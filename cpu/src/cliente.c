@@ -7,18 +7,41 @@
 int main(void)
 {
     /* ---------------- LOGGING ---------------- */
-    t_log* logger = iniciar_logger();
-    log_info(logger, "Modulo CPU iniciado");
+
+
+        t_cpu_sockets sockets;
+        char* ip_KM, ip_KS, ip_MS;
+        char* puerto_KSD, puerto_KSI, puerto_MS, puerto_KM, puerto_KS;
+        char* valor;
+        t_log_level log_level;
+        int intervalo_tiempo, tam_max_seg;
 
     /* ---------------- ARCHIVOS DE CONFIGURACION ---------------- */
+    t_log* logger = iniciar_logger();
     t_config* config = iniciar_config();
+   
+    ip_KS = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
+    ip_KM = config_get_string_value(config, "IP_KERNEL_MEMORY");
+    ip_MS = config_get_string_value(config, "IP_MEMORY_STICK");
+    
+	puerto_KM = config_get_string_value(config, "PUERTO_KERNEL_MEMORY");
+    puerto_KSD = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_DISPATCH");
+    puerto_KSI = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_INTERRUPT");
+    puerto_KS = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER");
+    puerto_MS = config_get_string_value(config, "PUERTO_MEMORY_STICK");
+
+	log_level = config_get_string_value(config, "LOG_LEVEL");
+	intervalo_tiempo = config_get_int_value(config, "TIEMPO_INSTRUCCION");
+	tam_max_seg = config_get_int_value(config, "TAM_MAX_SEGMENTO");
+
+    
+    log_info(logger, "Modulo CPU iniciado");
 
     /* ---------------- LEER CONSOLA ---------------- */
     
     leer_consola(logger);
 
     /* ---------------- CONEXIONES ---------------- */
-    t_cpu_sockets sockets;
 
     // Conectamos a cada modulo segun las claves de tu config
     printf("intentando conectar sockets");
@@ -26,7 +49,7 @@ int main(void)
     sockets.conexion_kernel_scheduler = conexion_kernelS(config);
     sockets.conexion_kernelS_dispatch  = conexion_kernelS_dispatch(config);
     sockets.conexion_kernelS_interrupt = conexion_kernelS_interrupt(config);
-    sockets.conexion_memory_stick     = conexion_memory_stick(config);
+    sockets.conexion_memory_stick = conexion_memory_stick(config);
 
     // Validacion de conexiones 
     if (sockets.conexion_kernel_memory < 0) {
@@ -86,7 +109,7 @@ int main(void)
 
 t_log* iniciar_logger(void)
 {
-    t_log* nuevo_logger = log_create("cpu.log", "CPU", true, LOG_LEVEL_INFO);
+    t_log* nuevo_logger = log_create("cpu.log", "CPU", true, log_level);
     if (nuevo_logger == NULL) {
         perror("No se pudo crear el logger");
         exit(EXIT_FAILURE);

@@ -44,19 +44,6 @@ OBJS = $(patsubst src/%.c,obj/%.o,$(SRCS_C))
 # Set output
 OUT = $(call outname,$(NAME))
 
-# Set test folder
-TESTS_DIR=tests
-
-# Set test prerrequisites
-TESTS_C += $(shell find $(TESTS_DIR)/ -iname "*.c" 2> /dev/null)
-TESTS_H += $(shell find $(TESTS_DIR)/ -iname "*.h" 2> /dev/null)
-
-# Set test intermediate objects
-TEST_OBJS = $(filter-out $(TEST_EXCLUDE), $(TESTS_C)) $(patsubst src/%.c,obj/%.o,$(filter-out $(TEST_EXCLUDE), $(SRCS_C)))
-
-# Set test binary targets
-TEST = bin/$(NAME)_tests
-
 .PHONY: all
 all: debug
 
@@ -68,10 +55,6 @@ debug: $(OUT)
 release: CFLAGS = $(CRELEASE)
 release: $(OUT)
 
-.PHONY: test
-test: CFLAGS = $(CDEBUG)
-test: $(TEST)
-
 .PHONY: clean
 clean:
 	-rm -rfv $(dir $(TEST) $(OBJS) $(OUT))
@@ -79,9 +62,6 @@ clean:
 
 $(OUT): $(OBJS) | $(dir $(OUT))
 	$(call compile_out)
-
-$(TEST): $(TEST_OBJS) $(DEPS) | $(dir $(TEST))
-	$(CC) $(CFLAGS) -o "$@" $^ $(IDIRS:%=-I%) $(LIBDIRS:%=-L%) $(RUNDIRS:%=-Wl,-rpath,%) $(LIBS:%=-l%) -lcspecs
 
 obj/%.o: src/%.c $(SRCS_H) $(DEPS) | $(dir $(OBJS))
 	$(call compile_objs)

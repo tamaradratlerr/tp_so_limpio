@@ -1,5 +1,5 @@
-#ifndef UTILS_HELLO_H_
-#define UTILS_HELLO_H_
+#ifndef UTILS_CLIENT_CPU
+#define UTILS_CLIENT_CPU
 
 #include <stdlib.h>
 #include <stdio.h>

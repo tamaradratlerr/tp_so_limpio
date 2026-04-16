@@ -10,34 +10,6 @@
 #include<string.h>
 #include<commons/log.h>
 
-typedef enum
-{
-	MENSAJE,
-	PAQUETE
-}op_code;
-
-typedef struct
-{
-	int size;
-	void* stream;
-} t_buffer;
-
-typedef struct
-{
-	op_code codigo_operacion;
-	t_buffer* buffer;
-} t_paquete;
-
-#ifndef UTILS_H_
-
-#define UTILS_H_
-
-
-
-#include <stdlib.h>
-
-
-
 // 1. Identificadores de las operaciones (Protocolo)
 
 typedef enum {g
@@ -54,9 +26,22 @@ typedef enum {g
 
 } op_code;
 
+typedef struct
+{
+	int size;
+	void* stream;
+} t_buffer;
+
+typedef struct
+{
+	op_code codigo_operacion;
+	t_buffer* buffer;
+} t_paquete;
 
 
-// 2. TAD para que SWAP informe al inicio (Tamaño total y de bloque)
+// especificos swap
+
+// TAD para que SWAP informe al inicio (Tamaño total y de bloque)
 
 typedef struct {
 

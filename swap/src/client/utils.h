@@ -14,6 +14,8 @@
 
 typedef enum {
 
+    HANDSHAKE_SWAP, //
+
     INICIO_SWAP,      
 
     LECTURA_BLOQUE,   //operacion 1
@@ -23,6 +25,7 @@ typedef enum {
     RESPUESTA_OK,      //devolver confirmación (escritura)
 
     RESPUESTA_DATOS   //devolver bytes leidos (lectura)
+   
 
 } op_code;
 

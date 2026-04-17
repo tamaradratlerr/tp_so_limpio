@@ -8,5 +8,5 @@
 #include "utils.h"
 
 void iterator(char* value);
-
+void validar_argumentos(int, char**);
 #endif /* SERVER_H_ */

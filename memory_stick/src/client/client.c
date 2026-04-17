@@ -1,48 +1,33 @@
 #include "client.h"
 
-int main(void)
+int memory_stick_client(void)
 {
-	/*---------------------------------------------------PARTE 2-------------------------------------------------------------*/
-
 	int conexion;
 	char* ip;
 	char* puerto;
-	char* valor;
 	char* clave;
 
 	t_log* logger;
 	t_config* config;
 
-	/* ---------------- LOGGING ---------------- */
+	/* Inicio el logging */
 	logger = iniciar_logger();
-	// Usando el logger creado previamente
-	// Escribi: "Hola! Soy un log"
-	log_info(logger, "Hola! Soy un log");
+	log_info(logger, "Log cliente iniciado.");
 
-
-	/* ---------------- ARCHIVOS DE CONFIGURACION ---------------- */
+	/* Cargo configuración */
 	config = iniciar_config();
 	if (config == NULL) {
 		abort();
 	}
-
-	// Usando el config creado previamente, leemos los valores del config y los 
-	// dejamos en las variables 'ip', 'puerto' y 'valor'
 	ip = config_get_string_value(config, "IP");
 	puerto = config_get_string_value(config, "PUERTO");
-	valor = config_get_string_value(config, "VALOR");
 	clave = config_get_string_value(config, "CLAVE");
 	// Loggeamos el valor de config
 	log_info(logger, ip);
 	log_info(logger, puerto);
-	log_info(logger, valor);
 
 	/* ---------------- LEER DE CONSOLA ---------------- */
 	leer_consola(logger);
-
-	/*---------------------------------------------------PARTE 3-------------------------------------------------------------*/
-
-	// ADVERTENCIA: Antes de continuar, tenemos que asegurarnos que el servidor esté corriendo para poder conectarnos a él
 
 	// Creamos una conexión hacia el servidor
 	conexion = crear_conexion(ip, puerto);
@@ -54,8 +39,6 @@ int main(void)
 
 	terminar_programa(conexion, logger, config);
 
-	/*---------------------------------------------------PARTE 5-------------------------------------------------------------*/
-	// Proximamente
 }
 
 t_log* iniciar_logger(void)

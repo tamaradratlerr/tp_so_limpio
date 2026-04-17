@@ -1,6 +1,14 @@
 #include "utils.h"
 
 
+/* Implementación de funciones que uso SOLO dentro de éste archivo */
+void crear_buffer(t_paquete* paquete)
+{
+	paquete->buffer = malloc(sizeof(t_buffer));
+	paquete->buffer->size = 0;
+	paquete->buffer->stream = NULL;
+}
+
 void* serializar_paquete(t_paquete* paquete, int bytes)
 {
 	void * magic = malloc(bytes);
@@ -16,6 +24,7 @@ void* serializar_paquete(t_paquete* paquete, int bytes)
 	return magic;
 }
 
+/* Implementación de funciones con headers en utils.h */
 int crear_conexion(char *ip, char* puerto)
 {
 	int err;
@@ -29,21 +38,22 @@ int crear_conexion(char *ip, char* puerto)
 
 	err = getaddrinfo(ip, puerto, &hints, &server_info); /*if 0 => ok*/
 	if (err){
-		printf("Error on getaddrinfo.");
+		perror("Error on getaddrinfo.");
 		abort();
 	}
 	// Ahora vamos a crear el socket.
 	int socket_cliente = socket(server_info->ai_family,
                          server_info->ai_socktype,
                          server_info->ai_protocol);
-	if (err == -1){
-		printf("Error on create socket.");
+
+	if (socket_cliente == -1){
+		perror("Error: socket closed.");
 		abort();
 	}
 	// Ahora que tenemos el socket, vamos a conectarlo
 	err = connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
 	if (err){
-		printf("Error on connect.");
+		perror("Error on connect.");
 		abort();
 	}
 
@@ -70,14 +80,6 @@ void enviar_mensaje(char* mensaje, int socket_cliente)
 
 	free(a_enviar);
 	eliminar_paquete(paquete);
-}
-
-
-void crear_buffer(t_paquete* paquete)
-{
-	paquete->buffer = malloc(sizeof(t_buffer));
-	paquete->buffer->size = 0;
-	paquete->buffer->stream = NULL;
 }
 
 t_paquete* crear_paquete(void)
@@ -112,6 +114,11 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente)
 	free(a_enviar);
 }
 
+void liberar_conexion(int socket_cliente)
+{
+	close(socket_cliente);
+}
+
 void eliminar_paquete(t_paquete* paquete)
 {
 	free(paquete->buffer->stream);
@@ -119,7 +126,3 @@ void eliminar_paquete(t_paquete* paquete)
 	free(paquete);
 }
 
-void liberar_conexion(int socket_cliente)
-{
-	close(socket_cliente);
-}

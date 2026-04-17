@@ -1,6 +1,11 @@
 #include"utils.h"
 
 t_log* logger;
+t_memory_stick_globals ms_globals;
+
+void iterator(char* value) {
+	log_info(logger,"%s", value);
+}
 
 int iniciar_servidor(void)
 {
@@ -57,6 +62,7 @@ int iniciar_servidor(void)
 	return socket_servidor;
 }
 
+/* Funcion bloqueante */
 int esperar_cliente(int socket_servidor)
 {
 	// Aceptamos un nuevo cliente
@@ -122,4 +128,56 @@ t_list* recibir_paquete(int socket_cliente)
 	}
 	free(buffer);
 	return valores;
+}
+
+/*
+ * Inicializa las estructuras de memoria del Memory Stick
+ * Reserva memoria con malloc()
+ */
+void init_memory_stick(uint32_t tamanio) {
+
+    ms_globals.memory_size = tamanio;
+	ms_globals.memory = malloc(tamanio);
+    if (ms_globals.memory == NULL) {
+        log_error(logger, "ERROR: No se pudo reservar %d bytes de memoria", tamanio);
+    	abort();
+    }
+    // Inicializar a 0
+    memset(ms_globals.memory, 0, tamanio);
+    log_info(logger, "Memory Stick inicializado: %d bytes reservados", tamanio);
+    // Inicializar lista de CPUs
+    ms_globals.cpus_conectadas = list_create();
+}
+
+// handler del cliente
+void* atender_cliente(void* arg) {
+    int cliente_fd = *(int*)arg;
+    free(arg);
+
+    t_list* lista;
+
+    while (1) {
+        int cod_op = recibir_operacion(cliente_fd);
+
+        switch (cod_op) {
+        case MENSAJE:
+            recibir_mensaje(cliente_fd);
+            break;
+
+        case PAQUETE:
+            lista = recibir_paquete(cliente_fd);
+            log_info(logger, "Me llegaron los siguientes valores:\n");
+            list_iterate(lista, (void*) iterator);
+            break;
+
+        case -1:
+            log_error(logger, "El cliente se desconecto");
+            close(cliente_fd);
+            return NULL;
+
+        default:
+            log_warning(logger,"Operacion desconocida");
+            break;
+        }
+    }
 }

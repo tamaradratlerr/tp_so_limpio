@@ -59,6 +59,5 @@ void* serializar_paquete(t_paquete* paquete, int bytes);
 
 // --- Recepción ---
 op_code recibir_operacion(int socket_cliente);
-void* recibir_buffer(uint32_t size, uint32_t offset, void* stream);
-
+void* recibir_buffer(int* size, int socket_cliente);
 #endif /* UTILS_H_ */

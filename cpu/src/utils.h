@@ -26,19 +26,11 @@ typedef enum
     LLEGO_INSTRUCCION
 } op_code;
 
-typedef struct {
-    uint8_t AX, BX, CX, DX;
-    uint32_t EAX, EBX, ECX, EDX, SI, DI, PC;
-} t_registros;
 
 typedef struct {
-    t_registros registros;
-    uint32_t limite_Memoria, PID;
-} t_contexto;
-
-typedef struct {
-    int size;
-    void* stream;
+    uint32_t size; // Tamaño del payload
+    uint32_t offset; // Desplazamiento dentro del payload
+    void* stream; // Payload
 } t_buffer;
 
 typedef struct {
@@ -67,10 +59,6 @@ void* serializar_paquete(t_paquete* paquete, int bytes);
 
 // --- Recepción ---
 op_code recibir_operacion(int socket_cliente);
-void* recibir_buffer(int* size, int socket_cliente);
-  
-// --- Contexto ---
-void enviar_contexto(t_contexto* contexto, int socket_cliente);
-t_contexto* recibir_contexto(int socket_cliente);
+void* recibir_buffer(uint32_t size, uint32_t offset, void* stream);
 
 #endif /* UTILS_H_ */

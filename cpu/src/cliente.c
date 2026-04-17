@@ -78,7 +78,8 @@ t_log* iniciar_logger(void)
 
 t_config* iniciar_config(void)
 {
-    t_config* nuevo_config = config_create("cpu.config");
+    char* path = "cpu.config";
+    t_config* nuevo_config = config_create(path);
     if (nuevo_config == NULL) {
         printf("¡No se pudo crear el config!\n");
     }
@@ -145,14 +146,14 @@ int conexion_memory_stick(t_config* config) {
 void paquete(int conexion)
 {
     char* leido;
-    t_paquete* p = crear_paquete(PAQUETE); // Enviamos con op_code PAQUETE
+    t_paquete* paquete = crear_paquete(PAQUETE); // Enviamos con op_code PAQUETE
 
     while( (leido = readline("Paquete> ")) != NULL && strcmp(leido, "") != 0 ) {
-        agregar_a_paquete(p, leido, strlen(leido) + 1);
+        agregar_a_paquete(paquete, leido, strlen(leido) + 1);
         free(leido);
     }
     free(leido);
 
-    enviar_paquete(p, conexion);
-    eliminar_paquete(p);
+    enviar_paquete(paquete, conexion);
+    eliminar_paquete(paquete);
 }

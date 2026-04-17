@@ -48,14 +48,20 @@ void liberar_conexion(int socket_cliente) {
 // ==========================
 
 void* serializar_paquete(t_paquete* paquete, int bytes) {
-    void * magic = malloc(bytes);
+    void* magic = malloc(bytes);
     int desplazamiento = 0;
 
-    memcpy(magic + desplazamiento, &(paquete->codigo_operacion), sizeof(int));
-    desplazamiento += sizeof(int);
-    memcpy(magic + desplazamiento, &(paquete->buffer->size), sizeof(int));
-    desplazamiento += sizeof(int);
+    // 1. Código de operación
+    memcpy(magic + desplazamiento, &(paquete->codigo_operacion), sizeof(op_code));
+    desplazamiento += sizeof(op_code);
+
+    // 2. Tamaño del buffer
+    memcpy(magic + desplazamiento, &(paquete->buffer->size), sizeof(uint32_t));
+    desplazamiento += sizeof(uint32_t);
+
+    // 3. El contenido
     memcpy(magic + desplazamiento, paquete->buffer->stream, paquete->buffer->size);
+    // No hace falta sumar al desplazamiento aquí porque es el final
     
     return magic;
 }
@@ -70,16 +76,21 @@ t_paquete* crear_paquete(op_code codigo) {
 }
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio) {
+    // 1. Redimensionamos el stream para que entre el nuevo dato + su tamaño
     paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio + sizeof(int));
 
+    // 2. Copiamos el tamaño del dato (payload size del dato específico)
     memcpy(paquete->buffer->stream + paquete->buffer->size, &tamanio, sizeof(int));
+    
+    // 3. Copiamos el dato en sí justo después del tamaño
     memcpy(paquete->buffer->stream + paquete->buffer->size + sizeof(int), valor, tamanio);
 
+    // 4. Actualizamos el tamaño total del buffer
     paquete->buffer->size += tamanio + sizeof(int);
 }
 
 void enviar_paquete(t_paquete* paquete, int socket_cliente) {
-    int bytes = paquete->buffer->size + 2*sizeof(int);
+    int bytes = paquete->buffer->size + sizeof(op_code) + sizeof(uint32_t);
     void* a_enviar = serializar_paquete(paquete, bytes);
 
     send(socket_cliente, a_enviar, bytes, 0);

@@ -105,6 +105,7 @@ void paquete(int conexion)
 			agregar_a_paquete(paquete, leido, strlen(leido) + 1);
 		}
 	}
+	free(leido);
 	enviar_paquete(paquete, conexion);
 
 	// ¡No te olvides de liberar las líneas y el paquete antes de regresar!

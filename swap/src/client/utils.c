@@ -1,12 +1,4 @@
-#define _POSIX_C_SOURCE 200112L  
 #include "utils.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h> 
 
 void* serializar_paquete(t_paquete* paquete, int bytes)
 {
@@ -123,3 +115,4 @@ void eliminar_paquete(t_paquete* paquete)
 void liberar_conexion(int socket_cliente)
 {
 	close(socket_cliente);
+}

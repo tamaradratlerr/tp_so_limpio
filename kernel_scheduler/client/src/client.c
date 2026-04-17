@@ -14,9 +14,7 @@ int main(void)
 	char* ip;
 	char* puerto;
 	char* valor;
-	char* ip_km,	puerto_km,	planificacion_algoritmo,	listas_algortimo;
-	int intervalo_tarea, tiempo_suspencion;
-
+	char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
 	t_log* logger;
 	t_config* config;
 

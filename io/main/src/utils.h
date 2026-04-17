@@ -59,4 +59,6 @@ void eliminar_paquete(t_paquete* paquete);
 
 void* serializar_paquete(t_paquete* paquete, int bytes);
 
+void enviar_mensaje(char* mensaje, int socket_cliente);
+
 #endif /* UTILS_H_ */

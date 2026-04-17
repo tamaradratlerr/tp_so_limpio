@@ -6,7 +6,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/bin/${workspaceFolderBasename}",
-      "args": [],
+      "args": ["IP_IO, PUERTO_IO, LOG_LEVEL, IO"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],

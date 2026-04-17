@@ -10,17 +10,23 @@
 
 void* serializar_paquete(t_paquete* paquete, int bytes)
 {
-	void * magic = malloc(bytes);
-	int desplazamiento = 0;
+    void * magic = malloc(bytes);
+    int desplazamiento = 0;
 
-	memcpy(magic + desplazamiento, &(paquete->codigo_operacion), sizeof(int));
-	desplazamiento+= sizeof(int);
-	memcpy(magic + desplazamiento, &(paquete->buffer->size), sizeof(int));
-	desplazamiento+= sizeof(int);
-	memcpy(magic + desplazamiento, paquete->buffer->stream, paquete->buffer->size);
-	desplazamiento+= paquete->buffer->size;
+    // 1. Código de operación
+    // Usamos (char*) para que la suma sea byte a byte
+    memcpy((char*)magic + desplazamiento, &(paquete->codigo_operacion), sizeof(int));
+    desplazamiento += sizeof(int);
 
-	return magic;
+    // 2. Tamaño del buffer
+    memcpy((char*)magic + desplazamiento, &(paquete->buffer->size), sizeof(int));
+    desplazamiento += sizeof(int);
+
+    // 3. El contenido real del buffer
+    memcpy((char*)magic + desplazamiento, paquete->buffer->stream, paquete->buffer->size);
+    desplazamiento += paquete->buffer->size;
+
+    return magic;
 }
 
 int crear_conexion(char *ip, char* puerto)
@@ -95,12 +101,22 @@ t_paquete* crear_paquete(void)
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
 {
-	paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio + sizeof(int));
+    // 1. Usamos un puntero temporal por seguridad
+    void* nuevo_stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio + sizeof(int));
+    if (nuevo_stream == NULL) {
+        // Manejar error de memoria si fuera necesario
+        return; 
+    }
+    paquete->buffer->stream = nuevo_stream;
 
-	memcpy(paquete->buffer->stream + paquete->buffer->size, &tamanio, sizeof(int));
-	memcpy(paquete->buffer->stream + paquete->buffer->size + sizeof(int), valor, tamanio);
+    // 2. Copiamos el tamaño del dato que estamos agregando
+    memcpy((char*)paquete->buffer->stream + paquete->buffer->size, &tamanio, sizeof(int));
+    
+    // 3. Copiamos el dato real justo después de su tamaño
+    memcpy((char*)paquete->buffer->stream + paquete->buffer->size + sizeof(int), valor, tamanio);
 
-	paquete->buffer->size += tamanio + sizeof(int);
+    // 4. Actualizamos el tamaño total acumulado en el buffer
+    paquete->buffer->size += tamanio + sizeof(int);
 }
 
 void enviar_paquete(t_paquete* paquete, int socket_cliente)
@@ -111,6 +127,7 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente)
 	send(socket_cliente, a_enviar, bytes, 0);
 
 	free(a_enviar);
+	eliminar_paquete(paquete);
 }
 
 void eliminar_paquete(t_paquete* paquete)

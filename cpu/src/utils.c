@@ -153,7 +153,7 @@ op_code recibir_operacion(int socket_cliente)
     {
         // Si el recv devuelve 0 o menos, la conexión se cerró o hubo error
         close(socket_cliente);
-        printf("la conexión se cerró o hubo error con el opcode")
+        printf("la conexión se cerró o hubo error con el opcode");
         return -1; 
     }
 }

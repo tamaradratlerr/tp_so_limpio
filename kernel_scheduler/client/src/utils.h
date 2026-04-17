@@ -20,16 +20,15 @@ typedef enum
 	INSTRUCCION
 }op_code;
 
-typedef struct
-{
-	int size;
-	void* stream;
+typedef struct {
+    uint32_t size; // Tamaño del payload
+    uint32_t offset; // Desplazamiento dentro del payload
+    void* stream; // Payload
 } t_buffer;
 
-typedef struct
-{
-	op_code codigo_operacion;
-	t_buffer* buffer;
+typedef struct {
+    op_code codigo_operacion;
+    t_buffer* buffer;
 } t_paquete;
 
 

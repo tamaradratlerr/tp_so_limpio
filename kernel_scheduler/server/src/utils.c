@@ -68,13 +68,22 @@ int recibir_operacion(int socket_cliente)
 
 void* recibir_buffer(int* size, int socket_cliente)
 {
-	void * buffer;
+    void * buffer;
 
-	recv(socket_cliente, size, sizeof(int), MSG_WAITALL);
-	buffer = malloc(*size);
-	recv(socket_cliente, buffer, *size, MSG_WAITALL);
+    // 1. Recibimos el tamaño (bloqueante hasta tener los 4 bytes del int)
+    if(recv(socket_cliente, size, sizeof(int), MSG_WAITALL) <= 0) {
+        return NULL; // El socket se cerró o hubo error
+    }
 
-	return buffer;
+    buffer = malloc(*size);
+    
+    // 2. Recibimos el contenido (bloqueante hasta tener todo el stream)
+    if(recv(socket_cliente, buffer, *size, MSG_WAITALL) <= 0) {
+        free(buffer);
+        return NULL;
+    }
+
+    return buffer;
 }
 
 void recibir_mensaje(int socket_cliente)
@@ -87,22 +96,31 @@ void recibir_mensaje(int socket_cliente)
 
 t_list* recibir_paquete(int socket_cliente)
 {
-	int size;
-	int desplazamiento = 0;
-	void * buffer;
-	t_list* valores = list_create();
-	int tamanio;
+    int size;
+    int desplazamiento = 0;
+    void * buffer;
+    t_list* valores = list_create();
+    int tamanio;
 
-	buffer = recibir_buffer(&size, socket_cliente);
-	while(desplazamiento < size)
-	{
-		memcpy(&tamanio, buffer + desplazamiento, sizeof(int));
-		desplazamiento+=sizeof(int);
-		char* valor = malloc(tamanio);
-		memcpy(valor, buffer+desplazamiento, tamanio);
-		desplazamiento+=tamanio;
-		list_add(valores, valor);
-	}
-	free(buffer);
-	return valores;
+    buffer = recibir_buffer(&size, socket_cliente);
+
+    while(desplazamiento < size)
+    {
+        // 1. Leemos el tamaño del próximo dato (casteando a char*)
+        memcpy(&tamanio, (char*)buffer + desplazamiento, sizeof(int));
+        desplazamiento += sizeof(int);
+
+        // 2. Reservamos memoria para el dato
+        char* valor = malloc(tamanio);
+        
+        // 3. Leemos el dato en sí
+        memcpy(valor, (char*)buffer + desplazamiento, tamanio);
+        desplazamiento += tamanio;
+
+        // 4. Lo guardamos en la lista
+        list_add(valores, valor);
+    }
+
+    free(buffer);
+    return valores;
 }

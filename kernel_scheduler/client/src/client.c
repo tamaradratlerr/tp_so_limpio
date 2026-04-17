@@ -4,6 +4,7 @@
 #include <readline/readline.h>
 #include <string.h>
 
+t_log_level log_level;
 
 int main(void)
 {
@@ -13,7 +14,6 @@ int main(void)
 	char* ip;
 	char* puerto;
 	char* valor;
-	t_log_level log_level;
 	char* ip_km,	puerto_km,	planificacion_algoritmo,	listas_algortimo;
 	int intervalo_tarea, tiempo_suspencion;
 
@@ -40,7 +40,6 @@ int main(void)
 
 	puerto_km = config_get_string_value(config, "PUERTO_KM");
 
-	log_level = config_get_string_value(config, "LOG_LEVEL");
 	planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
 	listas_algortimo = config_get_string_value(config, "QUEUES_ALGORITHMS");
 	intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");

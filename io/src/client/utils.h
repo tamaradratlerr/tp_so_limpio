@@ -1,5 +1,12 @@
+#ifndef _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200112L
+#endif    
+
+
+
 #ifndef UTILS_H_
 #define UTILS_H_
+
 
 #include<stdio.h>
 #include<stdlib.h>
@@ -15,13 +22,13 @@
 typedef enum
 {
 	//original TP0
-    MENSAJE,
+    MENSAJE, //0
 	//PAQUETE, 
     
     // *** Comunicacion con K.S *** //
-    SLEEP,
-    STDIN,
-    STDOUT
+    STDIN, //1
+	STDOUT, //2
+	SLEEP  //3
 	
 }op_code;
 

@@ -11,10 +11,9 @@
 #include "utils.h"
 
 
-t_log* iniciar_logger(t_log_level level);
+t_log* iniciar_logger(char* log_level);
 
 t_config* iniciar_config(void);
-
 
 //void leer_consola(t_log*); *** No parece necesario ***
 

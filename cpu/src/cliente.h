@@ -24,7 +24,7 @@ t_log* iniciar_logger(void);
 t_config* iniciar_config(void);
 void leer_consola(t_log* logger);
 void paquete(int conexion);
-void enviar_mensaje(char* mensaje, int socket_cliente)
+void enviar_mensaje(char* mensaje, int socket_cliente);
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets sockets);
 
 // --- Conexiones ---

@@ -1,65 +1,81 @@
-#include "utils.h"
+#define _POSIX_C_SOURCE 200112L 
+#include "utils.h"              
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <unistd.h>
+#include <errno.h>
 
-t_log* logger; //chat dic
 
-int iniciar_servidor(void)
-{
-
-    int err;
+int iniciar_servidor(char* puerto) {
+    int socket_servidor;
     struct addrinfo hints, *servinfo;
-
-    // Validar que el logger esté inicializado
-    if (!logger) {
-        fprintf(stderr, "Logger no inicializado\n");
-        abort();
-    }
-
-    //configuracion de hints
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    // obtener info de la direccion
-    // Usamos "4444" directamente si la constante PUERTO no está definida
-    err = getaddrinfo(NULL, "4444", &hints, &servinfo);
-    if (err){
-        log_error(logger, "Error en getaddrinfo: %s", gai_strerror(err)); //esto noc bien
-        abort();
-    }
-
-    //crear el socket
-
-    int socket_servidor = socket(servinfo->ai_family,
-                        servinfo->ai_socktype,
-                        servinfo->ai_protocol);
+    getaddrinfo(NULL, puerto, &hints, &servinfo);
+    socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     
-    if(socket_servidor == -1){
-        perror("Error al crear el socket");
-        log_error(logger, "Error al crear el socket");
-        abort();
-    }
-
-    // Para evitar el error de "Address already in use"
-    int refuse = 1;
     setsockopt(socket_servidor, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
-    err = bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen);
-    if (err == -1) {
-        perror("Error en bind");
-        abort();
-    }
-
-    err = listen(socket_servidor, SOMAXCONN);
-    if(err == -1){
-        perror("Error en listen");
-        log_error(logger, "Error en listen");
-        abort();
-    }
+    bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen);
+    listen(socket_servidor, SOMAXCONN);
 
     freeaddrinfo(servinfo);
-    log_trace(logger, "Listo para escuchar a mi cliente");
-
     return socket_servidor;
+}
+
+int esperar_cliente(int socket_servidor) {
+    return accept(socket_servidor, NULL, NULL);
+}
+
+int recibir_operacion(int socket_cliente) {
+    int cod_op;
+    if(recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
+        return cod_op;
+    close(socket_cliente);
+    return -1;
+}
+
+void* recibir_buffer(int* size, int socket_cliente) {
+    void* buffer;
+    if(recv(socket_cliente, size, sizeof(int), MSG_WAITALL) > 0) {
+        buffer = malloc(*size);
+        recv(socket_cliente, buffer, *size, MSG_WAITALL);
+        return buffer;
+    }
+    return NULL;
+}
+
+void recibir_mensaje(int socket_cliente) {
+    int size;
+    char* buffer = recibir_buffer(&size, socket_cliente);
+    log_info(logger, "Socket %d dice: %s", socket_cliente, buffer);
+    free(buffer);
+}
+
+t_list* recibir_paquete(int socket_cliente) {
+    int size;
+    int desplazamiento = 0;
+    void* buffer = recibir_buffer(&size, socket_cliente);
+    t_list* valores = list_create();
+
+    while(desplazamiento < size) {
+        int tamanio;
+        memcpy(&tamanio, buffer + desplazamiento, sizeof(int));
+        desplazamiento += sizeof(int);
+        char* valor = malloc(tamanio);
+        memcpy(valor, buffer + desplazamiento, tamanio);
+        desplazamiento += tamanio;
+        list_add(valores, valor);
+    }
+    free(buffer);
+    return valores;
 }

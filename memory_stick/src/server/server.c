@@ -1,17 +1,14 @@
 #include "server.h"
 
-int clientes_activos = 0;
-pthread_t tid[2];
-
 int main(int argc, char** argv)
 {
 	validar_argumentos(argc, argv);
 	
-	/* Inicializo la configuración */
+	/* Inicio configuración */
 	t_config* config	= config_create(argv[1]);
 	char* file			= config_get_string_value(config, "SERVER_LOG_NAME");
 	char* process_name	= config_get_string_value(config, "PROCCES_NAME"); 
-
+	char* server_port	= config_get_string_value(config, "MEMORY_STICK_PORT");
 	/* Creo el logger */
 	logger = log_create(file, process_name, 1, LOG_LEVEL_DEBUG);
 	if (logger == NULL)
@@ -21,11 +18,11 @@ int main(int argc, char** argv)
 	}
 	config_destroy(config);
 
-	/* Inicializo la memoria */
+	/* Inicio memoria */
 	init_memory_stick(atoi(argv[2]));
 
-	/* Inicializo el server memory_stick */
-	int server_fd = iniciar_servidor();
+	/* Inicio server memory_stick */
+	int server_fd = iniciar_servidor(server_port);
 	log_info(logger, "Servidor MEMORY_STICK listo para recibir clientes \n");
 	
 	/*

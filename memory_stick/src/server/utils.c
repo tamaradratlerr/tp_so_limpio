@@ -7,7 +7,7 @@ void iterator(char* value) {
 	log_info(logger,"%s", value);
 }
 
-int iniciar_servidor(void)
+int iniciar_servidor(char* server_port)
 {
 	int err;
 
@@ -18,7 +18,7 @@ int iniciar_servidor(void)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	err = getaddrinfo(NULL, PUERTO, &hints, &servinfo); /* If 0 => ok*/
+	err = getaddrinfo(NULL, server_port, &hints, &servinfo); /* If 0 => ok*/
 	if (err){
 		log_error(logger, "Error on getaddrinfo.");
 		abort();
@@ -180,4 +180,11 @@ void* atender_cliente(void* arg) {
             break;
         }
     }
+}
+
+/* AGREGAR los free, segun se vayan agregando variables globales */
+void free_all_globals(void)
+{
+	free(ms_globals.memory);
+	list_destroy(ms_globals.cpus_conectadas);
 }

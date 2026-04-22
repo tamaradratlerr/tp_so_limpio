@@ -13,8 +13,6 @@
 #include<assert.h>
 #include<pthread.h>
 
-#define PUERTO "4444"
-
 typedef enum
 {
 	LECTURA,
@@ -34,7 +32,7 @@ typedef struct {
 extern t_log* logger;
 extern t_memory_stick_globals ms_globals;
 
-int iniciar_servidor(void);
+int iniciar_servidor(char*);
 int esperar_cliente(int);
 
 int recibir_operacion(int);
@@ -43,4 +41,5 @@ void recibir_mensaje(int);
 t_list* recibir_paquete(int);
 void init_memory_stick(uint32_t);
 void* atender_cliente(void*);
+void free_all_globals(void);
 #endif /* UTILS_H_ */

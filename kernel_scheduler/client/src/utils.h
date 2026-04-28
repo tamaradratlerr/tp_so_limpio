@@ -30,11 +30,9 @@ typedef struct {
     t_buffer* buffer;
 } t_paquete;
 
-
-//Forma en la que la KM le manda a la KS el id del nuevo proceso
 typedef struct {
     int PID, PPID, UID;
-} t_infoProceso;
+} t_pcb;
 
 
 

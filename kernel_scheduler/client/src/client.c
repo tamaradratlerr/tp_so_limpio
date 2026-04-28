@@ -159,37 +159,41 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 
 
 
-//-------CHECKPOINT 1---------
+//-------CHECKPOINT 2---------
 
-int recepcionNuevoProceso(t_log* logger, int socket_km, t_infoProceso *infoProceso) {
+
+t_pcb* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
-	/* mi idea aca era reservar el espacio necesario para recibir un nuevo proceso de la km
-	y usarlo para inicializar aca a un proeso que me manda el main
-	y despues usarlo en el main para por ejemplo ponerlo el una cola de crearPcb*/
+    
+    //  Leemos instrucciones de UN SOLO PROCESO
+    t_list* nuevoProceso = leerInstruccionesDeUnProceso(path); 
+
+	//  creo que path lleva a un archivo txt que lee instrucción (MOV AX BX) por instruccion
+	//  leemos hasta que aparezca algo que nos indique que termino el proceso
+	//  y guardamos esas instrucciones en una lista de instrucciones a la que llamo nuevoProceso
 
 
-    t_infoProceso buffer;
-
-	//aca recibo el proeso
-    int bytes_recibidos = recv(socket_km, &buffer, sizeof(t_infoProceso), MSG_WAITALL);
-	log_info(logger, "lo que me llegó: %s", bytes_recibidos);
-
-    // verifico si llegaron los bytes
-    if (bytes_recibidos <= 0) {
-		log_error(logger, "no llegaron los bytes del buffer");
-        return -1; 
+	if (nuevoProceso == NULL) {
+        log_error(logger, "No se pudo leer el archivo en el path: %s", path);
+        return NULL;
     }
 
-    *infoProceso = buffer;
 
-	op_code llegadaProceso = INFO_PROCESO;
+    //  creo el pcb del proceso
+    t_pcb* nuevoPcb = crearPCB(nuevoProceso); 
+	
+	//  yo creo que esta funcion deberia tener un contador y le ponemos ese
+	//  numero como PID a cada proceso
 
-    //envio a la km que llegó el proceso
-	if (send(socket_km, &llegadaProceso, sizeof(op_code), 0) == -1) {
-        log_error(logger, "error al enviar confirmación");
-		return -1;
-    }
+    
+    //  Le mandamos el PID y el proceso a la KM para que lo guarde
+	//  pero como nuevo proceso es un PUNTERO de una lista habria que serializar
+	//  para poder mandarlo bien
+    guardarProcesoKM(nuevoPcb->PID, nuevoProceso, fd_km);
 
-    return 0;
+    return nuevoPcb;
+}
+
+void guardarProcesoKM(int pid, t_list* nuevoProceso, int fd_km){
 
 }

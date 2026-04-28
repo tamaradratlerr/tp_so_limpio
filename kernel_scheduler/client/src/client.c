@@ -163,8 +163,8 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 
 int recepcionNuevoProceso(t_log* logger, int socket_km, t_infoProceso *infoProceso) {
     
-	/* mi idea aca era reservar todo para recibir algo de la km
-	e igualarlo a un proeso que me manda el main para inicializarlo aca
+	/* mi idea aca era reservar el espacio necesario para recibir un nuevo proceso de la km
+	y usarlo para inicializar aca a un proeso que me manda el main
 	y despues usarlo en el main para por ejemplo ponerlo el una cola de crearPcb*/
 
 

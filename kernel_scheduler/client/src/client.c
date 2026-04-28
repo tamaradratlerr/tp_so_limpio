@@ -161,6 +161,35 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 
 //-------CHECKPOINT 1---------
 
-void recepcionNuevoProceso(){
-	
+int recepcionNuevoProceso(t_log* logger, int socket_km, t_infoProceso *infoProceso) {
+    
+	/* mi idea aca era reservar todo para recibir algo de la km
+	e igualarlo a un proeso que me manda el main para inicializarlo aca
+	y despues usarlo en el main para por ejemplo ponerlo el una cola de crearPcb*/
+
+
+    t_infoProceso buffer;
+
+	//aca recibo el proeso
+    int bytes_recibidos = recv(socket_km, &buffer, sizeof(t_infoProceso), MSG_WAITALL);
+	log_info(logger, "lo que me llegó: %s", bytes_recibidos);
+
+    // verifico si llegaron los bytes
+    if (bytes_recibidos <= 0) {
+		log_error(logger, "no llegaron los bytes del buffer");
+        return -1; 
+    }
+
+    *infoProceso = buffer;
+
+	op_code llegadaProceso = INFO_PROCESO;
+
+    //envio a la km que llegó el proceso
+	if (send(socket_km, &llegadaProceso, sizeof(op_code), 0) == -1) {
+        log_error(logger, "error al enviar confirmación");
+		return -1;
+    }
+
+    return 0;
+
 }

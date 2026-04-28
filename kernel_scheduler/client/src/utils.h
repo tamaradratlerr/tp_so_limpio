@@ -17,7 +17,8 @@ typedef enum
 
 	//Con la kernel memory
 	CONTEXTO, 
-	INSTRUCCION
+	INSTRUCCION,
+    INFO_PROCESO
 }op_code;
 
 typedef struct {

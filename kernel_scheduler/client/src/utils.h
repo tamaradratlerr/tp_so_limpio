@@ -16,9 +16,7 @@ typedef enum
 	PAQUETE, 
 
 	//Con la kernel memory
-	CONTEXTO, 
-	INSTRUCCION,
-    INFO_PROCESO
+	INFO_PROCESO
 }op_code;
 
 typedef struct {

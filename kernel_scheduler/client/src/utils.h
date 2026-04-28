@@ -31,6 +31,11 @@ typedef struct {
     t_buffer* buffer;
 } t_paquete;
 
+typedef struct {
+    int PID, PPID, UID;
+} t_infoProceso;
+
+
 
 
 int crear_conexion(char* ip, char* puerto);

@@ -3,13 +3,17 @@
 #include <commons/config.h>
 #include <readline/readline.h>
 #include <string.h>
+#include "../utilsKS/utilsKS.h"
 
 t_log_level log_level;
 
+// declaracion variables globales
+int contador_pid = 0;
+
+
 int main(void)
 {
-	/*---------------------------------------------------PARTE 2-------------------------------------------------------------*/
-
+	
 	int conexion;
 	char* ip;
 	char* puerto;
@@ -18,22 +22,17 @@ int main(void)
 	t_log* logger;
 	t_config* config;
 
-	/* ---------------- LOGGING ---------------- */
-
+	
 	logger = iniciar_logger();
 
 
-	// Usando el logger creado previamente
-	// Escribi: "Hola! Soy un log"
 
 
 	/* ---------------- ARCHIVOS DE CONFIGURACION ---------------- */
 
 	config = iniciar_config();
 
-	// Usando el config creado previamente, leemos los valores del config y los 
-	// dejamos en las variables 'ip', 'puerto' y 'valor'
-
+	
 	ip_km = config_get_string_value(config, "IP_KM");
 
 	puerto_km = config_get_string_value(config, "PUERTO_KM");
@@ -49,9 +48,8 @@ int main(void)
 
 	leer_consola(logger);
 
-	/*---------------------------------------------------PARTE 3-------------------------------------------------------------*/
+	/*---------------------------------------------------CONEXION CON KM-------------------------------------------------------------*/
 
-	// ADVERTENCIA: Antes de continuar, tenemos que asegurarnos que el servidor esté corriendo para poder conectarnos a él
 
 	// Creamos una conexión hacia el servidor
 	printf("Intentando conectar al servidor...\n");
@@ -77,7 +75,11 @@ int main(void)
 	terminar_programa(conexion, logger, config);
 
 	/*---------------------------------------------------PARTE 5-------------------------------------------------------------*/
-	// Proximamente
+	
+
+
+
+
 }
 
 t_log* iniciar_logger(void)
@@ -162,15 +164,15 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 //-------CHECKPOINT 2---------
 
 
-t_pcb* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
     
     //  Leemos instrucciones de UN SOLO PROCESO
-    t_list* nuevoProceso = leerInstruccionesDeUnProceso(path); 
+    t_list* nuevoProceso = leerInstruccionesDeUnProceso(logger, path); 
 
-	//  creo que path lleva a un archivo txt que lee instrucción (MOV AX BX) por instruccion
-	//  leemos hasta que aparezca algo que nos indique que termino el proceso
-	//  y guardamos esas instrucciones en una lista de instrucciones a la que llamo nuevoProceso
+	/*  creo que path lleva a un archivo txt que lee instrucción (MOV AX BX) por instruccion
+	    leemos hasta que aparezca algo que nos indique que termino el proceso
+	    y guardamos esas instrucciones en una lista de instrucciones a la que llamo nuevoProceso  */
 
 
 	if (nuevoProceso == NULL) {
@@ -178,22 +180,70 @@ t_pcb* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
         return NULL;
     }
 
-
-    //  creo el pcb del proceso
-    t_pcb* nuevoPcb = crearPCB(nuevoProceso); 
+	PCB* nuevoPcb = iniciar_pcb(contador_pid++, 0, 0);
 	
-	//  yo creo que esta funcion deberia tener un contador y le ponemos ese
-	//  numero como PID a cada proceso
-
+	
     
-    //  Le mandamos el PID y el proceso a la KM para que lo guarde
-	//  pero como nuevo proceso es un PUNTERO de una lista habria que serializar
-	//  para poder mandarlo bien
-    guardarProcesoKM(nuevoPcb->PID, nuevoProceso, fd_km);
+    /*  Le mandamos el PID y el proceso a la KM para que lo guarde
+	    pero como nuevo proceso es un PUNTERO de una lista habria que serializar
+	    para poder mandarlo bien  */
 
-    return nuevoPcb;
+    enviarProcesoKM(nuevoPcb->PID, nuevoProceso, fd_km);
+
 }
 
-void guardarProcesoKM(int pid, t_list* nuevoProceso, int fd_km){
+t_list* leerInstruccionesDeUnProceso(t_log* logger, char* path) {
+
+    FILE* archivo = fopen(path, "r");
+    
+    if (archivo == NULL) {
+        log_error(logger, "No se pudo abrir el archivo en el path: %s", path);
+        return NULL;
+    }
+
+    t_list* lista_instrucciones = list_create();
+    char* linea = NULL;  
+    size_t tamañoLinea = 0; 
+    ssize_t caracteresLeidos;
+
+    while ((caracteresLeidos = getline(&linea, &tamañoLinea, archivo)) != -1) {
+
+        if (caracteresLeidos > 0 && linea[caracteresLeidos - 1] == '\n') {
+            linea[caracteresLeidos - 1] = '\0';
+        }
+
+        list_add(lista_instrucciones, strdup(linea));
+    }
+    
+	//libero memoria y cierro archivo
+    free(linea); 
+    fclose(archivo);
+        
+    return lista_instrucciones;
+}
+
+void enviarProcesoKM(int pid, t_list* nuevoProceso, int fd_km){
+	
+	t_paquete* paquete = crear_paquete();
+	
+	agregar_a_paquete(paquete, &pid, sizeof(int));
+
+	int cant_instrucciones = list_size(nuevoProceso);
+
+	for (int i = 0; i < cant_instrucciones; i++) {
+        
+		// sacamos la instru d la lista de instrucciones que es el nuevo proceso
+        char* instruccion = list_get(nuevoProceso, i);
+        
+        // calculamos su tamaño (con el \0)
+        int tamanio = strlen(instruccion) + 1;
+
+        // la metemos en el paquete
+        agregar_a_paquete(paquete, instruccion, tamanio);
+    }
+
+	enviar_paquete(paquete, fd_km);
+    eliminar_paquete(paquete);
+	list_destroy_and_destroy_elements(nuevoProceso, (void*)free);
 
 }

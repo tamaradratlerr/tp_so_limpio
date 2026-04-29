@@ -1,0 +1,13 @@
+#include "utilsKS.h"
+
+PCB* iniciar_pcb (int PID, int PPID, int UID){
+
+	PCB* nuevo_pcb = malloc(sizeof(PCB));
+	nuevo_pcb->PID = PID;
+	nuevo_pcb->PPID = PPID;
+	nuevo_pcb->UID = UID;
+	nuevo_pcb->estado_pcb = NEW;
+	nuevo_pcb->estado_anterior = NULL;
+
+	return nuevo_pcb;
+}

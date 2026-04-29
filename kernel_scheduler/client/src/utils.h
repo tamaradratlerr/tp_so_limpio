@@ -30,9 +30,6 @@ typedef struct {
     t_buffer* buffer;
 } t_paquete;
 
-typedef struct {
-    int PID, PPID, UID;
-} t_pcb;
 
 
 

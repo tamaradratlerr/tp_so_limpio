@@ -28,14 +28,57 @@ typedef enum
 	STDOUT
 }op_code;
 
+//Tipo de dato que ingresa desde el kernel memory
+typedef struct {
+    int PID, PPID, UID;
+} t_infoProceso;
+
+//Tipo de dato que va a adoptar el PCB
+typedef struct 
+{
+    int PID;
+    int PPID;
+    int UID;
+    estado estado_pcb;
+    estado estado_anterior;
+    //Creto que estado anterior puede servir para sacar de esa lista
+
+}PCB;
+
+//Tipo de dato que identifica el estado del Proceso (PCB)
+typedef enum 
+{
+    NEW,
+    RNN,
+    BCK,
+    EXT
+    //Faltan agregar los estados del CheckPoint 3
+}estado;
+
+//Estructura de dato que identifica todas las listas de los procesos
+typedef struct
+{
+	t_list* new;
+	t_list* rnn;
+	t_list* bck;
+	t_list* ext;
+    //Faltan agregar los estados del CheckPoint 3
+
+}listas_procesos;
+
+
 extern t_log* logger;
 
 void* recibir_buffer(int*, int);
 
 int iniciar_servidor(void);
+
 int esperar_cliente(int);
+
 t_list* recibir_paquete(int);
+
 void recibir_mensaje(int);
+
 int recibir_operacion(int);
 
 #endif /* UTILS_H_ */

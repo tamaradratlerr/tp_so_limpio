@@ -74,10 +74,6 @@ int main(void)
 
 	terminar_programa(conexion, logger, config);
 
-	/*---------------------------------------------------PARTE 5-------------------------------------------------------------*/
-	
-
-
 
 
 }
@@ -161,89 +157,30 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 
 
 
-//-------CHECKPOINT 2---------
+/*-------CHECKPOINT 2-------------------------------------------------------------------------------------------------------*/
 
 
 void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
     
-    //  Leemos instrucciones de UN SOLO PROCESO
-    t_list* nuevoProceso = leerInstruccionesDeUnProceso(logger, path); 
-
-	/*  creo que path lleva a un archivo txt que lee instrucción (MOV AX BX) por instruccion
-	    leemos hasta que aparezca algo que nos indique que termino el proceso
-	    y guardamos esas instrucciones en una lista de instrucciones a la que llamo nuevoProceso  */
-
-
-	if (nuevoProceso == NULL) {
-        log_error(logger, "No se pudo leer el archivo en el path: %s", path);
-        return NULL;
-    }
-
-	PCB* nuevoPcb = iniciar_pcb(contador_pid++, 0, 0);
+    PCB* nuevoPcb = iniciar_pcb(contador_pid++, 0, 0);
 	
-	
-    
-    /*  Le mandamos el PID y el proceso a la KM para que lo guarde
-	    pero como nuevo proceso es un PUNTERO de una lista habria que serializar
-	    para poder mandarlo bien  */
-
-    enviarProcesoKM(nuevoPcb->PID, nuevoProceso, fd_km);
+    enviarProcesoKM(nuevoPcb->PID, path, fd_km);
 
 }
 
-t_list* leerInstruccionesDeUnProceso(t_log* logger, char* path) {
 
-    FILE* archivo = fopen(path, "r");
-    
-    if (archivo == NULL) {
-        log_error(logger, "No se pudo abrir el archivo en el path: %s", path);
-        return NULL;
-    }
 
-    t_list* lista_instrucciones = list_create();
-    char* linea = NULL;  
-    size_t tamañoLinea = 0; 
-    ssize_t caracteresLeidos;
-
-    while ((caracteresLeidos = getline(&linea, &tamañoLinea, archivo)) != -1) {
-
-        if (caracteresLeidos > 0 && linea[caracteresLeidos - 1] == '\n') {
-            linea[caracteresLeidos - 1] = '\0';
-        }
-
-        list_add(lista_instrucciones, strdup(linea));
-    }
-    
-	//libero memoria y cierro archivo
-    free(linea); 
-    fclose(archivo);
-        
-    return lista_instrucciones;
-}
-
-void enviarProcesoKM(int pid, t_list* nuevoProceso, int fd_km){
+void enviarProcesoKM(int pid, char* path, int fd_km){
 	
 	t_paquete* paquete = crear_paquete();
 	
 	agregar_a_paquete(paquete, &pid, sizeof(int));
 
-	int cant_instrucciones = list_size(nuevoProceso);
-
-	for (int i = 0; i < cant_instrucciones; i++) {
-        
-		// sacamos la instru d la lista de instrucciones que es el nuevo proceso
-        char* instruccion = list_get(nuevoProceso, i);
-        
-        // calculamos su tamaño (con el \0)
-        int tamanio = strlen(instruccion) + 1;
-
-        // la metemos en el paquete
-        agregar_a_paquete(paquete, instruccion, tamanio);
-    }
+	agregar_a_paquete(paquete, &path, sizeof(char*));
+	
 
 	enviar_paquete(paquete, fd_km);
     eliminar_paquete(paquete);
-	list_destroy_and_destroy_elements(nuevoProceso, (void*)free);
 
 }

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+
 int main(void)
 {
     /* ---------------- INITIALIZATION ---------------- */
@@ -79,7 +80,7 @@ t_log* iniciar_logger(void)
 t_config* iniciar_config(void)
 {
     char* path = "cpu.config";
-    t_config* nuevo_config = config_create(path);
+    nuevo_config = config_create(path);
     if (nuevo_config == NULL) {
         printf("¡No se pudo crear el config!\n");
     }

@@ -11,3 +11,9 @@ PCB* iniciar_pcb (int PID, int PPID, int UID){
 
 	return nuevo_pcb;
 }
+
+void terminar_pcb (PCB* pcb){
+	free(pcb);
+
+	return 0;
+}

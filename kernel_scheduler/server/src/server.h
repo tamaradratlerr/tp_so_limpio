@@ -6,6 +6,8 @@
 #include <string.h>
 #include <commons/log.h>
 #include "utils.h"
+#include <pthread.h>   // Para los Mutex y Hilos
+#include <semaphore.h> // Para los Semáforos (sem_wait, sem_post)
 
 void iterator(char* value);
 

@@ -10,6 +10,7 @@
 #include<commons/collections/list.h>
 #include<string.h>
 #include<assert.h>
+#include<utilsKS/utilsKS.h>
 
 #define PUERTO "4444"
 
@@ -51,7 +52,8 @@ typedef enum
     NEW,
     RNN,
     BCK,
-    EXT
+    EXT,
+    RDY
     //Faltan agregar los estados del CheckPoint 3
 }estado;
 
@@ -62,6 +64,7 @@ typedef struct
 	t_list* rnn;
 	t_list* bck;
 	t_list* ext;
+    t_list* rdy;
     //Faltan agregar los estados del CheckPoint 3
 
 }listas_procesos;

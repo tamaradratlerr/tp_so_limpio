@@ -6,7 +6,9 @@
 #include <string.h>
 #include <commons/collections/list.h>
 #include <commons/log.h>
+#include <commons/config.h>
 
+t_config* config = NULL;
 
 typedef enum
 {
@@ -46,7 +48,8 @@ typedef enum
     NEW,
     RNN,
     BCK,
-    EXT
+    EXT,
+    RDY
     //Faltan agregar los estados del CheckPoint 3
 }estado;
 
@@ -61,7 +64,27 @@ typedef struct
 
 }listas_procesos;
 
-PCB* iniciar_pcb (int PID, int PPID, int UID){
+//Estructura de dato que identifica CPUs
+typedef struct
+{
+	int idCpu;
+    int conexionCPu;
+    //se va viendo
 
+}listas_cpu;
+
+
+typedef enum
+{
+	FIFO,
+    RR,
+    NM
+    
+}algortimoEnUso;
+
+
+
+PCB* iniciar_pcb (int PID, int PPID, int UID);
+void terminar_pcb (PCB* pcb);
 
 #endif

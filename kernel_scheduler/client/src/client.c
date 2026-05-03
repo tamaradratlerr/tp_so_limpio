@@ -20,7 +20,6 @@ int main(void)
 	char* valor;
 	char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
 	t_log* logger;
-	t_config* config;
 
 	
 	logger = iniciar_logger();
@@ -163,19 +162,24 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
     
-    PCB* nuevoPcb = iniciar_pcb(contador_pid++, 0, 0);
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
 	
-    enviarProcesoKM(nuevoPcb->PID, path, fd_km);
+    enviarProcesoKM(nuevoPcb, path, fd_km);
 
+	contador_pid++;
 }
 
 
 
-void enviarProcesoKM(int pid, char* path, int fd_km){
+void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	
 	t_paquete* paquete = crear_paquete();
 	
-	agregar_a_paquete(paquete, &pid, sizeof(int));
+	agregar_a_paquete(paquete, pcb ->PID, sizeof(int));
+
+	agregar_a_paquete(paquete, pcb ->PPID, sizeof(int));
+
+	agregar_a_paquete(paquete, pcb -> UID, sizeof(int));
 
 	agregar_a_paquete(paquete, &path, sizeof(char*));
 	

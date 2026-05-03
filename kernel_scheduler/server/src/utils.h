@@ -14,37 +14,6 @@
 
 #define PUERTO "4444"
 
-typedef enum
-{
-	MENSAJE,
-	PAQUETE, 
-
-	//con la CPU
-	DISPATCH, 
-	INTERRUPT,
-
-	//con la IO
-	SLEEP, 
-	STDIN,
-	STDOUT
-}op_code;
-
-//Tipo de dato que ingresa desde el kernel memory
-typedef struct {
-    int PID, PPID, UID;
-} t_infoProceso;
-
-//Tipo de dato que va a adoptar el PCB
-typedef struct 
-{
-    int PID;
-    int PPID;
-    int UID;
-    estado estado_pcb;
-    estado estado_anterior;
-    //Creto que estado anterior puede servir para sacar de esa lista
-
-}PCB;
 
 //Tipo de dato que identifica el estado del Proceso (PCB)
 typedef enum 

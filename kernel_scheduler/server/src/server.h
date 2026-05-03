@@ -9,6 +9,16 @@
 #include <pthread.h>   // Para los Mutex y Hilos
 #include <semaphore.h> // Para los Semáforos (sem_wait, sem_post)
 
+/* Variables Globales*/
+
+listas_procesos* listasProcesos; //Lista de PCBs segun estado
+l_suplementarias* l_suple; //Lista de CPUs y IOs
+
+sem_t sem_procesos_ready; //Semaforo para lista de READYS
+sem_t sem_cpus_libres; //Semaforo para lista de CPUs
+pthread_mutex_t mutex_ready; // ????????????
+
+/*Funciones de SERVIDOR*/
 void iterator(char* value);
 
 listas_procesos* Iniciar_listas_procesos (void);
@@ -21,46 +31,31 @@ void terminar_pcb (PCB* pcb);
 
 
 
+/*Funciones de Planificador*/
 
-//Funcion que inicializa todas las listas de los Procesos//
-listas_procesos* Iniciar_listas_procesos (void);
+listas_procesos* Iniciar_listas_procesos (void); //Funcion que inicializa todas las listas de los Procesos//
+void terminar_listas_procesos ();//Funcion que elimina todas las listas de los procesos//
 
-listas_procesos* listasProcesos;
-
-
-void terminar_listas_procesos ();
-
-
-//Funcion que a suma un PCB a su lista correspondiente segun su ESTADO ACTUAL.
-void agregar_proceso_lista (PCB* pcb);
-
-//Funcion que inicia un nuevo PCB en estado NEW en utilsKS
+void agregar_proceso_lista (PCB* pcb); //Funcion que a suma un PCB a su lista correspondiente segun su ESTADO ACTUAL.
+void eliminar_proceso_Lista (PCB* pcb ); //Funcion que elimina un PCB de su lista correspondiente segun su ESTADO ANTERIOR.
 
 
-//Funcion que termina un pcb liberando su memoria en utils KS
-
-//funcion CAmbia estado pcb
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado); //Funcion Cambia el ESTADO ACTUAL y ESTADO ANTERIOR de un PCB
 
 
+void agregar_lista_ready(PCB* pcb); //Funcion que agrega PCB a lista READY segun el ALGORITMO PLANIFICADOR
+
+void ready_FIFO(PCB* pcb_nuevo); //Funcion que agrega a lista READY para FIFO
 
 
-//PLANIFICACION
-
-void agregar_lista_ready(PCB* pcb);
+void iniciar_listas_suple ();
+void eliminar_listas_suple ();
 
 
 
 
 
-sem_t sem_procesos_ready;
-sem_t sem_cpus_libres;
 
-pthread_mutex_t mutex_ready;
-
-
-//de new a ready fifo
-void agregar_a_ready_FIFO(PCB* pcb_nuevo);
 
 void manejar_vuelta_proceso_cpu(PCB* pcb);
 

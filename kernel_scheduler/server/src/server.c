@@ -2,6 +2,8 @@
 
 
 
+
+
 int main(void) {
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
 
@@ -63,10 +65,8 @@ void iterator(char* value) {
 
 //PCB ---------
 
-//Funcion que inicializa todas las listas de los Procesos//
+//Funcion que inicializa todas las listas de los Procesos
 listas_procesos* Iniciar_listas_procesos (void){
-	
-	listas_procesos* l_procesos;
 
 	l_procesos->new = list_create();
 	l_procesos->rnn = list_create();
@@ -78,7 +78,8 @@ listas_procesos* Iniciar_listas_procesos (void){
 };
 
 
-void terminar_listas_procesos (listas_procesos* listas_procesos){
+void terminar_listas_procesos (){
+
 	list_destroy(listas_procesos->new);
 	list_destroy(listas_procesos->rnn);
 	list_destroy(listas_procesos->bck);
@@ -88,7 +89,20 @@ void terminar_listas_procesos (listas_procesos* listas_procesos){
 	return 0;
 }
 
-listas_procesos* listasProcesos;
+//Funcion que inicializa las listas de CPUs y IOs
+void iniciar_listas_suple (){
+    l_suple->cpu = list_create();
+    l_suple->io = list_create();
+
+    return 0;
+}
+
+void eliminar_listas_suple (){
+    list_destroy_and_destroy_elements(l_suple->cpu);
+    list_destroy_and(l_suple->io);
+
+    return 0;
+}
 
 //Funcion que a suma un PCB a su lista correspondiente segun su ESTADO ACTUAL.
 void agregar_proceso_lista (PCB* pcb){
@@ -115,13 +129,37 @@ void agregar_proceso_lista (PCB* pcb){
 
 }
 
+//Esta Funcion debe ser llamada dsp de agregar_proceso_lista (PCB* pcb) 
+void eliminar_proceso_Lista (PCB* pcb ){
 
-//Funcion que inicia un nuevo PCB en estado NEW en utilsKS
+    bool removed;
+    switch (pcb->estado_anterior)
+	{
+	case NEW: //NEW
+		removed = list_remove_element(listasProcesos->new, pcb);
+	case RNN: //RUNNING
+		removed = list_remove_element(listasProcesos->rnn, pcb);
+	case BCK: //BLOCK
+		removed = list_remove_element(listasProcesos->bck, pcb);
+	case EXT: //EXIT
+		removed = list_remove_element(listasProcesos->ext, pcb);
+	case RDY: //RDY
+		removed = list_remove_element(listas_procesos->rdy, pcb);
+		break;
+	
+	default:
+        //Erro en valor del PCB//
+		break;
+	}
+    if (!remove){
+        return -1;
+    }
+    return 0;
+    
+    /*list_remove_element:: Devuelve TRUE si el elemento fue removido y Devuelve FALSE si no fue encontrado el elemento*/
+}   
 
-
-//Funcion que termina un pcb liberando su memoria en utils KS
-
-//funcion CAmbia estado pcb
+//funcion Cambia estado pcb
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
     pcb -> estado_anterior = (pcb ->estado_pcb);
     pcb ->estado_pcb = nuevoEstado;
@@ -136,15 +174,18 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
 void agregar_lista_ready(PCB* pcb){
 
     if (strcmp(planificacion_algoritmo, "FIFO") == 0) {
-    ready_FIFO(pcb);
+        ready_FIFO(pcb);
     } 
     else if (strcmp(planificacion_algoritmo, "RR") == 0) {
-        // ready_RR(pcb);
+        ready_FIFO(pcb); // ready_RR(pcb);
     } 
     else if (strcmp(planificacion_algoritmo, "VRR") == 0) {
         // ready_VRR(pcb);
     }
-
+    else {
+    return -1;
+    }
+    return 0;
 }
 
 
@@ -152,7 +193,7 @@ void agregar_lista_ready(PCB* pcb){
 
 
 //de new a ready fifo
-void agregar_a_ready_FIFO(PCB* pcb_nuevo) {
+void ready_FIFO(PCB* pcb_nuevo) {
 
     cambiar_estado_pcb(pcb_nuevo, RDY);  
 

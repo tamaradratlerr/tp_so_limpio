@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-t_log* logger;
+
 
 int iniciar_servidor(void)
 {

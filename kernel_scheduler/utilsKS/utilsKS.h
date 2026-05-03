@@ -82,6 +82,32 @@ typedef enum
     
 }algortimoEnUso;
 
+typedef struct{
+    int CPU_ID;
+}CPU;
+
+
+
+typedef struct{
+    int IO_ID;
+    IO_OPCODE tipo;
+    int estado = 0; //valor cero indica que no esta en uso;    
+}IO;
+
+typedef enum
+{
+    STDIN,
+    STDOUT,
+    SLEEP
+
+}IO_OPCODE;
+
+typedef struct 
+{
+    t_list* STDIN;
+    t_list* STDOUT;
+    t_list* SLEEP;
+}l_IO;
 
 
 PCB* iniciar_pcb (int PID, int PPID, int UID);

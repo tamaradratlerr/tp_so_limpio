@@ -221,6 +221,10 @@ void atender_cpu(){
     
     
     manejar_vuelta_proceso_cpu(listasProcesos -> rnn)
+
+    //OP_code interrupcion IO
+
+
 }
 
 
@@ -243,3 +247,41 @@ void agregar_running() {
     
 }
 
+
+
+
+//***  IO ***//
+
+//Mandar (cuando se recibe la peticion desde la CPU se acciona esta funcion....)
+//en caso de CPU: (CPU) y agrego a listas CPU; en caso IO: (STDIN) ; (STDOUT) ; (SLEEP) y se agrega cada una a su lista.  
+//vamos a hacer una estructura por cada tipo de cliene. (CPU , IO)
+
+//t_list* l_CPU = list_create(); //CREAR DESTROY DE TODAS ESTAS LISTAS
+
+//hacer ENUM de todas las comunicaciones posibles con la CPU.
+
+//Hacer estado EXIT;
+
+
+
+
+STDIN(INT TAMAÑO;){
+    while (//pasar por toda la lista de STDINs buscando una que no este en uso)
+    {
+        /* code */
+    }
+    
+    //hace la conect
+
+    //recibe el mesaje
+
+    //Vemos que devuelva.....
+
+
+}
+
+STDOUT();
+
+SLEEP();
+
+//Recibir

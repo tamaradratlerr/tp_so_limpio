@@ -106,7 +106,7 @@ void agregar_proceso_lista (PCB* pcb){
 		list_add(listasProcesos->ext, pcb);
 
 	case 5: //RDY
-		agregar_lista_ready(pcb, "algoritmo");
+		agregar_lista_ready(pcb);
 		break;
 	
 	default:
@@ -133,33 +133,22 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
 
 //PLANIFICACION
 
-void agregar_lista_ready(PCB* pcb, algortimoEnUso algoritmo){
+void agregar_lista_ready(PCB* pcb){
 
-    switch (algoritmo)
-    {
-    case FIFO:
-        ready_FIFO(pcb);
-
-    case NM:
-
-    case RR:
-        /* code */
-        break;
-    
-    default:
-        break;
+    if (strcmp(planificacion_algoritmo, "FIFO") == 0) {
+    ready_FIFO(pcb);
+    } 
+    else if (strcmp(planificacion_algoritmo, "RR") == 0) {
+        // ready_RR(pcb);
+    } 
+    else if (strcmp(planificacion_algoritmo, "VRR") == 0) {
+        // ready_VRR(pcb);
     }
 
 }
 
 
 
-
-
-sem_t sem_procesos_ready;
-sem_t sem_cpus_libres;
-
-pthread_mutex_t mutex_ready;
 
 
 //de new a ready fifo
@@ -176,20 +165,6 @@ void agregar_a_ready_FIFO(PCB* pcb_nuevo) {
     pthread_mutex_unlock(&mutex_ready);
 
     sem_post(&sem_procesos_ready); 
-}
-
-
-void agregar_a_ready_RR(PCB* pcb_nuevo) {
-
-    //sacamos el quantum desde config (no se como)
-    int quantum;
-
-    while(timepo){
-        
-    }
-    
-
-    
 }
 
 
@@ -214,13 +189,13 @@ void atender_cpu(){
 
     enviar_a_cpu_disponible(listasProcesos -> rnn);
     
-    if (algoirtimo == rr){
-        sleep(quantum);
-        desalojar_proceso;
+    if (strcmp(planificacion_algoritmo, "RR") == 0){
+        sleep(intervalo_tarea);
+        desalojar_proceso_cpu();
     }
     
     
-    manejar_vuelta_proceso_cpu(listasProcesos -> rnn)
+    manejar_vuelta_proceso_cpu(listasProcesos -> rnn);
 
     //OP_code interrupcion IO
 
@@ -265,8 +240,8 @@ void agregar_running() {
 
 
 
-STDIN(INT TAMAÑO;){
-    while (//pasar por toda la lista de STDINs buscando una que no este en uso)
+io_stdint(int TAMAÑO){    /*pasar por toda la lista de STDINs buscando una que no este en uso*/
+    while (1)
     {
         /* code */
     }
@@ -280,8 +255,10 @@ STDIN(INT TAMAÑO;){
 
 }
 
-STDOUT();
 
-SLEEP();
 
+io_stdout();
+
+io_sleep();
 //Recibir
+

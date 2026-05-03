@@ -14,14 +14,7 @@ int contador_pid = 0;
 int main(void)
 {
 	
-	int conexion;
-	char* ip;
-	char* puerto;
-	char* valor;
-	char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
-	t_log* logger;
-
-	
+		
 	logger = iniciar_logger();
 
 
@@ -41,7 +34,7 @@ int main(void)
 	intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
 	tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
 	
-	
+
 	log_info(logger, "Soy un Log");
 	/* ---------------- LEER DE CONSOLA ---------------- */
 

@@ -10,6 +10,13 @@
 
 t_config* config = NULL;
 
+int conexion;
+char* ip;
+char* puerto;
+char* valor;
+char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
+t_log* logger;
+
 typedef enum
 {
 	MENSAJE,
@@ -24,6 +31,19 @@ typedef enum
 	STDIN,
 	STDOUT
 }op_code;
+
+
+
+typedef enum{
+
+    //interrupciones
+    FIN_PROCESO,
+
+//COMPLETAR
+
+}op_code_cpu_ks;
+
+
 
 //Tipo de dato que ingresa desde el kernel memory
 typedef struct {
@@ -91,7 +111,7 @@ typedef struct{
 typedef struct{
     int IO_ID;
     IO_OPCODE tipo;
-    int estado = 0; //valor cero indica que no esta en uso;    
+    int enUso; //valor cero indica que no esta en uso;    
 }IO;
 
 typedef enum

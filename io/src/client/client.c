@@ -1,64 +1,56 @@
 #include "client.h"
 
-//argc es la cantidad de argumentos que se agregan por línea de comando (argument count).
-//argv es un array de strings que contiene los string ingresados (argument vector).
-
-//argumento 0: intruccion - agumento 1: direc. archivo.config - argumento 2: Tipo de intruccion de IO.
-// void validar_argumentos(int argc, char** argv) {
-//     if (argc != 3) { 
-//         fprintf(stderr, "Error, faltan argumentos. \nUso: %s <arg1> <arg2>\n", argv[0]);
-//         exit(EXIT_FAILURE);
-//     }
-// }
-
-//int main(int argc, char** argv)
-int main(void)
+int main(int argc, char** argv)
 {
-	//validar_argumentos(argc, argv);
-// *** ---------- Variables ---------- *** //
+	validar_argumentos(argc, argv);
 
 	int conexion;
-
 	char* clave;
-	char* ip_io; 
-	char* puerto_io; 
-	char* log_level; //Variable para darle el valor de LOG_LEVEL desde el config
-	
+	char* io_ip; 
+	char* io_port; 
+	char* log_level;
 	char* io;
-
-	
-
 	t_log* logger;
-	t_config* config;
-
 	
+	/* Inicio configuración */
+	t_config* config = config_create(argv[1]);
+	/* Chequeamos si hubo error al crear config */
+    if (config == NULL) {
+        printf("¡No se pudo crear el config!\n");
+        abort();
+    }
 
-	//io = argv[2]; //Le damos valor al tipo de intruccion.
-	// io = "STDIN";
-	// printf("Valor de Tipo = ", io);
+
+
+
+	/* Revisar desde la VM la commmons la funcion "iniciar_config" */
+
+
+
+
+	/* Asigno el tipo de IO a la variable "io" */
+	io = argv[2];
+	printf("Tipo de IO ingresada: %s", io);
 
 
 	/* ---------------- logger y config ---------------- */
-
-
-	//config = config_create(argv[1]);
 	config = iniciar_config();
 	if (config == NULL) {
-    fprintf(stderr, "No se pudo abrir el archivo de configuración\n");
-    return EXIT_FAILURE;
+		fprintf(stderr, "No se pudo abrir el archivo de configuración\n");
+		return EXIT_FAILURE;
 	}
 
 	clave = config_get_string_value(config, "CLAVE");
-	ip_io = config_get_string_value(config, "IP_IO");
-	puerto_io = config_get_string_value(config, "PUERTO_IO");
-	log_level = config_get_string_value(config, "LOG_LEVEL"); 
+	io_ip = config_get_string_value(config, "IO_IP");
+	io_port = config_get_string_value(config, "IO_PORT");
+	log_level = config_get_string_value(config, "LOG_LEVEL");
 
 	
 	logger = iniciar_logger(log_level);
 	
 	log_info(logger, "Prueba de funcionamiento de logger");
-	log_info(logger, ip_io);
-	log_info(logger, puerto_io);
+	log_info(logger, io_ip);
+	log_info(logger, io_port);
 
 
 	
@@ -67,7 +59,7 @@ int main(void)
     printf("Intentando conectar al servidor...\n");
 	log_info(logger, "Intentando concetar al servidor...\n");
 
-	conexion = crear_conexion(ip_io, puerto_io);
+	conexion = crear_conexion(io_ip, io_port);
 
 	if (conexion != -1) {
 		log_info(logger, "Conexion establecida, socket: %d\n", conexion);
@@ -101,7 +93,6 @@ int main(void)
 
 
 // *** Funciones *** //
-
 //*** Uso la funcion de las commons *** //
 t_log* iniciar_logger(char *log_level) //Ingreso valor del t_log_level para configurar la salida del mismo
 {
@@ -126,26 +117,6 @@ t_log* iniciar_logger(char *log_level) //Ingreso valor del t_log_level para conf
 	
 	return nuevo_logger;
 }
-
-
-//*** Uso la funcion de las commons *** //
-t_config* iniciar_config(void) 
-{
-	t_config* nuevo_config;
-
-	char *path = "IO.config";
-
-	nuevo_config = config_create(path);
-
-	//Chequeamos si hubo error al crear el config
-    if (nuevo_config == NULL) {
-        printf("¡No se pudo crear el config!\n");
-        abort(); // Terminamos la ejecución como pide la consigna
-    }
-
-	return nuevo_config;
-}
-
 
 
 // **original del TP0, no me parece necesaria**
@@ -190,4 +161,11 @@ void terminar_programa(int conexion, t_log* logger, t_config* config) //libera l
 	log_destroy(logger);
 	config_destroy(config);
 	liberar_conexion(conexion);
+}
+
+void validar_argumentos(int argc, char** argv) {
+    if (argc != 3) {
+        fprintf(stderr, "Error, faltan argumentos. \nUso: %s <arg1> <arg2>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
 }

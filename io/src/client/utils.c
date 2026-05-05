@@ -19,33 +19,38 @@ void* serializar_paquete(t_paquete* paquete, int bytes)
 
 int crear_conexion(char *ip, char* puerto)
 {
+	int err;
     struct addrinfo hints, *server_info;
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    // 1. Obtener info de dirección
-    if(getaddrinfo(ip, puerto, &hints, &server_info) != 0) {
-        fprintf(stderr, "Error en getaddrinfo\n");
-        return -1;
+    /* 1. Obtener info de dirección */
+	err = getaddrinfo(ip, puerto, &hints, &server_info); /*if 0 => ok*/
+    if(err) {
+        perror("Error on getaddrinfo.");
+        abort();
     }
 
-    // 2. Crear el socket
+    /* 2. Crear el socket */
     int socket_cliente = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
     if(socket_cliente == -1) {
         freeaddrinfo(server_info);
-        return -1;
+		perror("Error: socket closed.");
+        abort();
     }
 
-    // 3. Intentar conectar
-    if(connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen) == -1) {
-        // Si entra acá, la conexión NO se realizó
-        perror("ERROR AL CONECTAR"); 
-        close(socket_cliente); // Cerramos el socket porque no sirve para nada
-        freeaddrinfo(server_info);
-        return -1; // Devolvemos -1 para avisar al main que falló
+    /* 3. Intentar conectar al socket */
+	err = connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
+    if(err) {
+		perror("Error on connect.");
+		close(socket_cliente);
+		freeaddrinfo(server_info);
+		abort();
     }
+
+	/* aca voy a generar el mensaje de  ## conectado a... y ubicar en utils (modificar firma, sumar logger y nombre de server)*/
 
     freeaddrinfo(server_info);
     return socket_cliente;

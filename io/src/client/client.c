@@ -4,7 +4,7 @@ int main(int argc, char** argv)
 {
 	validar_argumentos(argc, argv);
 
-	int conexion;
+	int fd_conexion;
 	char* clave;
 	char* io_ip; 
 	char* io_port; 
@@ -16,32 +16,35 @@ int main(int argc, char** argv)
 	t_log* logger;
 
 	/* Inicio configuración */
-	t_config* config = iniciar_config(argv[1]);
+	t_config* io_config = iniciar_config(argv[1]);
 
-	clave 					= config_get_string_value(config, "CLAVE");
-	io_ip					= config_get_string_value(config, "IO_IP");
-	io_port					= config_get_string_value(config, "IO_PORT");
-	log_level				= config_get_string_value(config, "LOG_LEVEL");
-	log_file				= config_get_string_value(config, "LOG_FILE");
-	log_process_name		= config_get_string_value(config, "LOG_PROCESS_NAME");
-	log_is_active_console	= config_get_string_value(config, "LOG_IS_ACTIVE_CONSOLE");
+	clave 					= config_get_string_value(io_config, "CLAVE");
+	io_ip					= config_get_string_value(io_config, "IO_IP");		/* Ip del KS */
+	io_port					= config_get_string_value(io_config, "IO_PORT");	/* Port del KS */
+	log_level				= config_get_string_value(io_config, "LOG_LEVEL");
+	log_file				= config_get_string_value(io_config, "LOG_FILE");
+	log_process_name		= config_get_string_value(io_config, "LOG_PROCESS_NAME");
+	log_is_active_console	= config_get_string_value(io_config, "LOG_IS_ACTIVE_CONSOLE");
 	
 	/* Inicio Logger */
 	logger = iniciar_logger(log_level, log_file, log_process_name, log_is_active_console);
 	log_info(logger, "Logger iniciado.");
-	log_info(logger, "Ip del módulo: %s", io_ip);
-	log_info(logger, "Puerto del módulo: %s", io_port);
+	log_info(logger, "Ip del KS: %s", io_ip);
+	log_info(logger, "Puerto KS: %s", io_port);
 
 
-	
 	/* Conexion a servidor */
-    
 	log_info(logger, "Iniciando conexión con el servidor...");
-	conexion = crear_conexion(io_ip, io_port);
+	fd_conexion = crear_conexion(io_ip, io_port);
 
-	if (conexion != -1) {
-		log_info(logger, "Conexion establecida, socket: %d\n", conexion);
-        printf("Conexión establecida, socket: %d\n", conexion);
+
+
+	/* Subo hasta aca, porque voy a poner codigo en utils (develop)*/
+
+
+
+	if (fd_conexion != -1) {
+        printf("Conexión establecida, socket: %d\n", fd_conexion);
 		log_info(logger, "## Conectado a Kernel Scheduler"); //*** --- Logger obligatorio para Entrega --- ***//
 	} else {
 		printf("No se pudo conectar.\n");
@@ -49,21 +52,21 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	// if(conexion < 0){ //se repiten las dos funciones pero es para ver como funciona cada una
+	// if(fd_conexion < 0){ //se repiten las dos funciones pero es para ver como funciona cada una
 	// 	log_error(logger, "error de la conexión");
-	// 	terminar_programa(conexion, logger, config);
+	// 	terminar_programa(fd_conexion, logger, io_config);
 	// 	return 1; //termino el programa
 	//}
 
 // Enviamos un mensaje a KS para comprobar la conexion
-	enviar_mensaje(clave, conexion);
+	enviar_mensaje(clave, fd_conexion);
 
 	log_info(logger, "Esperando porr IO desde K.S.");
 
 //funcion paquete que se debe revisar como funciona
-	//paquete(conexion);
+	//paquete(fd_conexion);
 
-	terminar_programa(conexion, logger, config);
+	terminar_programa(fd_conexion, logger, io_config);
 
 	return 0;
 }

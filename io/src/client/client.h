@@ -21,4 +21,6 @@ t_config* iniciar_config(char* path);
 
 void terminar_programa(int, t_log*, t_config*);
 
+void validar_argumentos(int, char**);
+
 #endif /* CLIENT_H_ */

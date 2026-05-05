@@ -9,56 +9,34 @@ int main(int argc, char** argv)
 	char* io_ip; 
 	char* io_port; 
 	char* log_level;
-	char* io;
+	char* log_file;
+	char* log_process_name;
+	char* log_is_active_console;
+	char* io = argv[2];
 	t_log* logger;
-	
+
 	/* Inicio configuración */
-	t_config* config = config_create(argv[1]);
-	/* Chequeamos si hubo error al crear config */
-    if (config == NULL) {
-        printf("¡No se pudo crear el config!\n");
-        abort();
-    }
+	t_config* config = iniciar_config(argv[1]);
 
-
-
-
-	/* Revisar desde la VM la commmons la funcion "iniciar_config" */
-
-
-
-
-	/* Asigno el tipo de IO a la variable "io" */
-	io = argv[2];
-	printf("Tipo de IO ingresada: %s", io);
-
-
-	/* ---------------- logger y config ---------------- */
-	config = iniciar_config();
-	if (config == NULL) {
-		fprintf(stderr, "No se pudo abrir el archivo de configuración\n");
-		return EXIT_FAILURE;
-	}
-
-	clave = config_get_string_value(config, "CLAVE");
-	io_ip = config_get_string_value(config, "IO_IP");
-	io_port = config_get_string_value(config, "IO_PORT");
-	log_level = config_get_string_value(config, "LOG_LEVEL");
-
+	clave 					= config_get_string_value(config, "CLAVE");
+	io_ip					= config_get_string_value(config, "IO_IP");
+	io_port					= config_get_string_value(config, "IO_PORT");
+	log_level				= config_get_string_value(config, "LOG_LEVEL");
+	log_file				= config_get_string_value(config, "LOG_FILE");
+	log_process_name		= config_get_string_value(config, "LOG_PROCESS_NAME");
+	log_is_active_console	= config_get_string_value(config, "LOG_IS_ACTIVE_CONSOLE");
 	
-	logger = iniciar_logger(log_level);
-	
-	log_info(logger, "Prueba de funcionamiento de logger");
-	log_info(logger, io_ip);
-	log_info(logger, io_port);
+	/* Inicio Logger */
+	logger = iniciar_logger(log_level, log_file, log_process_name, log_is_active_console);
+	log_info(logger, "Logger iniciado.");
+	log_info(logger, "Ip del módulo: %s", io_ip);
+	log_info(logger, "Puerto del módulo: %s", io_port);
 
 
 	
-// *** Conexion a servidor *** //
-
-    printf("Intentando conectar al servidor...\n");
-	log_info(logger, "Intentando concetar al servidor...\n");
-
+	/* Conexion a servidor */
+    
+	log_info(logger, "Iniciando conexión con el servidor...");
 	conexion = crear_conexion(io_ip, io_port);
 
 	if (conexion != -1) {
@@ -90,17 +68,32 @@ int main(int argc, char** argv)
 	return 0;
 }
 
+/* 
+ ****************
+ *	Funciones	*
+ ****************
+*/
 
+t_config* iniciar_config(char* path)
+{
+	t_config* nuevo_config;
 
-// *** Funciones *** //
-//*** Uso la funcion de las commons *** //
-t_log* iniciar_logger(char *log_level) //Ingreso valor del t_log_level para configurar la salida del mismo
+	nuevo_config = config_create(path);
+
+    if (nuevo_config == NULL) {
+        printf("¡No se pudo crear el config!\n");
+        abort();
+    }
+	return nuevo_config;
+}
+
+t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_active_console) //Ingreso valor del t_log_level para configurar la salida del mismo
 {
 	t_log* nuevo_logger;
 
-	char *file = "io.log";
-	char *process_name = "io_logs";
-	bool is_active_console = true;
+	char *file = file;
+	char *process_name = process_name;
+	bool is_active_console = is_active_console;
 	t_log_level level;
 
 	//Condicional que me permite modificar el nivel del log a partir de lo recibido en el .config//

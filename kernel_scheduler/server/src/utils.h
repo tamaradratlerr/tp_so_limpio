@@ -15,6 +15,7 @@
 #define PUERTO "4444"
 
 
+
 //Tipo de dato que identifica el estado del Proceso (PCB)
 typedef enum 
 {
@@ -39,7 +40,7 @@ typedef struct
 }listas_procesos;
 
 
-extern t_log* logger;
+
 
 void* recibir_buffer(int*, int);
 

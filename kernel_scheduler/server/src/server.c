@@ -5,8 +5,10 @@
 
 
 int main(void) {
+
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
 
+    //Esto debe suceder luego de conectarse con la KM hay que ver como...
     int server_fd = iniciar_servidor();
     log_info(logger, "Servidor listo para recibir clientes");
 
@@ -23,9 +25,14 @@ int main(void) {
         // BUCLE 2: El que ya tenías, para procesar a ESTE cliente
         int control_loop = 1;
         while (control_loop) {
+
+            //Creo que aca se deberi crear el HILO
             int cod_op = recibir_operacion(cliente_fd);
             
             t_list* lista;
+
+            //aca deberia ver que es lo que conecto con el servidor y dsp llamar a la funcion atender y hacer ese switch
+            
             switch (cod_op) {
                 case MENSAJE:
                     recibir_mensaje(cliente_fd);
@@ -108,23 +115,52 @@ void eliminar_listas_suple (){
 void agregar_proceso_lista (PCB* pcb){
 
 	sacar_proceso_lista();//Funcion pensada para tomar estado anterior y sacarlo de esa lista.
-	switch (pcb->estado_pcb)
-	{
-	case 1: //NEW
+	
+    switch (pcb->estado_pcb){
+	case NEW: //NEW
+        
+        pthread_mutex_lock(&sem_procesos_new);
+
 		list_add(listasProcesos->new, pcb);
-	case 2: //RUNNING
+
+        pthread_mutex_unlock(&sem_procesos_new);
+
+	case RNN: //RUNNING
+
+        pthread_mutex_lock(&sem_procesos_running);    
+
 		list_add(listasProcesos->rnn, pcb);
-	case 3: //BLOCK
+
+        pthread_mutex_unlock(&sem_procesos_running);
+	case BCK: //BLOCK
+
+        pthread_mutex_lock(&sem_procesos_block);
+
 		list_add(listasProcesos->bck, pcb);
-	case 4: //EXIT
+
+        pthread_mutex_unlock(&sem_procesos_block);
+
+	case EXT: //EXIT
+
+        pthread_mutex_lock(&sem_procesos_exit);    
+
 		list_add(listasProcesos->ext, pcb);
 
-	case 5: //RDY
+        pthread_mutex_unlock(&sem_procesos_exit);
+
+	case RDY: //RDY
+
+        //por ahora no agrego los semaforos pq hay que analizar si se hace dentro o fuera de la funcion
 		agregar_lista_ready(pcb);
-		break;
+	
+    
+        break;
 	
 	default:
+        return -1;
 		break;
+
+        return 0;
 	}
 
 }
@@ -136,15 +172,25 @@ void eliminar_proceso_Lista (PCB* pcb ){
     switch (pcb->estado_anterior)
 	{
 	case NEW: //NEW
+        pthread_mutex_lock(&sem_procesos_new);
 		removed = list_remove_element(listasProcesos->new, pcb);
+        pthread_mutex_unlock(&sem_procesos_new);
 	case RNN: //RUNNING
+        pthread_mutex_lock(&sem_procesos_running);
 		removed = list_remove_element(listasProcesos->rnn, pcb);
+        pthread_mutex_unlock(&sem_procesos_running);
 	case BCK: //BLOCK
+        pthread_mutex_lock(&sem_procesos_block);
 		removed = list_remove_element(listasProcesos->bck, pcb);
+        pthread_mutex_unlock(&sem_procesos_block);
 	case EXT: //EXIT
+        pthread_mutex_lock(&sem_procesos_exit);
 		removed = list_remove_element(listasProcesos->ext, pcb);
+        pthread_mutex_unlock(&sem_procesos_exit);
 	case RDY: //RDY
+        pthread_mutex_lock(&sem_procesos_ready);
 		removed = list_remove_element(listas_procesos->rdy, pcb);
+        pthread_mutex_unlock(&sem_procesos_ready);
 		break;
 	
 	default:
@@ -159,13 +205,11 @@ void eliminar_proceso_Lista (PCB* pcb ){
     /*list_remove_element:: Devuelve TRUE si el elemento fue removido y Devuelve FALSE si no fue encontrado el elemento*/
 }   
 
-//funcion Cambia estado pcb
+//funcion Cambia estado pcb //Se le podria agregar semaforos pero antes y dsp de llamar a la funcion
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
     pcb -> estado_anterior = (pcb ->estado_pcb);
     pcb ->estado_pcb = nuevoEstado;
 }
-
-
 
 
 

@@ -15,7 +15,7 @@ char* ip;
 char* puerto;
 char* valor;
 char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
-t_log* logger;
+//t_log* logger; ME PARAECE QUE EL LOGGER TIENE QUE SER UNO PARA CLIENTE Y OTRO PARA SERVIDOR
 
 typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y KM.
 {

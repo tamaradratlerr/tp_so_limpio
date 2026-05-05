@@ -11,10 +11,17 @@
 
 /* Variables Globales*/
 
+extern t_log* logger;
+
 listas_procesos* listasProcesos; //Lista de PCBs segun estado
 l_suplementarias* l_suple; //Lista de CPUs y IOs
 
+sem_t sem_procesos_new; //Semaforo para lista de NEWS
 sem_t sem_procesos_ready; //Semaforo para lista de READYS
+sem_t sem_procesos_running; //Semaforo para lista de RUNNINGS
+sem_t sem_procesos_block; //Semaforo para lista de BLOCKS
+sem_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
+
 sem_t sem_cpus_libres; //Semaforo para lista de CPUs
 pthread_mutex_t mutex_ready; // ????????????
 

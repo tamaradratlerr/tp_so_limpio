@@ -72,7 +72,7 @@ typedef enum
 //Estructura de dato que identifica todas las listas de los procesos
 typedef struct
 {
-	t_list* niu;
+	t_list* new;
 	t_list* rnn;
     t_list* rdy;
 	t_list* bck;

@@ -35,7 +35,7 @@ int iniciar_servidor(void)
     listen(socket_servidor, SOMAXCONN);
 	
 	freeaddrinfo(servinfo);
-	log_trace(logger, "Listo para escuchar a mi cliente");
+	log_trace(logger, "Listo para escuchar Clientes");
 
 	return socket_servidor;
 }
@@ -50,7 +50,7 @@ int esperar_cliente(int socket_servidor)
         return -1;
     }
 
-	log_info(logger, "Se conecto un cliente!");
+	log_info(logger, "Se conecto un Cliente!");
 
 	return socket_cliente;
 }

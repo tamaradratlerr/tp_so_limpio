@@ -13,8 +13,13 @@ int main(void) {
     log_info(logger, "Servidor listo para recibir clientes");
 
     // BUCLE 1: Para aceptar nuevos clientes uno tras otro
-    while (1) {
+    int control_loop_2 = 1;
+    while (control_loop_2) {
+
+        /*En esta intancia estamos esperando la conexion de un cliente*/
         int cliente_fd = esperar_cliente(server_fd);
+
+        /*Verificamos si la conexion con el nuevo cliente fue exitosa*/
         if (cliente_fd == -1) {
             log_error(logger, "Error al aceptar un cliente");
             continue; // Intentamos con el siguiente
@@ -22,9 +27,14 @@ int main(void) {
         
         log_info(logger, "Cliente conectado. Iniciando recepción...");
 
+        pthread_t hilo_id; //Identificador del hilo
+
+        if (pthread_create(&hilo_id, NULL))
+
+
         // BUCLE 2: El que ya tenías, para procesar a ESTE cliente
-        int control_loop = 1;
-        while (control_loop) {
+        int control_loop_1 = 1;
+        while (control_loop_1) {
 
             //Creo que aca se deberi crear el HILO
             int cod_op = recibir_operacion(cliente_fd);

@@ -9,6 +9,7 @@
 #include <commons/config.h>
 
 t_config* config = NULL;
+bool g_server = FALSE;
 
 int conexion;
 char* ip;

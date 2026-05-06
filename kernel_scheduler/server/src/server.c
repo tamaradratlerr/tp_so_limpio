@@ -8,31 +8,56 @@ int main(void) {
 
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
 
-    //Esto debe suceder luego de conectarse con la KM hay que ver como...
+    while(!g_server){
+        
+        /*g_servel va a ser una variable INT global que desde el cliente va a indicar cuando se va a poder levantar el servidor*/
+        /*Deberia ser luego que conectarse con el KM por primera vez segun el enunciado del TP*/
+        /*g_server inicia con un valor de FALSE*/
+    } 
+
     int server_fd = iniciar_servidor();
     log_info(logger, "Servidor listo para recibir clientes");
 
     // BUCLE 1: Para aceptar nuevos clientes uno tras otro
-    int control_loop_2 = 1;
-    while (control_loop_2) {
+    /*El valor de control_loop0 debera ser modificado solo en caso de querer denter por completo el KS*/
+    int control_loop_0= 1;
+    while (control_loop_0) {
 
         /*En esta intancia estamos esperando la conexion de un cliente*/
+        
         int cliente_fd = esperar_cliente(server_fd);
-
         /*Verificamos si la conexion con el nuevo cliente fue exitosa*/
         if (cliente_fd == -1) {
             log_error(logger, "Error al aceptar un cliente");
             continue; // Intentamos con el siguiente
         }
-        
         log_info(logger, "Cliente conectado. Iniciando recepción...");
 
-        pthread_t hilo_id; //Identificador del hilo
+        pthread_t hilo_id; //Identidicador del HILO
+        if(pthread_create(&hilo_id. NULL, atender_nuevo_cliente, (void*)(intptr_t)cliente_fd)) {/*No estoy seguro de que este bien esta declaracion*/ /*Le estoy pasando la info del cliente*/
+            log_info(logger, "Error en la creacion de HILO");
+            return 1;
+        }
+        
+            /*&hilo_id: Puntero donde se guardará el ID del nuevo hilo.
 
-        if (pthread_create(&hilo_id, NULL))
+            NULL: Atributos del hilo (usualmente NULL para los valores por defecto).
+
+            atender_nuevo_cliente: El nombre de la función que quieres ejecutar.
+            (void*)mensaje: El argumento que le pasas a esa función (debe ser un puntero).*/
+        
+            /*Aquí entra intptr_t, que vive en la librería <stdint.h>.
+
+            Es un tipo de dato entero que garantiza tener siempre el mismo tamaño que un puntero de la plataforma donde estés.
+
+            En un sistema de 32 bits, intptr_t será de 32 bits. 
+
+            En un sistema de 64 bits, intptr_t será de 64 bits.*/
 
 
-        // BUCLE 2: El que ya tenías, para procesar a ESTE cliente
+
+        // BUCLE 2: Para procesar al cliente (entiendo que capaz este bucle deberia estar dentro de una funcion atender_nuevo_cliente)
+        /*El valor de control_loop1 debera ser modificado solo en caso de querer desconectar al cliente*/
         int control_loop_1 = 1;
         while (control_loop_1) {
 
@@ -78,6 +103,17 @@ void iterator(char* value) {
 
 
 /*-------- CHECKPOINT 2 --------------------------------------------------------------------*/
+
+void* atender_nuevo_cliente(void* arg) {
+    int fd = (int)(intptr_t)arg; // Lo convertimos de vuelta a int
+    // ...
+}
+
+
+
+
+
+
 
 
 //PCB ---------

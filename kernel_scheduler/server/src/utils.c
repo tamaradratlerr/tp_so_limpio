@@ -35,7 +35,7 @@ int iniciar_servidor(void)
     listen(socket_servidor, SOMAXCONN);
 	
 	freeaddrinfo(servinfo);
-	log_trace(logger, "Listo para escuchar Clientes");
+	log_info(logger, "Listo para escuchar Clientes");
 
 	return socket_servidor;
 }
@@ -46,7 +46,7 @@ int esperar_cliente(int socket_servidor)
 	int socket_cliente = accept(socket_servidor, NULL, NULL);
     
     if (socket_cliente == -1) {
-        log_error(logger, "Error al aceptar al cliente");
+        log_info(logger, "Error al aceptar al cliente");
         return -1;
     }
 

@@ -1,9 +1,3 @@
-#ifndef _POSIX_C_SOURCE 200112L
-#define _POSIX_C_SOURCE 200112L
-#endif    
-
-
-
 #ifndef UTILS_H_
 #define UTILS_H_
 
@@ -17,20 +11,16 @@
 #include<string.h>
 #include<commons/log.h>
 
-
-// def de estructura de paquete que viaja a K.S
 typedef enum
 {
-	//original TP0
-    MENSAJE, //0
-	//PAQUETE, 
-    
-    // *** Comunicacion con K.S *** //
-    STDIN, //1
-	STDOUT, //2
-	SLEEP  //3
-	
-}op_code;
+	GENERIC,
+    MENSAJE,
+	PAQUETE,
+
+    STDIN,
+	STDOUT,
+	SLEEP,
+} op_code;
 
 typedef struct
 {
@@ -49,12 +39,12 @@ typedef struct
 
 //void enviar_mensaje(char* mensaje, int socket_cliente);
 
-int crear_conexion(char* ip, char* puerto);
+/* Creación de paquete segun tipo de io */
+t_paquete* crear_paquete_io(op_code);
 
-//creacion de paquete segun tipo de mensaje
-t_paquete* crear_sleep(void);
-t_paquete* crear_stdin(void);
-t_paquete* crear_stdout(void);
+int atender_peticiones_del_KS(int, t_log*);
+
+int recibir_operacion(int);
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
 

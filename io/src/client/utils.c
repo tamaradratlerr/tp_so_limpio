@@ -17,47 +17,6 @@ void* serializar_paquete(t_paquete* paquete, int bytes)
 	return magic;
 }
 
-int crear_conexion(char *ip, char* puerto)
-{
-	int err;
-    struct addrinfo hints, *server_info;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    /* 1. Obtener info de dirección */
-	err = getaddrinfo(ip, puerto, &hints, &server_info); /*if 0 => ok*/
-    if(err) {
-        perror("Error on getaddrinfo.");
-        abort();
-    }
-
-    /* 2. Crear el socket */
-    int socket_cliente = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
-    if(socket_cliente == -1) {
-        freeaddrinfo(server_info);
-		perror("Error: socket closed.");
-        abort();
-    }
-
-    /* 3. Intentar conectar al socket */
-	err = connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen);
-    if(err) {
-		perror("Error on connect.");
-		close(socket_cliente);
-		freeaddrinfo(server_info);
-		abort();
-    }
-
-	/* aca voy a generar el mensaje de  ## conectado a... y ubicar en utils (modificar firma, sumar logger y nombre de server)*/
-
-    freeaddrinfo(server_info);
-    return socket_cliente;
-}
-
-// *** funcion enviar mensaje (creo que no es necesaria) *** //
-
 void enviar_mensaje(char* mensaje, int socket_cliente)
 {
 	t_paquete* paquete = malloc(sizeof(t_paquete));
@@ -88,32 +47,81 @@ void crear_buffer(t_paquete* paquete)
 
 
 // *** creamos los paquetes para las tres opciones de mensajes *** //
-t_paquete* crear_sleep(void) 
+t_paquete* crear_paquete_io(op_code io)
 {
 	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = SLEEP;
+	paquete->codigo_operacion = io;
 	crear_buffer(paquete);
 	return paquete;
 }
 
-t_paquete* crear_stdin(void)
+int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 {
-	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = STDIN;
-	crear_buffer(paquete);
-	return paquete;
+	t_paquete* paquete_io = crear_paquete_io(GENERIC);
+
+	/* Quizas esta lista me sirva para STDIN, para buffear el mensaje a enviar al KS*/
+    t_list* lista;
+
+	/* Leo la IO que envió el Kernel Scheduler */
+	int cod_op = recibir_operacion(fd_conexion, paquete_io);
+
+	/* Realizo la accion de la IO correspondiente */
+	switch (cod_op) {
+		case SLEEP:
+			/*Recibo tiempo T en milisegundos del KS.*/
+			
+			/* FALTA */
+
+			recibir_paquete(fd_conexion);	/* FALTA */
+			break;
+
+		case STDIN:
+
+			/* FALTA */
+
+			lista = recibir_paquete(fd_conexion);	/* FALTA */
+			log_info(logger, "Me llegaron los siguientes valores:\n");
+			list_iterate(lista, (void*) iterator);	/* FALTA */
+			break;
+
+		case STDOUT:
+
+			/* FALTA */
+
+			lista = recibir_paquete(fd_conexion);	/* FALTA */
+			break;
+
+		case -1:
+
+			log_error(logger, "El cliente se desconectó");
+			close(fd_conexion);
+			return NULL;
+
+		default:
+			log_warning(logger,"IO desconocida.");
+			
+			/* Deberia avisar al KS que la IO no existe */
+			/* FALTA */
+			
+			break;
+	}
+
+	eliminar_paquete(paquete_io);
 }
 
-t_paquete* crear_stdout(void)
+int recibir_operacion(int fd_conexion, t_paquete* paquete_io)
 {
-	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = STDOUT;
-	crear_buffer(paquete);
-	return paquete;
+	if(recv(fd_conexion, &(paquete_io->codigo_operacion), sizeof(op_code), MSG_WAITALL) > 0)
+	{
+		return paquete_io;
+	}
+	else
+	{
+		eliminar_paquete(paquete_io);
+		close(fd_conexion);
+		return -1;
+	}
 }
-
-
-
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
 {

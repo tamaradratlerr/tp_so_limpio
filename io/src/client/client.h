@@ -9,6 +9,7 @@
 #include<readline/readline.h>
 
 #include "utils.h"
+#include "utils/global_utils.h"
 
 
 t_log* iniciar_logger(char* log_level, char* file, char* process_name, char* is_active_console);

@@ -35,37 +35,18 @@ int main(int argc, char** argv)
 
 	/* Conexion a servidor */
 	log_info(logger, "Iniciando conexión con el servidor...");
-	fd_conexion = crear_conexion(io_ip, io_port);
+	fd_conexion = crear_conexion(io_ip, io_port, logger, KERNEL_SCHEDULER);
 
+	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
+	log_info(logger, "Esperando peticiones IO desde %s", getModuleName(KERNEL_SCHEDULER));
+	
+	int status = 0;
 
-
-	/* Subo hasta aca, porque voy a poner codigo en utils (develop)*/
-
-
-
-	if (fd_conexion != -1) {
-        printf("Conexión establecida, socket: %d\n", fd_conexion);
-		log_info(logger, "## Conectado a Kernel Scheduler"); //*** --- Logger obligatorio para Entrega --- ***//
-	} else {
-		printf("No se pudo conectar.\n");
-        log_info(logger, "No se puedo conectar.");
-		return 1;
-	}
-
-	// if(fd_conexion < 0){ //se repiten las dos funciones pero es para ver como funciona cada una
-	// 	log_error(logger, "error de la conexión");
-	// 	terminar_programa(fd_conexion, logger, io_config);
-	// 	return 1; //termino el programa
-	//}
-
-// Enviamos un mensaje a KS para comprobar la conexion
-	enviar_mensaje(clave, fd_conexion);
-
-	log_info(logger, "Esperando porr IO desde K.S.");
-
-//funcion paquete que se debe revisar como funciona
-	//paquete(fd_conexion);
-
+	while (status != -1)
+    {
+        status = atender_peticiones_del_KS(fd_conexion, logger);
+    }
+	
 	terminar_programa(fd_conexion, logger, io_config);
 
 	return 0;

@@ -36,7 +36,7 @@ int crear_conexion(char *ip, char* puerto, t_log* logger, module_name moduleName
     freeaddrinfo(server_info);
 
     /* Logger obligatorio para conexión a servidor */
-    log_info(logger, "## Conectado a %s", module_name);
+    log_info(logger, "## Conectado a %s", getModuleName(module_name));
 
     return socket_cliente;
 }

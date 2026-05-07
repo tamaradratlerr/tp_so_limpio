@@ -64,7 +64,28 @@ int main(void)
 	// Armamos y enviamos el paquete
 	paquete(conexion);
 
+
+
+
+
+
+
+
+
+
+
+	//while que chequee lista ready y cpus y arranque la planificación
+
+
+
+
+
 	terminar_programa(conexion, logger, config);
+
+
+
+
+
 
 
 
@@ -180,4 +201,10 @@ void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	enviar_paquete(paquete, fd_km);
     eliminar_paquete(paquete);
 
+	//enviar señal de que se conecto
+
 }
+
+
+
+

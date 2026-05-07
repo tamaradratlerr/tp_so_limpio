@@ -26,6 +26,7 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 	//con la CPU
 	NUEVA_CPU,
     FIN_PROCESO,
+    DESALOJO,
 
     //syscalls de la CPU --- Descripcion de cada una esta en el TP.
     MUTEX_CREATE,
@@ -36,7 +37,12 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     INIT_PROC,
     EXIT,
 
+
+    //con el KM
+    MEM_CORRUPT, //cortar todo con esta
+
 	//con la IO
+    NUEVA_IO,
 	SLEEP, 
 	STDIN,
 	STDOUT
@@ -99,7 +105,9 @@ typedef struct{
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     t_list* cpu;
-    t_list* io;
+    t_list* stdin;
+    t_list* stdou;
+    t_list* sleep;
 }listas_suplementarias;
 
 
@@ -126,18 +134,15 @@ typedef enum
 
 }IO_OPCODE;
 
-typedef struct 
-{
-    t_list* STDIN;
-    t_list* STDOUT;
-    t_list* SLEEP;
-}l_IO;
 
 //VARIABLES GLOBALES-------------------------
 extern t_log* logger;
 
 listas_procesos* listasProcesos; //Lista de PCBs segun estado
 listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs
+
+
+/*los semáforos los canbiamos a tipo mutex??---------------*/
 
 sem_t sem_procesos_new; //Semaforo para lista de NEWS
 sem_t sem_procesos_ready; //Semaforo para lista de READYS
@@ -151,7 +156,7 @@ sem_t sem_cpus_libres; //Semaforo para lista de CPUs
 pthread_mutex_t mutex_cpus; 
 pthread_t hilo_timer;
 pthread_mutex_t mutex_ready; 
-//FALTA PONER LAS DEMAS MUTEX
+//FALTA PONER LAS DEMAS MUTEX?
 
 
 /*analizar que tipo de semáforo/mutex*/

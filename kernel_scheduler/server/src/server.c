@@ -9,7 +9,15 @@ int main(void) {
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
-
+   
+    //mutex que trae la señal de la parte client
+    //Esto debe suceder luego de conectarse con la KM hay que ver como...
+        while(!g_server){
+            
+            /*g_servel va a ser una variable INT global que desde el cliente va a indicar cuando se va a poder levantar el servidor*/
+            /*Deberia ser luego que conectarse con el KM por primera vez segun el enunciado del TP*/
+            /*g_server inicia con un valor de FALSE*/
+        } 
     
     int server_fd = iniciar_servidor(); 
     log_info(logger, "Servidor listo para recibir clientes");
@@ -26,10 +34,11 @@ int main(void) {
         log_info(logger, "Nuevo cliente. Creamos el hilo");
 
 
-        // -------------CREACIÓN DEKL HILO----------
+        // -------------CREACIÓN DEL HILO----------
 
         pthread_t hilo_id;
         
+
         // esto lo saque del ejemplo que uso el profe
         
         // &hilo_id: donde se guarda el ID del hilo
@@ -42,6 +51,9 @@ int main(void) {
         }
         
     }
+
+
+
 
     return EXIT_SUCCESS;
 }
@@ -86,15 +98,19 @@ void terminar_listas_procesos (){
 //Funcion que inicializa las listas de CPUs y IOs
 void iniciar_listas_suple (){
     list_suplementarias->cpu = list_create();
-    list_suplementarias->io = list_create();
+    list_suplementarias->stdint = list_create();
+    list_suplementarias-> stdou= list_create();
+    list_suplementarias-> sleep= list_create();
 
     return 0;
 }
 
 void eliminar_listas_suple (){
     list_destroy_and_destroy_elements(list_suplementarias->cpu);
-    list_destroy_and(list_suplementarias->io);
-
+    list_destroy_and(list_suplementarias->stdint);
+    list_destroy_and(list_suplementarias->stdou);
+    list_destroy_and(list_suplementarias->sleep);
+    
     return 0;
 }
 
@@ -223,17 +239,8 @@ void agregar_lista_ready(PCB* pcb){
     else if (strcmp(planificacion_algoritmo, "RR") == 0) {
         ready_FIFO(pcb); // ready_RR(pcb);
     } 
-    else if (strcmp(planificacion_algoritmo, "VRR") == 0) {
-        // ready_VRR(pcb);
-
-
-
-
-        //creo q en el tp no se ponia VRR
-
-
-
-
+    else if (strcmp(planificacion_algoritmo, "CNM") == 0) {
+        // ready_CNM(pcb)
 
     }
     else {
@@ -329,6 +336,9 @@ void* atender_nuevo_cliente(void* fd) {
 
         switch (op_code) {
             case NUEVA_CPU:
+
+            //funcion que englobe esto: void nueva_cpu()
+
                 CPU* info_cpu = malloc(sizeof(CPU));
                 info_cpu->fd = cliente_fd;
                 info_cpu->enUso = false;
@@ -337,7 +347,25 @@ void* atender_nuevo_cliente(void* fd) {
                 list_add(list_suplementarias->cpu, info_cpu);
                 pthread_mutex_unlock(&mutex_cpus);
                 log_info(logger, "CPU registrada en el socket %d", cliente_fd);
+
+
                 break;
+
+            case CPU_LIBRE:
+                mandar_proceso_cpu();
+                break;
+
+            case NUEVA_IO:
+                
+            //buscar tipo
+            //incializar
+            //agregar a la lista correpsondiente
+                
+                
+                log_info(logger, "IO registrada en el socket %d", cliente_fd);
+                break;
+
+            //mas cases con los opcodes entre la cpu
 
             case -1:
                 log_info(logger, "El cliente se desconectó.");
@@ -354,6 +382,9 @@ void* atender_nuevo_cliente(void* fd) {
     close(cliente_fd);
     return NULL;
 }
+
+
+
 
 void atender_cpu() {
 
@@ -388,8 +419,6 @@ void mandar_proceso_cpu(){
         }
     }
 }
-
-
 
 
 
@@ -435,7 +464,7 @@ void* hilo_quantum(void* arg) {
 //Hacer estado EXIT;
 
 
-
+/*--------------------------LEER IO Y PENSAR QUE HAY QUE HACER--------------------------*/
 
 io_stdint(int TAMAÑO){    /*pasar por toda la lista de STDINs buscando una que no este en uso*/
     while (1)

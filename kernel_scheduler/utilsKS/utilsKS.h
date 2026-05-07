@@ -24,8 +24,7 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 	PAQUETE, 
 
 	//con la CPU
-	DISPATCH, 
-	INTERRUPT,
+	NUEVA_CPU,
     FIN_PROCESO,
 
     //syscalls de la CPU --- Descripcion de cada una esta en el TP.
@@ -55,6 +54,7 @@ typedef struct
     t_infoProceso data;
     estado estado_pcb;
     estado estado_anterior;
+    int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
 
 }PCB;
 
@@ -84,23 +84,25 @@ typedef struct
 
 //Estructura de dato que identifica CPUs
 typedef struct{
-    int CPU_ID;
-    int enUso; // EN USO = 1 --- LIBRE = 0
+    int fd; //hay un socket por cpu q se conecta
+    bool enUso; // EN USO = 1 --- LIBRE = 0
     //Ver que mas data nos puede interesar
 }CPU;
 
 //Estructura de dato que identifica IOs
 typedef struct{
-    int IO_ID;
     IO_OPCODE tipo;
-    int enUso; // EN USO = 1 --- LIBRE = 0    
+    int fd; //hay un socket por io q se conecta
+    bool enUso; // EN USO = 1 --- LIBRE = 0    
 }IO;
 
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     t_list* cpu;
     t_list* io;
-}l_suplementarias;
+}listas_suplementarias;
+
+
 
 typedef enum
 {
@@ -131,6 +133,28 @@ typedef struct
     t_list* SLEEP;
 }l_IO;
 
+//VARIABLES GLOBALES-------------------------
+extern t_log* logger;
+
+listas_procesos* listasProcesos; //Lista de PCBs segun estado
+listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs
+
+sem_t sem_procesos_new; //Semaforo para lista de NEWS
+sem_t sem_procesos_ready; //Semaforo para lista de READYS
+sem_t sem_procesos_running; //Semaforo para lista de RUNNINGS
+sem_t sem_procesos_block; //Semaforo para lista de BLOCKS
+sem_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
+
+sem_t sem_cpus_libres; //Semaforo para lista de CPUs
+
+
+pthread_mutex_t mutex_cpus; 
+pthread_t hilo_timer;
+pthread_mutex_t mutex_ready; 
+//FALTA PONER LAS DEMAS MUTEX
+
+
+/*analizar que tipo de semáforo/mutex*/
 
 PCB* iniciar_pcb (int PID, int PPID, int UID);
 void terminar_pcb (PCB* pcb);

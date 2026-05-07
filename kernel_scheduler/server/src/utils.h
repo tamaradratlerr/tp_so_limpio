@@ -16,31 +16,15 @@
 
 
 
-//Tipo de dato que identifica el estado del Proceso (PCB)
-typedef enum 
-{
-    NEW,
-    RNN,
-    BCK,
-    EXT,
-    RDY
-    //Faltan agregar los estados del CheckPoint 3
-}estado;
-
-//Estructura de dato que identifica todas las listas de los procesos
-typedef struct
-{
-	t_list* new;
-	t_list* rnn;
-	t_list* bck;
-	t_list* ext;
-    t_list* rdy;
-    //Faltan agregar los estados del CheckPoint 3
-
-}listas_procesos;
 
 
 
+
+
+
+
+//FUNCIONES DE CONEXION (UTLS.C)----------
+//chris nos pidio que lo cambiemos creo x wpp
 
 void* recibir_buffer(int*, int);
 

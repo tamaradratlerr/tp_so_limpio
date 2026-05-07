@@ -6,24 +6,11 @@
 #include <string.h>
 #include <commons/log.h>
 #include "utils.h"
-#include <pthread.h>   // Para los Mutex y Hilos
-#include <semaphore.h> // Para los Semáforos (sem_wait, sem_post)
+#include <pthread.h>   
+#include <semaphore.h> 
 
-/* Variables Globales*/
 
-extern t_log* logger;
 
-listas_procesos* listasProcesos; //Lista de PCBs segun estado
-l_suplementarias* l_suple; //Lista de CPUs y IOs
-
-sem_t sem_procesos_new; //Semaforo para lista de NEWS
-sem_t sem_procesos_ready; //Semaforo para lista de READYS
-sem_t sem_procesos_running; //Semaforo para lista de RUNNINGS
-sem_t sem_procesos_block; //Semaforo para lista de BLOCKS
-sem_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
-
-sem_t sem_cpus_libres; //Semaforo para lista de CPUs
-pthread_mutex_t mutex_ready; // ????????????
 
 /*Funciones de SERVIDOR*/
 void iterator(char* value);
@@ -38,7 +25,7 @@ void terminar_pcb (PCB* pcb);
 
 
 
-/*Funciones de Planificador*/
+//INICIALIZAR Y FINALIZAR LISTAS--------------------------------------
 
 listas_procesos* Iniciar_listas_procesos (void); //Funcion que inicializa todas las listas de los Procesos//
 void terminar_listas_procesos ();//Funcion que elimina todas las listas de los procesos//
@@ -46,40 +33,34 @@ void terminar_listas_procesos ();//Funcion que elimina todas las listas de los p
 void agregar_proceso_lista (PCB* pcb); //Funcion que a suma un PCB a su lista correspondiente segun su ESTADO ACTUAL.
 void eliminar_proceso_Lista (PCB* pcb ); //Funcion que elimina un PCB de su lista correspondiente segun su ESTADO ANTERIOR.
 
+//GESTIÓN DE LISTAS--------------------------------------
 
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado); //Funcion Cambia el ESTADO ACTUAL y ESTADO ANTERIOR de un PCB
-
-
-void agregar_lista_ready(PCB* pcb); //Funcion que agrega PCB a lista READY segun el ALGORITMO PLANIFICADOR
-
-void ready_FIFO(PCB* pcb_nuevo); //Funcion que agrega a lista READY para FIFO
-
-
-void iniciar_listas_suple ();
-void eliminar_listas_suple ();
-
-
-
-
-
-
-
-void manejar_vuelta_proceso_cpu(PCB* pcb);
-
-
-void atender_cpu();
-
-
+void agregar_proceso_lista (PCB* pcb);
+void eliminar_proceso_Lista (PCB* pcb );
+void agregar_lista_ready(PCB* pcb);
+void ready_FIFO(PCB* pcb_nuevo);
 void agregar_running();
 
 
+//GESTIÓN DE PCB-----------------------------------------------------------------
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
 
 
+//GESTIÓN DE LAS CPUS-----------------------------------------------------------------
+void* atender_nuevo_cliente(void* argumento);
+void atender_cpu();
+
+
+
+//GESTIÓN DE HILOS -------------------------------------------------------------
+void* hilo_quantum(void* arg);
+
+
+//GESTIÓN DE LAS IO-----------------------------------------------------------
 io_stdint(int TAMAÑO);
-
 io_stdout();
-
 io_sleep();
+
 
 
 

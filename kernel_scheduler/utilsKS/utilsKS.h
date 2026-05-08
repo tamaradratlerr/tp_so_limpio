@@ -105,7 +105,7 @@ typedef struct{
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     t_list* cpu;
-    t_list* stdin;
+    t_list* stdi;
     t_list* stdou;
     t_list* sleep;
 }listas_suplementarias;

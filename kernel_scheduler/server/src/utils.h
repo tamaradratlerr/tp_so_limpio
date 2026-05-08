@@ -38,4 +38,6 @@ void recibir_mensaje(int);
 
 int recibir_operacion(int);
 
+void iterator(char* value);
+
 #endif /* UTILS_H_ */

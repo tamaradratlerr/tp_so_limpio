@@ -126,3 +126,6 @@ t_list* recibir_paquete(int socket_cliente)
     return valores;
 }
 
+void iterator(char* value) {
+	log_info(logger,"%s", value);
+}

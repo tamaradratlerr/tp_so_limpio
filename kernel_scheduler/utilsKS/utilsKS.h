@@ -25,8 +25,10 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 
 	//con la CPU
 	NUEVA_CPU,
+    CPU_LIBRE,
     FIN_PROCESO,
     DESALOJO,
+    PCB,
 
     //syscalls de la CPU --- Descripcion de cada una esta en el TP.
     MUTEX_CREATE,
@@ -43,6 +45,7 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 
 	//con la IO
     NUEVA_IO,
+    IO_LIBRE,
 	SLEEP, 
 	STDIN,
 	STDOUT

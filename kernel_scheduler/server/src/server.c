@@ -331,7 +331,25 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     pcb ->estado_pcb = nuevoEstado;
 }
 
+void enviar_pcb(int PCB_ID, int socket_cliente)
+{
+	t_paquete* paquete = malloc(sizeof(t_paquete));
 
+	paquete->codigo_operacion = PCB;
+	paquete->buffer = malloc(sizeof(t_buffer));
+	paquete->buffer->size = sizeof(int);
+	paquete->buffer->stream = malloc(paquete->buffer->size);
+	memcpy(paquete->buffer->stream, PCB_ID, paquete->buffer->size);
+
+	int bytes = paquete->buffer->size + 2*sizeof(int);
+
+	void* a_enviar = serializar_paquete(paquete, bytes);
+
+	send(socket_cliente, a_enviar, bytes, 0);
+
+	free(a_enviar);
+	eliminar_paquete(paquete);
+}
 
 
 /*-----                     GESTION DE CPUs                     -----*/
@@ -343,24 +361,38 @@ mandar_proceso_cpu();
     
 }
 
-void mandar_proceso_cpu(){ /*REVISAR ESTA FUNCION*/
+void mandar_proceso_cpu(int socket_cliente){ /*REVISAR ESTA FUNCION*/
     
-    //nos fijamos si hay cpu libre
+    
     pthread_mutex_lock(&mutex_cpus);
-    CPU* cpu_libre = buscar_cpu_libre(list_suplementarias->cpu); //crear funcion: recorer y fijarse si estan en uso
+
+
+    /*Buscamos la CPU*/
+    CPU *cpu_libre = list_find(list_suplementarias->cpu, (CPU->fd == socket_cliente) && (CPU->enUso == FALSE) ) //Esta linea busca y DEVUELVE un elemento de la lista que responda TRUE a la condicion del FINAL   
+    cpu_libre->enUso = TRUE;
     pthread_mutex_unlock(&mutex_cpus);
 
-    //mandamos pcb
+    /*Mandamos el PCB a la CPU*/
     if (cpu_libre != NULL && !list_is_empty(listasProcesos->rdy)) {
         
-        PCB* pcb_a_ejecutar = list_remove(listasProcesos->rdy, 0);
+        PCB* pcb_a_ejecutar = list_get(listasProcesos->rdy, 0);
+        
+        //¿agregar mutex aca?
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
-        cpu_libre->enUso = true; // La marcamos como ocupada
+        //¿agregar mutex aca?
 
-        enviar_pcb_cpu(cpu_libre->fd, pcb_a_ejecutar); //HACER FUNCION
+        agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        eliminar_proceso_lista(pcb_a_ejecutar);//ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+
+        enviar_pcb(pcb_a_ejecutar->PID, cpu_libre->fd); //Envia el PID a la CPU
+        if (/*hacer verificacion*/){
+        
+        }
+        
         log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->pid, cpu_libre->fd);
 
         //rr
+
         if (strcmp(planificacion_algoritmo, "RR") == 0) {
             // ceamos un hilo que espere el Quatum y mande la interrupción --> CHEQUEAR
             pthread_create(&hilo_timer, NULL, hilo_quantum, (void*)pcb_a_ejecutar);
@@ -431,6 +463,15 @@ void nueva_cpu (void* arg) {
     pthread_mutex_unlock(&mutex_cpus);
                 
     log_info(logger, "CPU registrada en el socket %d", cliente_fd);
+
+    //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE
+}
+// CPU_LIBRE
+void cpu_libre (void* arg){
+   
+    int cliente_fd = (intptr_t)arg;
+
+    mandar_proceso_cpu(cliente_fd);
 }
 // FIN_PROCESO,
 // DESALOJO,
@@ -450,6 +491,7 @@ void nueva_cpu (void* arg) {
 
 // //con la IO
 // NUEVA_IO,
+// IO_LIBRE
 // SLEEP, 
 // STDIN,
 // STDOUT

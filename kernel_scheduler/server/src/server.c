@@ -9,21 +9,12 @@ int main(void) {
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
-   
-    //mutex que trae la señal de la parte client
-    //Esto debe suceder luego de conectarse con la KM hay que ver como...
-        while(!g_server){
-            
-            /*g_servel va a ser una variable INT global que desde el cliente va a indicar cuando se va a poder levantar el servidor*/
-            /*Deberia ser luego que conectarse con el KM por primera vez segun el enunciado del TP*/
-            /*g_server inicia con un valor de FALSE*/
-        } 
     
     int server_fd = iniciar_servidor(); 
     log_info(logger, "Servidor listo para recibir clientes");
 
     while (1) {
-        // no es espera activa xq el SO se queda frenado hasta que reciba
+        
         int cliente_fd = esperar_cliente(server_fd);
         
         if (cliente_fd == -1) {
@@ -65,11 +56,10 @@ int main(void) {
 
 
 void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los HILOS de cuando te conecta un NUEVO CLIENTE*/
-    //hacer ENUM de todas las comunicaciones posibles con la CPU.
 
     int cliente_fd = (int)(intptr_t)fd; // Recuperamos el FD del cliente
     
-    pthread_detach(pthread_self()); //esto hace que el SO limpie la memoria de este hilo cuando termine la funcion
+    pthread_detach(pthread_self()); //Esto hace que el SO limpie la memoria de este hilo cuando termine la funcion
 
     int control_loop = 1;
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
@@ -79,11 +69,11 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
         }
 
-        t_list* lista; //Para que vamos a usar esta lista.
+        t_list* lista; //Para que vamos a usar esta lista. ¿¿ ??
 
         switch (op_code) {
             case NUEVA_CPU:
-                nueva_cpu();/* Funcion que se va a encargar de este OP_CODE*/ /*SIN TERMINAR*/
+                nueva_cpu();
                 break;
 
             case CPU_LIBRE:
@@ -91,17 +81,14 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 break;
 
             case NUEVA_IO:
-                
-            //buscar tipo
-            //incializar
-            //agregar a la lista correpsondiente
-                
-                
-                log_info(logger, "IO registrada en el socket %d", cliente_fd);
+                nueva_io();
                 break;
 
-            //mas cases con los opcodes entre la cpu
+            case IO_LIBRE:
+                io_libre();
 
+            /* COMPLETAR TODOS LOS OPCODEs */
+            
             case -1:
                 log_info(logger, "El cliente se desconectó.");
                 control_loop = 0;
@@ -149,9 +136,7 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
 void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs (Suplementarias)*/
     
     list_suplementarias->cpu = list_create();
-    list_suplementarias->stdint = list_create();
-    list_suplementarias-> stdou= list_create();
-    list_suplementarias-> sleep= list_create();
+    list_suplementarias->io = list_create();
 
     return 0;
 }
@@ -159,9 +144,7 @@ void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs 
 void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/
     
     list_destroy_and_destroy_elements(list_suplementarias->cpu);
-    list_destroy_and(list_suplementarias->stdint);
-    list_destroy_and(list_suplementarias->stdou);
-    list_destroy_and(list_suplementarias->sleep);
+    list_destroy_and(list_suplementarias->io);
     
     return 0;
 }
@@ -179,30 +162,30 @@ void agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista 
     switch (pcb->estado_pcb){
 	case NEW: //NEW
         
-        pthread_mutex_lock(&sem_procesos_new);
+        pthread_mutex_lock(&mutex_procesos_new);
 		list_add(listasProcesos->new, pcb);
-        pthread_mutex_unlock(&sem_procesos_new);
+        pthread_mutex_unlock(&mutex_procesos_new);
         break;
 
 	case RNN: //RUNNING
 
-        pthread_mutex_lock(&sem_procesos_running);    
+        pthread_mutex_lock(&mutex_procesos_running);    
 		list_add(listasProcesos->rnn, pcb);
-        pthread_mutex_unlock(&sem_procesos_running);
+        pthread_mutex_unlock(&mutex_procesos_running);
         break;
 
 	case BCK: //BLOCK
 
-        pthread_mutex_lock(&sem_procesos_block);
+        pthread_mutex_lock(&mutex_procesos_block);
 		list_add(listasProcesos->bck, pcb);
-        pthread_mutex_unlock(&sem_procesos_block);
+        pthread_mutex_unlock(&mutex_procesos_block);
         break;
 
 	case EXT: //EXIT
 
-        pthread_mutex_lock(&sem_procesos_exit);    
+        pthread_mutex_lock(&mutex_procesos_exit);    
 		list_add(listasProcesos->ext, pcb);
-        pthread_mutex_unlock(&sem_procesos_exit);
+        pthread_mutex_unlock(&mutex_procesos_exit);
         break;
 
 	case RDY: //RDY
@@ -229,33 +212,33 @@ void eliminar_proceso_Lista (PCB* pcb ){/*Funcion que ELIMINA un PCB de una list
 	{
 	
         case NEW: //NEW
-        pthread_mutex_lock(&sem_procesos_new);
+        pthread_mutex_lock(&mutex_procesos_new);
 		removed = list_remove_element(listasProcesos->new, pcb);
-        pthread_mutex_unlock(&sem_procesos_new);
+        pthread_mutex_unlock(&mutex_procesos_new);
         break;
         	
         case RNN: //RUNNING
-        pthread_mutex_lock(&sem_procesos_running);
+        pthread_mutex_lock(&mutex_procesos_running);
 		removed = list_remove_element(listasProcesos->rnn, pcb);
-        pthread_mutex_unlock(&sem_procesos_running);
+        pthread_mutex_unlock(&mutex_procesos_running);
         break;
 
         case BCK: //BLOCK
-        pthread_mutex_lock(&sem_procesos_block);
+        pthread_mutex_lock(&mutex_procesos_block);
 		removed = list_remove_element(listasProcesos->bck, pcb);
-        pthread_mutex_unlock(&sem_procesos_block);
+        pthread_mutex_unlock(&mutex_procesos_block);
         break;
 
         case EXT: //EXIT
-        pthread_mutex_lock(&sem_procesos_exit);
+        pthread_mutex_lock(&mutex_procesos_exit);
 		removed = list_remove_element(listasProcesos->ext, pcb);
-        pthread_mutex_unlock(&sem_procesos_exit);
+        pthread_mutex_unlock(&mutex_procesos_exit);
         break;
         
         case RDY: //RDY
-        pthread_mutex_lock(&sem_procesos_ready);
+        pthread_mutex_lock(&mutex_procesos_ready);
 		removed = list_remove_element(listas_procesos->rdy, pcb);
-        pthread_mutex_unlock(&sem_procesos_ready);
+        pthread_mutex_unlock(&mutex_procesos_ready);
 		break;
 	
 	default:
@@ -270,7 +253,7 @@ void eliminar_proceso_Lista (PCB* pcb ){/*Funcion que ELIMINA un PCB de una list
     /*list_remove_element:: Devuelve TRUE si el elemento fue removido y Devuelve FALSE si no fue encontrado el elemento*/
 }   
 
-void agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO*/
+void agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
 
     
     if (strcmp(planificacion_algoritmo, "FIFO") == 0) {
@@ -292,14 +275,12 @@ void agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de RE
 void ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
 
     cambiar_estado_pcb(pcb_nuevo, RDY);  
-
-    sem_wait(&sem_procesos_ready); 
+ 
     pthread_mutex_lock(&mutex_ready);
     
     list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
     
-    pthread_mutex_unlock(&mutex_ready);
-    sem_post(&sem_procesos_ready); 
+    pthread_mutex_unlock(&mutex_ready); 
 }
 
 //Esta funcion debe ser llamada dsp de recibir que una CPU esta libre
@@ -331,8 +312,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     pcb ->estado_pcb = nuevoEstado;
 }
 
-void enviar_pcb(int PCB_ID, int socket_cliente)
-{
+void enviar_pcb(int PCB_ID, int socket_cliente){ /* Funcion que manda PCB a un cliente */
 	t_paquete* paquete = malloc(sizeof(t_paquete));
 
 	paquete->codigo_operacion = PCB;
@@ -355,25 +335,17 @@ void enviar_pcb(int PCB_ID, int socket_cliente)
 /*-----                     GESTION DE CPUs                     -----*/
 
 
-void atender_cpu() {/*REVISAR ESTA FUNCION*/
-/*MANDAR PROCESO A LA CPU*/
-mandar_proceso_cpu();
-    
-}
-
-void mandar_proceso_cpu(int socket_cliente){ /*REVISAR ESTA FUNCION*/
+void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
     
     
     pthread_mutex_lock(&mutex_cpus);
-
-
     /*Buscamos la CPU*/
     CPU *cpu_libre = list_find(list_suplementarias->cpu, (CPU->fd == socket_cliente) && (CPU->enUso == FALSE) ) //Esta linea busca y DEVUELVE un elemento de la lista que responda TRUE a la condicion del FINAL   
     cpu_libre->enUso = TRUE;
     pthread_mutex_unlock(&mutex_cpus);
 
     /*Mandamos el PCB a la CPU*/
-    if (cpu_libre != NULL && !list_is_empty(listasProcesos->rdy)) {
+    if ((cpu_libre != NULL) && (!list_is_empty(listasProcesos->rdy)) && (!list_is_empty(list_suplementarias->io))) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
         
         PCB* pcb_a_ejecutar = list_get(listasProcesos->rdy, 0);
         
@@ -397,33 +369,21 @@ void mandar_proceso_cpu(int socket_cliente){ /*REVISAR ESTA FUNCION*/
             // ceamos un hilo que espere el Quatum y mande la interrupción --> CHEQUEAR
             pthread_create(&hilo_timer, NULL, hilo_quantum, (void*)pcb_a_ejecutar);
             pthread_detach(hilo_timer);
+            enviar_desalojo(socket_cliente); //Hacer Funcion
+    
         }
     }
 }
 
-
-
-
-/*-----                     GESTION DE IOs                     -----*/
-
-io_stdint(int TAMAÑO){  //COMPLETAR ESTA FUNCION 
-    while (1)
-    {
-        /* code */
-    }
+void enviar_desalojo(socket_cliente){/* HACER  */
+   
     
-    //hace la conect
-
-    //recibe el mesaje
-
-    //Vemos que devuelva.....
-
+   log_info(logger, "Enviado Desalojo a socket %d por fin de Quantum",cpu_libre->fd);
 
 }
 
-io_stdout(/*direccion de memoria*/); //COMPLETAR ESTA FUNCION
 
-io_sleep(/*timepo de sleep*/); //COMPLETAR ESTA FUNCION
+/*-----                     GESTION DE IOs                     -----*/
 
 
 
@@ -474,6 +434,12 @@ void cpu_libre (void* arg){
     mandar_proceso_cpu(cliente_fd);
 }
 // FIN_PROCESO,
+void fin_proceso (void* arg){
+
+    
+
+
+}
 // DESALOJO,
 
 // //syscalls de la CPU --- Descripcion de cada una esta en el TP.
@@ -491,7 +457,28 @@ void cpu_libre (void* arg){
 
 // //con la IO
 // NUEVA_IO,
+void nueva_io (void* arg){
+    
+    int cliente_fd = (intptr_t)arg;
+
+    IO* info_io = malloc(sizeof(IO));
+
+    info_io->fd = cliente_fd;         
+    info_io->enUso = FALSE;    
+                
+    pthread_mutex_lock(&mutex_ios);
+    list_add(list_suplementarias->io, info_io);
+    pthread_mutex_unlock(&mutex_ios);
+                
+    log_info(logger, "IO registrada en el socket %d", cliente_fd);
+}
 // IO_LIBRE
+void io_libre (void* arg){ /* HACER / para mi no va a servir */
+
+     int cliente_fd = (intptr_t)arg;
+
+    mandar_proceso_io(cliente_fd);
+}
 // SLEEP, 
 // STDIN,
 // STDOUT

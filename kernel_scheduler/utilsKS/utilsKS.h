@@ -93,24 +93,20 @@ typedef struct
 
 //Estructura de dato que identifica CPUs
 typedef struct{
-    int fd; //hay un socket por cpu q se conecta
-    bool enUso; // EN USO = 1 --- LIBRE = 0
-    //Ver que mas data nos puede interesar
+    int fd; 
+    bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }CPU;
 
 //Estructura de dato que identifica IOs
 typedef struct{
-    IO_OPCODE tipo;
-    int fd; //hay un socket por io q se conecta
-    bool enUso; // EN USO = 1 --- LIBRE = 0    
+    int fd; 
+    bool enUso; // EN USO = TRUE --- LIBRE = FALSE   
 }IO;
 
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     t_list* cpu;
-    t_list* stdi;
-    t_list* stdou;
-    t_list* sleep;
+    t_list* io;
 }listas_suplementarias;
 
 
@@ -145,18 +141,16 @@ listas_procesos* listasProcesos; //Lista de PCBs segun estado
 listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs
 
 
-/*los semáforos los canbiamos a tipo mutex??---------------*/
-
-sem_t sem_procesos_new; //Semaforo para lista de NEWS
-sem_t sem_procesos_ready; //Semaforo para lista de READYS
-sem_t sem_procesos_running; //Semaforo para lista de RUNNINGS
-sem_t sem_procesos_block; //Semaforo para lista de BLOCKS
-sem_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
-
-sem_t sem_cpus_libres; //Semaforo para lista de CPUs
+/* Semaforos tipo Mutex*/
+pthread_mutex_t sem_procesos_new; //Semaforo para lista de NEWS
+pthread_mutex_t sem_procesos_ready; //Semaforo para lista de READYS
+pthread_mutex_t sem_procesos_running; //Semaforo para lista de RUNNINGS
+pthread_mutex_t sem_procesos_block; //Semaforo para lista de BLOCKS
+pthread_mutex_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
 
 
-pthread_mutex_t mutex_cpus; 
+pthread_mutex_t mutex_cpus;
+pthread_mutex_t mutex_ios;
 pthread_t hilo_timer;
 pthread_mutex_t mutex_ready; 
 //FALTA PONER LAS DEMAS MUTEX?

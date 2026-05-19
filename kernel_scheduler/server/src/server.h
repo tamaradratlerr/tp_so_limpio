@@ -9,7 +9,7 @@
 #include <pthread.h>   
 #include <semaphore.h> 
 
-
+listas_procesos* l_procesos;
 
 
 /*Funciones de SERVIDOR*/

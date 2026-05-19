@@ -7,9 +7,10 @@
 #include <commons/collections/list.h>
 #include <commons/log.h>
 #include <commons/config.h>
+#include "../../utils/src/global_utils.h"
 
 t_config* config = NULL;
-bool g_server = FALSE;
+
 
 int conexion;
 char* ip;
@@ -18,78 +19,17 @@ char* valor;
 char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
 //t_log* logger; ME PARAECE QUE EL LOGGER TIENE QUE SER UNO PARA CLIENTE Y OTRO PARA SERVIDOR
 
-typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y KM.
-{
-	MENSAJE,
-	PAQUETE, 
-
-	//con la CPU
-	NUEVA_CPU,
-    CPU_LIBRE,
-    FIN_PROCESO,
-    DESALOJO,
-    PCB,
-
-    //syscalls de la CPU --- Descripcion de cada una esta en el TP.
-    MUTEX_CREATE,
-    MUTEX_LOCK,
-    MUTEX_UNLOK,
-    MEM_ALLOC,
-    MEM_FREE,
-    INIT_PROC,
-    EXIT,
-
-
-    //con el KM
-    MEM_CORRUPT, //cortar todo con esta
-
-	//con la IO
-    NUEVA_IO,
-    IO_LIBRE,
-    DESALOJO_IO_STDOUT,
-    DESALOJO_IO_SLEEP,
-    ATENDER_INSTRUCCION_IO,
-	SLEEP, 
-	STDIN,
-	STDOUT
-}op_code;
-
-
-//Tipo de dato que ingresa desde el kernel memory
-typedef struct {
-    int PID, PPID, UID;
-} t_infoProceso;
-
-//Tipo de dato que va a adoptar el PCB
-typedef struct 
-{
-    t_infoProceso data;
-    estado estado_pcb;
-    estado estado_anterior;
-    int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
-
-}PCB;
 
 typedef struct {
+
     PCB* pcb;
     IO_OPCODE tipo_operacion;   
     int tiempo_sleep;     
     uint32_t dir_fisica;  
-    uint32_t tamano;      
+    uint32_t tamano;
+         
 } t_pedido_io;
 
-
-//Tipo de dato que identifica el estado del Proceso (PCB)
-typedef enum 
-{
-    NEW,
-    RNN,
-    RDY,
-    BCK,
-    EXT
-    
-    //Faltan agregar los estados del CheckPoint 3
-}estado;
 
 //Estructura de dato que identifica todas las listas de los procesos
 typedef struct
@@ -109,17 +49,22 @@ typedef struct{
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }CPU;
 
-//Estructura de dato que identifica IOstypedef struct {
+//Estructura de dato que identifica IOs
+typedef struct {
+
     int fd; 
     bool enUso;                 
     char* nombre;             
     t_queue* cola_bloqueados; // cola de las so-commons para guardar los t_pedido_io*
+
 } IO;
 
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
+    
     t_list* cpu;
     t_list* io;
+
 }listas_suplementarias;
 
 
@@ -131,10 +76,6 @@ typedef enum
     NM
     //No lo estamos Usado ahora, deberiamos cambiar cuando leemos el config y darle valor de esta estructura de datos
 }algortimoEnUso;
-
-
-
-
 
 
 

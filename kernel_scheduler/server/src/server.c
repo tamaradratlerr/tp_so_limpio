@@ -151,11 +151,11 @@ listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas 
 
 void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Procesos*/
 
-	list_destroy(listas_procesos->new);
-	list_destroy(listas_procesos->rnn);
-	list_destroy(listas_procesos->bck);
-	list_destroy(listas_procesos->ext);
-	list_destroy(listas_procesos->rdy);
+	list_destroy(l_procesos->new);
+	list_destroy(l_procesos->rnn);
+	list_destroy(l_procesos->bck);
+	list_destroy(l_procesos->ext);
+	list_destroy(l_procesos->rdy);
 
 	return 0;
 }
@@ -414,7 +414,11 @@ void enviar_desalojo(socket_cliente){/* HACER  */
 
 // NUEVA_IO,
 void nueva_io (void* arg){
+
     int cliente_fd = (intptr_t)arg;
+
+    
+
 
     IO* info_io = malloc(sizeof(IO));
     info_io->fd = cliente_fd;         
@@ -428,12 +432,15 @@ void nueva_io (void* arg){
     pthread_mutex_lock(&mutex_ios);
     list_add(list_suplementarias->io, info_io);
     pthread_mutex_unlock(&mutex_ios);
+
+    enviar_op_code (OK, cliente_fd);
                 
     log_info(logger, "IO '%s' registrada en el socket %d", info_io->nombre, cliente_fd);
 }
 
 // IO_LIBRE
 void io_libre (void* arg){ 
+    
     pthread_mutex_lock(&mutex_ios);
     t_pedido_io* pedido_terminado = queue_pop(interfaz->cola_bloqueados);
     interfaz->enUso = false;
@@ -448,7 +455,8 @@ void io_libre (void* arg){
 }
 
 // SLEEP, 
-vvoid atender_io_sleep(t_list* lista) {
+void atender_io_sleep(t_list* lista) {
+    
     PCB* pcb = (PCB*)list_get(lista, 0);        
     char* nombre_io = (char*)list_get(lista, 1); 
     
@@ -629,7 +637,9 @@ void nueva_cpu (void* arg) {
     pthread_mutex_lock(&mutex_cpus);
     list_add(list_suplementarias->cpu, info_cpu);
     pthread_mutex_unlock(&mutex_cpus);
-                
+    
+    enviar_op_code (OK, cliente_fd);
+
     log_info(logger, "CPU registrada en el socket %d", cliente_fd);
 
     //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE

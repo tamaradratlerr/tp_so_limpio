@@ -46,6 +46,9 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 	//con la IO
     NUEVA_IO,
     IO_LIBRE,
+    DESALOJO_IO_STDOUT,
+    DESALOJO_IO_SLEEP,
+    ATENDER_INSTRUCCION_IO,
 	SLEEP, 
 	STDIN,
 	STDOUT
@@ -66,6 +69,15 @@ typedef struct
     int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
 
 }PCB;
+
+typedef struct {
+    PCB* pcb;
+    IO_OPCODE tipo_operacion;   
+    int tiempo_sleep;     
+    uint32_t dir_fisica;  
+    uint32_t tamano;      
+} t_pedido_io;
+
 
 //Tipo de dato que identifica el estado del Proceso (PCB)
 typedef enum 
@@ -97,11 +109,12 @@ typedef struct{
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }CPU;
 
-//Estructura de dato que identifica IOs
-typedef struct{
+//Estructura de dato que identifica IOstypedef struct {
     int fd; 
-    bool enUso; // EN USO = TRUE --- LIBRE = FALSE   
-}IO;
+    bool enUso;                 
+    char* nombre;             
+    t_queue* cola_bloqueados; // cola de las so-commons para guardar los t_pedido_io*
+} IO;
 
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
@@ -127,9 +140,9 @@ typedef enum
 
 typedef enum
 {
-    STDIN,
-    STDOUT,
-    SLEEP
+    IO_STDIN,
+    IO_STDOUT,
+    IO_SLEEP
 
 }IO_OPCODE;
 

@@ -7,7 +7,8 @@
 
 int main(void)
 {
-    /* ---------------- INITIALIZATION ---------------- */
+    /* Iniciamos el Logger y Config*/
+
     t_cpu_sockets sockets;
     t_log* logger = iniciar_logger();
     t_config* config = iniciar_config();
@@ -18,50 +19,68 @@ int main(void)
 
     log_info(logger, "Modulo CPU iniciado");
 
-    /* ---------------- LEER CONSOLA ---------------- */
-    // Esto es el equivalente al TP0 para probar que el logger funciona
-    leer_consola(logger);
 
     /* ---------------- CONEXIONES ---------------- */
-    printf("Intentando conectar sockets...\n");
 
-    sockets.conexion_kernel_memory    = conexion_kernel_memory(config);
-    sockets.conexion_kernel_scheduler = conexion_kernelS(config);
-    sockets.conexion_kernelS_dispatch  = conexion_kernelS_dispatch(config);
-    sockets.conexion_kernelS_interrupt = conexion_kernelS_interrupt(config);
-    sockets.conexion_memory_stick     = conexion_memory_stick(config);
+    sockets.conexion_kernel_memory    = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+    enviar_op_code (NUEVA_CPU, sockets.conexion_kernel_memory);
+    op_code handshake = recibir_operacion(sockets.conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
+    
+    if(handshake = 1){
+        log_error(logger, "Error en HandShake con Kernel Memory.");
+    }
+
+    
+
+    sockets.conexion_memory_stick     = conexion_memory_stick(config, logger, MEMORY_STICK);
+    enviar_op_code (NUEVA_CPU, sockets.conexion_memory_stick);
+    op_code handshake = recibir_operacion(sockets.conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
+    
+     if(handshake = 1){
+        log_error(logger, "Error en HandShake con Memory Stick.");
+    }
+    
+    
+    
+    sockets.conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
+    enviar_op_code (NUEVA_CPU, sockets.conexion_kernel_scheduler);
+    op_code handshake = recibir_operacion(sockets.conexion_kernel_scheduler); //Se espera que se devueva el op_code OK (1)
+    
+     if(handshake = 1){
+        log_error(logger, "Error en HandShake con Kernel Scheduler.");
+    }
+
 
     // Validacion de conexiones (Si falla una conexión crítica, cerramos)
-    if (sockets.conexion_kernel_memory < 0 || sockets.conexion_kernel_scheduler < 0) {
-        log_error(logger, "Error al establecer conexiones iniciales.");
+    if (sockets.conexion_kernel_memory < 0 || sockets.conexion_kernel_scheduler < 0 || sockets.conexion_memory_stick < 0) {
+        
+        log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
+        
         terminar_programa(logger, config, sockets);
+        
         return EXIT_FAILURE;
     }
 
     log_info(logger, "Todas las conexiones establecidas con éxito");
 
-    /* ---------------- PRUEBA DE ENVIO ---------------- */
-    printf("Seleccione destino (1: MS, 2: KS, 3: KM): ");
-    char* seleccion = readline("> ");
 
-    if (seleccion != NULL) {
-        if (strcmp(seleccion, "1") == 0) {
-            enviar_mensaje("Mensaje a MS", sockets.conexion_memory_stick);
-            paquete(sockets.conexion_memory_stick);
-        } 
-        else if (strcmp(seleccion, "2") == 0) {
-            enviar_mensaje("Mensaje a KS", sockets.conexion_kernel_scheduler);
-            paquete(sockets.conexion_kernel_scheduler);
-        }
-        else if (strcmp(seleccion, "3") == 0) {
-            enviar_mensaje("Mensaje a KM", sockets.conexion_kernel_memory);
-            paquete(sockets.conexion_kernel_memory); // Corregido el socket aquí
-        }
-        free(seleccion);
+    //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
+    enviar_op_code (CPU_LIBRE, sockets.conexion_kernel_scheduler);
+
+    //Recibir PID
+    int PID = recibir_pid(sockets.conexion_kernel_scheduler);
+
+    int control_loop = 1;
+    while (control_loop = 1){
+    fetch();
+
+    decode();
+
+    execute();
+
+    interrupciones();
+    
     }
-
-    terminar_programa(logger, config, sockets);
-    return 0;
 }
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
@@ -86,16 +105,6 @@ t_config* iniciar_config(void)
     return nuevo_config;
 }
 
-void leer_consola(t_log* logger)
-{
-    char* leido;
-    while( (leido = readline("> ")) != NULL && strcmp(leido, "") != 0 ) {
-        log_info(logger, "Leido de consola: %s", leido);
-        free(leido);
-    }
-    free(leido);
-}
-
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets sockets)
 {
     if(logger) log_destroy(logger);
@@ -104,56 +113,61 @@ void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets sockets)
     // Cerramos todos los sockets abiertos
     liberar_conexion(sockets.conexion_kernel_memory);
     liberar_conexion(sockets.conexion_kernel_scheduler);
-    liberar_conexion(sockets.conexion_kernelS_dispatch);
-    liberar_conexion(sockets.conexion_kernelS_interrupt);
     liberar_conexion(sockets.conexion_memory_stick);
 }
 
+
+
 /* ---------------- IMPLEMENTACION DE CONEXIONES ---------------- */
 
-int conexion_kernel_memory(t_config* config) {
+int conexion_kernel_memory(t_config* config, t_log* logger, module_name module) {
+
     char* ip = config_get_string_value(config, "IP_KERNEL_MEMORY");
     char* puerto = config_get_string_value(config, "PUERTO_KERNEL_MEMORY");
-    return crear_conexion(ip, puerto);
+
+    log_info(logger, "Iniciando conexion con KERNEL MEMORY");
+
+    return crear_conexion(ip, puerto, logger, module);
 }
 
-int conexion_kernelS(t_config* config) {
+int conexion_kernelS(t_config* config, t_log* logger, module_name module) {
+
     char* ip = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
     char* puerto = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER");
-    return crear_conexion(ip, puerto);
+    
+    log_info(logger, "Iniciando conexion con KERNEL SCHEDULER");
+    
+    return crear_conexion(ip, puerto, logger, module);
 }
 
-int conexion_kernelS_dispatch(t_config* config) {
-    char* ip = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
-    char* puerto = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_DISPATCH");
-    return crear_conexion(ip, puerto);
-}
-
-int conexion_kernelS_interrupt(t_config* config) {
-    char* ip = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
-    char* puerto = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_INTERRUPT");
-    return crear_conexion(ip, puerto);
-}
-
-int conexion_memory_stick(t_config* config) {
+int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {
+    
     char* ip = config_get_string_value(config, "IP_MEMORY_STICK");
     char* puerto = config_get_string_value(config, "PUERTO_MEMORY_STICK");
-    return crear_conexion(ip, puerto);
+    
+    log_info(logger, "Iniciando conexion con MEMORY STICK");
+    
+    return crear_conexion(ip, puerto, logger, module);
 }
 
-/* ---------------- MANEJO DE PAQUETES ---------------- */
 
-void paquete(int conexion)
-{
-    char* leido;
-    t_paquete* paquete = crear_paquete(PAQUETE); // Enviamos con op_code PAQUETE
+/* ---------------- IMPLEMENTACION DE CLICO DE INTRUCCION ---------------- */
 
-    while( (leido = readline("Paquete> ")) != NULL && strcmp(leido, "") != 0 ) {
-        agregar_a_paquete(paquete, leido, strlen(leido) + 1);
-        free(leido);
+int recibir_pid (int socket_cliente){
+
+    int PID;
+    if (recv(socket_cliente, &PID, sizeof(int), MSG_WAITALL) > 0) {
+        return PID;
+    } else {
+        close(socket_cliente);
+        return -1; 
     }
-    free(leido);
-
-    enviar_paquete(paquete, conexion);
-    eliminar_paquete(paquete);
 }
+
+void fetch(); /*COMPLETAR*/
+
+void decode(); /*COMPLETAR*/
+
+void execute(); /*COMPLETAR*/
+
+void interrupciones(); /*COMPLETAR*/

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L 
 #include "utils.h"              
 #include <sys/socket.h>
+#include <commons/string.h>
 #include <commons/collections/list.h>
 #include <sys/types.h>
 #include <netdb.h>
@@ -109,13 +110,22 @@ typedef struct {
 // global pq la usan varias partes del programa:crear proceso, cpu, finalizar proceso.
 
 //inicializacion que va en el main EN UTILS.C
-lista_contextos = list_create();
-pthread_mutex_init(&mutex_contextos, NULL);
 
-//EN UTILS.H
 t_list* lista_contextos;
 pthread_mutex_t mutex_contextos;
 
+t_list* lista_procesos;
+pthread_mutex_t mutex_procesos;
+
+t_log* logger;
+void inicializar_utils(void);
+
+void inicializar_utils(void) {
+    lista_contextos = list_create();
+    pthread_mutex_init(&mutex_contextos, NULL);
+
+    lista_procesos = list_create();
+    pthread_mutex_init(&mutex_procesos, NULL);}
 
 t_contexto* crear_contexto(int pid) {
 
@@ -309,5 +319,55 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
 
     //libero el paquete recibido por socket
+    list_destroy_and_destroy_elements(paquete, free);
+}
+void manejar_pedido_instruccion_cpu(int socket_cpu) {
+    // Recibo el paquete de la CPU (Trae PID y PC)
+    t_list* paquete = recibir_paquete(socket_cpu);
+
+    int pid = atoi(list_get(paquete, 0));
+    int pc = atoi(list_get(paquete, 1));
+
+    //  Busco el proceso en memoria 
+    int indice = buscar_indice_proceso(pid);
+    if (indice == -1) {
+        log_error(logger, "CPU pidió instrucción para PID: %d inexistente", pid);
+        
+        // Le avisamos a la CPU que hubo un error enviando un string vacío o de control
+        int tam_error = strlen("ERROR") + 1;
+        void* error_buffer = malloc(sizeof(int) + tam_error);
+        memcpy(error_buffer, &tam_error, sizeof(int));
+        memcpy(error_buffer + sizeof(int), "ERROR", tam_error);
+        send(socket_cpu, error_buffer, sizeof(int) + tam_error, 0);
+        free(error_buffer);
+
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    pthread_mutex_lock(&mutex_procesos);
+    t_proceso* proceso = list_get(lista_procesos, indice);
+    
+    // Obtengo la instrucción correspondiente al PC
+    char* instruccion = list_get(proceso->instrucciones, pc);
+    pthread_mutex_unlock(&mutex_procesos);
+
+    // Armao el buffer para enviarle el string a la CPU
+    // Formato clásico: [ tam_string (int) | string (char*) ]
+    int tam_instruccion = strlen(instruccion) + 1; // +1 por el '\0'
+    int tam_a_enviar = sizeof(int) + tam_instruccion;
+    void* buffer_enviar = malloc(tam_a_enviar);
+
+    int desplazamiento = 0;
+    memcpy(buffer_enviar + desplazamiento, &tam_instruccion, sizeof(int));
+    desplazamiento += sizeof(int);
+    memcpy(buffer_enviar + desplazamiento, instruccion, tam_instruccion);
+
+   
+    send(socket_cpu, buffer_enviar, tam_a_enviar, 0);
+
+    log_info(logger, "## CPU - PID: %d - Leyendo PC: %d - Instrucción: %s", pid, pc, instruccion);
+
+    free(buffer_enviar);
     list_destroy_and_destroy_elements(paquete, free);
 }

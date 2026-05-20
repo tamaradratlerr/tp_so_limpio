@@ -3,20 +3,24 @@
 #ifndef GLOBAL_UTILS_H_
 #define GLOBAL_UTILS_H_
 
-// 1. Primero SIEMPRE los tipos de sistema y sockets básicos
 #include <sys/types.h>
 #include <sys/socket.h>
-
-// 2. Después las librerías de red que dependen de lo anterior
 #include <netdb.h>
 #include <unistd.h>
-
-// 3. El resto de librerías estándar y de las cátedras
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 #include <commons/log.h>
+#include <errno.h>
+#include <commons/collections/list.h>
+#include <assert.h>
+#include <commons/config.h>
+#include <semaphore.h> 
+#include <pthread.h>  
+
+extern t_log* logger;
+int PUERTO;
 
 typedef enum {
     
@@ -31,11 +35,11 @@ typedef enum {
 
 typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y KM.
 {
-	//Funcionamiento basico
-    OK,
-    NOTOK,
+	
+    OK, /* "Funciona para el HandShake" */
+    NOTOK, /* "Funciona para el HandShake" */
     
-    MENSAJE,
+    MENSAJE, 
 	PAQUETE, 
 
 	//con la CPU
@@ -59,6 +63,7 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     MEM_CORRUPT, //cortar todo con esta
 
 	//con la IO
+    IO_LIBRE,
 	SLEEP, 
 	STDIN,
 	STDOUT
@@ -101,14 +106,50 @@ typedef struct
 
 }PCB;
 
+//Estructura de dato que identifica CPUs
+typedef struct{
+    int fd; 
+    bool enUso; // EN USO = TRUE --- LIBRE = FALSE
+}CPU;
 
+
+
+/*-----     FUNCIONES     -----*/
+
+/*-----     COMUNICACION CLIENTE - SERVIDOR     -----*/
 
 int crear_conexion(char *ip, char* puerto, t_log*, module_name module);
+
 const char* getModuleName(module_name module);
+
 void enviar_mensaje(char* mensaje, int socket_cliente);
+
 void* serializar_paquete(t_paquete* paquete, int bytes);
+
 t_paquete* crear_paquete(op_code codigo);
+
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
+
 void enviar_op_code (op_code code, int socket_cliente); 
+
+void enviar_paquete(t_paquete* paquete, int socket_cliente);
+
+void eliminar_paquete(t_paquete* paquete);
+
+void liberar_conexion(int socket_cliente);
+
+void* recibir_buffer(int* size, int socket_cliente);
+
+op_code recibir_operacion(int socket_cliente);
+
+t_list* recibir_paquete(int);
+
+void iterator(char* value);
+
+void recibir_mensaje(int);
+
+int esperar_cliente(int);
+
+int iniciar_servidor(void);
 
 #endif /* GLOBAL_UTILS_H_ */

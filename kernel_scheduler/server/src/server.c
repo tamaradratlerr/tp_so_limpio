@@ -140,22 +140,22 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
 listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas las listas de los Procesos*/
 
-	l_procesos->new = list_create();
-	l_procesos->rnn = list_create();
-	l_procesos->bck = list_create();
-	l_procesos->ext = list_create();
-	l_procesos->rdy = list_create();
+	listasProcesos->new = list_create();
+	listasProcesos->rnn = list_create();
+	listasProcesos->bck = list_create();
+	listasProcesos->ext = list_create();
+	listasProcesos->rdy = list_create();
 
-	return l_procesos;
+	return listasProcesos;
 };
 
 void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Procesos*/
 
-	list_destroy(l_procesos->new);
-	list_destroy(l_procesos->rnn);
-	list_destroy(l_procesos->bck);
-	list_destroy(l_procesos->ext);
-	list_destroy(l_procesos->rdy);
+	list_destroy(listasProcesos->new);
+	list_destroy(listasProcesos->rnn);
+	list_destroy(listasProcesos->bck);
+	list_destroy(listasProcesos->ext);
+	list_destroy(listasProcesos->rdy);
 
 	return 0;
 }
@@ -310,20 +310,7 @@ void ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agre
     pthread_mutex_unlock(&mutex_ready); 
 }
 
-//Esta funcion debe ser llamada dsp de recibir que una CPU esta libre
-void agregar_lista_running() { /*Funcion que Saca al primer elemento de la lista ready y lo pone en la lista RUNNING*/
 
-    pthread_mutex_lock(&mutex_ready);
-    
-    PCB* pcb = list_pop_first(listasProcesos -> rdy); /* Saca al primer PCB de la lista de READYS (Deberia siempre ser el de mayor priodidad)*/
-        
-    pthread_mutex_unlock(&mutex_ready);
-
-    cambiar_estado_pcb(pcb, RNN);
-
-    agregar_proceso_lista(pcb); 
-    
-}
 
 
 
@@ -402,7 +389,7 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
     }
 }
 
-void enviar_desalojo(socket_cliente){/* HACER  */
+void enviar_desalojo(int socket_cliente){/* HACER  */
    
     
    log_info(logger, "Enviado Desalojo a socket %d por fin de Quantum",cpu_libre->fd);
@@ -574,7 +561,89 @@ void mandar_proceso_io(IO* interfaz) {
 }
 
 
-void io_libre (void* arg) { 
+
+
+
+/*-----                     GESTION DE HILOS                     -----*/
+
+void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos (QUAMTUM) de CPU en el ALGORITMO RR
+    t_pcb* pcb = (t_pcb*) arg;
+    
+    usleep(config_get_int_value(config, "QUANTUM") * 1000); 
+
+    return NULL;
+}
+
+
+
+
+
+/*-----                     GESTION DE OP_CODEs                     -----*/
+
+    //OK, 
+    //NOTOK,
+    
+    //MENSAJE,
+	//PAQUETE, 
+
+	//con la CPU
+	
+    //NUEVA_CPU,
+    void nueva_cpu (void* arg) {
+    
+        int cliente_fd = (intptr_t)arg;
+
+        CPU* info_cpu = malloc(sizeof(CPU));
+
+        info_cpu->fd = cliente_fd;         
+        info_cpu->enUso = FALSE;    
+                    
+        pthread_mutex_lock(&mutex_cpus);
+        list_add(list_suplementarias->cpu, info_cpu);
+        pthread_mutex_unlock(&mutex_cpus);
+        
+        enviar_op_code (OK, cliente_fd);
+
+        log_info(logger, "CPU registrada en el socket %d", cliente_fd);
+
+        //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE
+        }
+    //CPU_LIBRE,
+    void cpu_libre (void* arg){
+   
+    int cliente_fd = (intptr_t)arg;
+
+    mandar_proceso_cpu(cliente_fd);
+}
+    //FIN_PROCESO,
+    void fin_proceso (void* arg){ /*HACER*/
+
+    
+
+
+}
+    //DESALOJO,
+    //PCB,
+
+    //syscalls de la CPU --- Descripcion de cada una esta en el TP.
+    
+    //MUTEX_CREATE,
+    //MUTEX_LOCK,
+    //MUTEX_UNLOK,
+    //MEM_ALLOC,
+    //MEM_FREE,
+    //INIT_PROC,
+    //EXIT,
+
+
+    //con el KM
+    
+    //MEM_CORRUPT, /*cortar todo con esta*/
+
+	//con la IO
+
+    //IO_LIBRE,
+    void io_libre (void* arg) { 
     int io_fd = (intptr_t)arg;
 
     pthread_mutex_lock(&mutex_ios);
@@ -602,86 +671,12 @@ void io_libre (void* arg) {
     // 4. LLAMADA CLAVE: Al estar enUso = false, si había otro proceso atrás en la cola, arranca al toque
     mandar_proceso_io(interfaz);
 }
-
-
-/*-----                     GESTION DE HILOS                     -----*/
-
-void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos (QUAMTUM) de CPU en el ALGORITMO RR
-    t_pcb* pcb = (t_pcb*) arg;
-    
-    usleep(config_get_int_value(config, "QUANTUM") * 1000); 
-
-    return NULL;
-}
+	//SLEEP, 
+	//STDIN,
+	//STDOUT
 
 
 
-
-
-/*-----                     GESTION DE OP_CODEs                     -----*/
-
-// MENSAJE,
-// PAQUETE, 
-
-// //con la CPU
-// NUEVA_CPU,
-void nueva_cpu (void* arg) {
-    
-    int cliente_fd = (intptr_t)arg;
-
-    CPU* info_cpu = malloc(sizeof(CPU));
-
-    info_cpu->fd = cliente_fd;         
-    info_cpu->enUso = FALSE;    
-                
-    pthread_mutex_lock(&mutex_cpus);
-    list_add(list_suplementarias->cpu, info_cpu);
-    pthread_mutex_unlock(&mutex_cpus);
-    
-    enviar_op_code (OK, cliente_fd);
-
-    log_info(logger, "CPU registrada en el socket %d", cliente_fd);
-
-    //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE
-}
-// CPU_LIBRE
-void cpu_libre (void* arg){
-   
-    int cliente_fd = (intptr_t)arg;
-
-    mandar_proceso_cpu(cliente_fd);
-}
-// FIN_PROCESO,
-void fin_proceso (void* arg){
-
-    
-
-
-}
-// DESALOJO,
-
-// //syscalls de la CPU --- Descripcion de cada una esta en el TP.
-// MUTEX_CREATE,
-// MUTEX_LOCK,
-// MUTEX_UNLOK,
-// MEM_ALLOC,
-// MEM_FREE,
-// INIT_PROC,
-// EXIT,
-
-
-// //con el KM
-// MEM_CORRUPT, //cortar todo con esta
-
-// //con la IO
-
-
-/*-----                     COSAS A HACER...                    -----*/
-
-//en caso de CPU: (CPU) y agrego a listas CPU; en caso IO: (STDIN) ; (STDOUT) ; (SLEEP) y se agrega cada una a su lista.  
-//vamos a hacer una estructura por cada tipo de cliene. (CPU , IO)
-
-//Hacer estado EXIT;
 
 
 

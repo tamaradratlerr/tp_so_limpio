@@ -1,12 +1,6 @@
 #ifndef UTILSKS_H_
 #define UTILSKS_H_
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <commons/collections/list.h>
-#include <commons/log.h>
-#include <commons/config.h>
 #include "../../utils/src/global_utils.h"
 
 t_config* config = NULL;
@@ -18,6 +12,9 @@ char* puerto;
 char* valor;
 char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
 //t_log* logger; ME PARAECE QUE EL LOGGER TIENE QUE SER UNO PARA CLIENTE Y OTRO PARA SERVIDOR
+
+listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
+listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
 
 
 typedef struct {
@@ -43,11 +40,6 @@ typedef struct
     //Faltan agregar los estados del CheckPoint 3
 }listas_procesos;
 
-//Estructura de dato que identifica CPUs
-typedef struct{
-    int fd; 
-    bool enUso; // EN USO = TRUE --- LIBRE = FALSE
-}CPU;
 
 //Estructura de dato que identifica IOs
 typedef struct {
@@ -59,14 +51,12 @@ typedef struct {
 
 } IO;
 
-
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     
     t_list* cpu;
     t_list* io;
 
 }listas_suplementarias;
-
 
 
 typedef enum
@@ -78,7 +68,6 @@ typedef enum
 }algortimoEnUso;
 
 
-
 typedef enum
 {
     IO_STDIN,
@@ -86,13 +75,6 @@ typedef enum
     IO_SLEEP
 
 }IO_OPCODE;
-
-
-//VARIABLES GLOBALES-------------------------
-extern t_log* logger;
-
-listas_procesos* listasProcesos; //Lista de PCBs segun estado
-listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs
 
 
 /* Semaforos tipo Mutex*/
@@ -109,10 +91,12 @@ pthread_t hilo_timer;
 pthread_mutex_t mutex_ready; 
 //FALTA PONER LAS DEMAS MUTEX?
 
-
-/*analizar que tipo de semáforo/mutex*/
+/*-----     FUNCIONES      -----*/
 
 PCB* iniciar_pcb (int PID, int PPID, int UID);
 void terminar_pcb (PCB* pcb);
+
+IO* buscar_io_por_nombre(char* nombre_buscado);
+IO* buscar_io_por_fd(int fd_buscado);
 
 #endif

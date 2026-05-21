@@ -45,7 +45,6 @@ void crear_buffer(t_paquete* paquete)
 	paquete->buffer->stream = NULL;
 }
 
-
 // *** creamos los paquetes para las tres opciones de mensajes *** //
 t_paquete* crear_paquete_io(op_code io)
 {
@@ -64,22 +63,30 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 
 	/* Leo la IO que envió el Kernel Scheduler */
 	int cod_op = recibir_operacion(fd_conexion, paquete_io);
+	char* mseg;
+	char* useg;
 
 	/* Realizo la accion de la IO correspondiente */
 	switch (cod_op) {
 		case SLEEP:
 			/*Recibo tiempo T en milisegundos del KS.*/
-			
-			/* FALTA */
+			recibir_mensaje(fd_conexion, paquete_io);
+			mseg = paquete_io->buffer->stream;
+			//	pid = paquete_io->buffer->stream; ACA TENGO QUE PEDIR EL PID DE ALGUNA MANERA PARA IMPRIMIRLO.
 
-			recibir_paquete(fd_conexion);	/* FALTA */
+			/* Ejecuto el tiempo de sleep que me envió el Kernel Scheduler */
+			log_info(logger, "## PID: %s - Haciendo sleep por %s milisegundos.", pid, mseg);
+			useg = atoi(mseg) * 1000;
+			usleep(useg);
+			/* Le aviso al KS que fue OK */
+			enviar_mensaje("Finalizo OK",fd_conexion);
 			break;
 
 		case STDIN:
 
 			/* FALTA */
 
-			lista = recibir_paquete(fd_conexion);	/* FALTA */
+			lista = recibir_mensaje(fd_conexion);	/* FALTA */
 			log_info(logger, "Me llegaron los siguientes valores:\n");
 			list_iterate(lista, (void*) iterator);	/* FALTA */
 			break;
@@ -88,7 +95,7 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 
 			/* FALTA */
 
-			lista = recibir_paquete(fd_conexion);	/* FALTA */
+			lista = recibir_mensaje(fd_conexion);	/* FALTA */
 			break;
 
 		case -1:
@@ -133,6 +140,38 @@ void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
 	paquete->buffer->size += tamanio + sizeof(int);
 }
 
+void* recibir_buffer(int* size, int socket_cliente)
+{
+	void * buffer;
+	/* Recibo el tamaño del stream */
+	recv(socket_cliente, size, sizeof(int), MSG_WAITALL);
+	buffer = malloc(*size);
+	/* Recibo el stream */
+	recv(socket_cliente, buffer, *size, MSG_WAITALL);
+
+	return buffer;
+}
+
+void recibir_mensaje(int socket_cliente, t_paquete* paquete_io)
+{
+	int size;
+	int desplazamiento = 0;
+	int tamanio;
+	
+	/* Recibo el stream */
+	char* buffer = recibir_buffer(&size, socket_cliente);
+
+	/* Copio el tamaño*/
+	paquete_io->buffer->size = size;
+
+	/* Reservo memoria para el stream */
+	paquete_io->buffer->stream = malloc(size);
+
+	/* Copio el stream */
+	memcpy(paquete_io->buffer->stream, buffer, size);
+
+	free(buffer);
+}
 
 
 void enviar_paquete(t_paquete* paquete, int socket_cliente)

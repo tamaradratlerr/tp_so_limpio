@@ -82,7 +82,8 @@ int main(void)
 
         execute();
 
-        interrupciones();
+        //falta poner pc++
+        interrupciones(); // --> aca como haríamos?
 
         liberar_instruccion(instruccion_decodificada);
         instruccion_decodificada = NULL;
@@ -233,10 +234,6 @@ void decode(char* instruccion_raw) {
 
 // función para traducir el string al enum de instru
 
-/* no use switch proque cuando le pregunte a gemini si estaba bien programado me dijo
-   que: Usar if-else con strcmp es necesario en C porque los switch no pueden evaluar 
-   strings directamente*/
-
 t_instruccion_code identificar_codigo(char* token) {
     if (strcmp(token, "NOOP") == 0)          return NOOP;
     if (strcmp(token, "SET") == 0)           return SET;
@@ -345,29 +342,30 @@ void execute() {
             break;
 
         case SLEEP:
-
+            ejecutar_sleep(instr); 
             break;
         
         case STDOUT:
-
+            ejecutar_stdout(instr);
             break;
-        
+            
         case STDIN:
-
+            ejecutar_stdin(instr);
             break;
         
         case INIT_PROC:
-
+            ejecutar_init_proc(instr);
             break;
 
         case EXIT:
-        
+            ejecutar_exit();
             break;
 
         default:
             log_warning(logger, "Instruccion no definida en execute");
             break;
     }
+    
 }
 
 void ejecutar_noop (t_instruccion* instr){
@@ -656,10 +654,149 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     enviar_paquete(paquete, sockets.conexion_kernel_memory);
     eliminar_paquete(paquete);
     
-    // 2. Esperar confirmación de la memoria
+    // esperar confirmación de la memoria
     int resultado = recibir_operacion(sockets.conexion_kernel_memory);
     if (resultado != OK) {
         log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
+    }
+}
+
+void ejecutar_sleep(t_instruccion* instr) {
+    char* tiempo = strdup(instr->params[0]);
+    
+    gestionar_desalojo_por_syscall(tiempo, ks_BLOQUEAR_PROCESO);    
+
+    if (recibir_operacion(sockets.conexion_kernel_scheduler) != OK) {
+        log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
+    }
+}
+
+void limpiar_contexto_actual() {
+    log_info(logger, "Limpiando contexto del proceso actual...");
+
+    if (contexto_actual != NULL) {
+        free(contexto_actual);
+        contexto_actual = NULL;
+    }
+
+   
+    memset(&registros_cpu, 0, sizeof(t_contexto));
+
+    log_info(logger, "Contexto limpio. CPU lista para recibir nuevo PID.");
+}
+
+void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
+
+    enviar_contexto_a_kernel_memory(); 
+
+    t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
+    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    agregar_a_paquete(paquete, valor, strlen(valor) + 1);
+    
+    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
+    op_code status = recibir_operacion(sockets.conexion_kernel_scheduler);
+    
+    if(status == OK) {
+        log_info(logger, "Desalojo confirmado. Limpiando CPU.");
+        limpiar_contexto_actual();
+    }
+}
+
+void enviar_contexto_a_kernel_memory() {
+
+    t_paquete* paquete = crear_paquete(km_GUARDAR_CONTEXTO);
+
+    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));
+    
+    // Registros 8 bits
+    agregar_a_paquete(paquete, &contexto_actual->ax, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->bx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->cx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->dx, sizeof(uint8_t));
+    
+    // Registros 32 bits
+    agregar_a_paquete(paquete, &contexto_actual->eax, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->ebx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->ecx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->edx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
+
+    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    eliminar_paquete(paquete);
+
+}
+
+void ejecutar_stdout(t_instruccion* instr) {
+    char* mensaje = instr->params[0];
+    log_info(logger, "PID: %d - Ejecutando STDOUT: %s", contexto_actual->pid, mensaje);
+
+    enviar_op_code(ks_IO_STDOUT, sockets.conexion_kernel_scheduler);
+
+    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+        
+        t_paquete* paquete = crear_paquete(ks_IO_STDOUT);
+        agregar_a_paquete(paquete, mensaje, strlen(mensaje) + 1);
+        enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+        eliminar_paquete(paquete);
+
+        if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+            log_info(logger, "Mensaje impreso por el Kernel.");
+        }
+    }
+}
+
+void ejecutar_stdin(t_instruccion* instr) {
+    char* interfaz = instr->params[0];
+    char* registro_destino = instr->params[1]; 
+
+    enviar_op_code(ks_IO_STDIN, sockets.conexion_kernel_scheduler);
+
+    t_paquete* paquete = crear_paquete(ks_IO_STDIN);
+    agregar_a_paquete(paquete, interfaz, strlen(interfaz) + 1);
+    agregar_a_paquete(paquete, registro_destino, strlen(registro_destino) + 1);
+    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
+    gestionar_desalojo_por_syscall(registro_destino, ks_IO_STDIN);
+}
+
+void ejecutar_init_proc(t_instruccion* instr) {
+    char* path = instr->params[0];
+    int prioridad = atoi(instr->params[1]);
+
+    log_info(logger, "PID %d solicitando crear nuevo proceso: %s", contexto_actual->pid, path);
+
+    enviar_op_code(ks_INIT_PROC, sockets.conexion_kernel_scheduler);
+
+    t_paquete* paquete = crear_paquete(ks_INIT_PROC);
+    agregar_a_paquete(paquete, path, strlen(path) + 1);
+    agregar_a_paquete(paquete, &prioridad, sizeof(int));
+    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
+    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+        log_info(logger, "Proceso creado exitosamente por el Kernel.");
+    }
+}
+
+void ejecutar_exit() {
+    log_info(logger, "PID: %d - Ejecutando EXIT", contexto_actual->pid);
+
+    enviar_op_code(ks_EXIT, sockets.conexion_kernel_scheduler);
+
+    t_paquete* paquete = crear_paquete(ks_EXIT);
+    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
+    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+        log_info(logger, "EXIT confirmado. Limpiando CPU.");
+        limpiar_contexto_actual();
+        debe_desalojar_cpu = true;
     }
 }
 

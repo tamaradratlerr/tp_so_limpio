@@ -33,7 +33,16 @@ typedef enum{
     //solicitud para km
     SOLICITUD_INSTRUCCION,
     LEER_MEMORIA,
-    ESCRIBIR_MEMORIA
+    ESCRIBIR_MEMORIA,
+    km_GUARDAR_CONTEXTO,
+
+    //con ks
+    ks_BLOQUEAR_PROCESO,
+    ks_SLEEP,
+    ks_IO_STDOUT,
+    ks_IO_STDIN,
+    ks_INIT_PROC,
+    ks_EXIT
 
 }op_code;
 

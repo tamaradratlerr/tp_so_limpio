@@ -110,5 +110,6 @@ void* serializar_paquete(t_paquete* paquete, int bytes);
 t_paquete* crear_paquete(op_code codigo);
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
 void enviar_op_code (op_code code, int socket_cliente); 
+op_code recibir_operacion (int socket_cliente);
 
 #endif /* GLOBAL_UTILS_H_ */

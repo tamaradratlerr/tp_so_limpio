@@ -133,7 +133,7 @@ void* recibir_buffer(int* size, int socket_cliente) {
     return NULL;
 }
 
-op_code recibir_operacion(int socket_cliente) {
+op_code recibir_operacion (int socket_cliente) {
     
     op_code cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(op_code), MSG_WAITALL) > 0) {

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 t_log* logger;
- t_cpu_sockets sockets;
+t_cpu_sockets sockets;
 
 int main(void)
 {
@@ -324,6 +324,26 @@ void execute() {
             ejecutar_copy_mem(instr);
             break;
         
+        case MUTEX_CREATE:
+            ejecutar_mutex_create(instr);
+            break;    
+        
+        case MUTEX_LOCK:
+            ejecutar_mutex_lock(instr);
+            break;
+
+        case MUTEX_UNLOCK:
+            ejecutar_mutex_unlock(instr);
+            break;
+
+        case MEM_ALLOC:
+            ejecutar_mem_alloc(instr);
+            break;
+
+        case MEM_FREE:
+            ejecutar_mem_free(instr);
+            break;
+
         case SLEEP:
 
             break;
@@ -440,15 +460,6 @@ void ejecutar_mov_out (t_instruccion* instr){
 
 }
 
-
-
-
-
-
-
-
-
-
 void ejecutar_sum(t_instruccion* instr) {
     
     char* reg_dest_nombre = instr->params[0];
@@ -526,6 +537,96 @@ void ejecutar_copy_mem(t_instruccion* instr) {
              tamanio, *dir_logica_origen, *dir_logica_destino);
 }
 
+void ejecutar_mutex_create(t_instruccion* instr){
+
+    char* mutex_id = instr->params[0];
+    op_code err;
+
+    enviar_op_code (MUTEX_CREATE, sockets.conexion_kernel_scheduler); //Envia la señal
+    
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return //MARCAR EL ERROR.
+
+    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+    
+    log_info(logger, ""); //Completar LOG
+}
+
+void ejecutar_mutex_lock (t_instruccion* instr){
+
+    char* mutex_id = instr->params[0];
+    op_code err;
+
+    enviar_op_code (MUTEX_LOCK, sockets.conexion_kernel_scheduler); //Envia la señal
+
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return //MARCAR ERROR
+
+    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+
+    log_info (logger, ""); //Completar LOG
+}
+
+void ejecutar_mutex_unlock (t_instruccion* instr){
+
+    char* mutex_id = instr->params[0];
+    op_code err;
+
+    enviar_op_code (MUTEX_UNLOCK, sockets.conexion_kernel_scheduler); //Envia la señal
+
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return //MARCAR ERROR
+
+    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+
+    log_info (logger, ""); //Completar LOG
+}
+
+void ejecutar_mem_alloc (t_instruccion* instr){
+
+    char* id_segmento = instr->params[0];
+    char* tamanio = instr->params[1];
+    op_code err;
+
+    enviar_op_code (MEM_ALLOC, sockets.conexion_kernel_scheduler); //Envia la señal
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return //MARCAR ERROR
+
+    enviar_mensaje (id_segmento, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+
+
+    enviar_mensaje (tamanio, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+    log_info (logger, ""); //Completar LOG
+            
+}
+
+void ejecutar_mem_free (t_instruccion* instr){
+
+    char* id_segmento = instr->params[0];
+    op_code err;
+
+    enviar_op_code (MEM_FREE, sockets.conexion_kernel_scheduler); //Envia la señal
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return //MARCAR ERROR
+
+    enviar_mensaje (id_segmento, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return; //MARCAR ERROR
+
+}
 
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
 

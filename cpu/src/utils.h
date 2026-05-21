@@ -6,9 +6,12 @@
 
 
 typedef struct {
-    int pid;
     uint32_t pc;
-    uint32_t registros[4]; // EAX, EBX, ECX, EDX, ... --- poner los que faltan
+    // Registros de 8 bits (uint8_t)
+    uint8_t ax, bx, cx, dx;
+    // Registros de 32 bits (uint32_t)
+    uint32_t eax, ebx, ecx, edx;
+    uint32_t si, di;
 } t_contexto;
 
 typedef enum {

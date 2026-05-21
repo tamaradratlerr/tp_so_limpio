@@ -260,6 +260,33 @@ t_instruccion_code identificar_codigo(char* token) {
     if (token == NULL) return EXIT;
 }
 
+
+
+void* obtener_registro(char* nombre) {
+    // registros de 8 bits
+    if (strcmp(nombre, "AX") == 0) return &(contexto_actual->ax);
+    if (strcmp(nombre, "BX") == 0) return &(contexto_actual->bx);
+    if (strcmp(nombre, "CX") == 0) return &(contexto_actual->cx);
+    if (strcmp(nombre, "DX") == 0) return &(contexto_actual->dx);
+
+    // registros de 32 bits
+    if (strcmp(nombre, "EAX") == 0) return &(contexto_actual->eax);
+    if (strcmp(nombre, "EBX") == 0) return &(contexto_actual->ebx);
+    if (strcmp(nombre, "ECX") == 0) return &(contexto_actual->ecx);
+    if (strcmp(nombre, "EDX") == 0) return &(contexto_actual->edx);
+    if (strcmp(nombre, "SI") == 0)  return &(contexto_actual->si);
+    if (strcmp(nombre, "DI") == 0)  return &(contexto_actual->di);
+    if (strcmp(nombre, "PC") == 0)  return &(contexto_actual->pc);
+
+    log_error(logger, "Registro inexistente: %s", nombre);
+    return NULL;
+}
+
+bool es_registro_32bits(char* nombre) {
+    // si empieza con E o es SI o DI o PC  es de 32 bits
+    return (nombre[0] == 'E' || strcmp(nombre, "SI") == 0 || strcmp(nombre, "DI") == 0 || strcmp(nombre, "PC") == 0);
+}
+
 void execute() {
     t_instruccion* instr = instruccion_decodificada;
     
@@ -285,6 +312,5 @@ void execute() {
             break;
     }
 }
-
 
 void interrupciones(); /*COMPLETAR*/

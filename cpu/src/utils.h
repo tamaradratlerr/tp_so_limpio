@@ -6,6 +6,7 @@
 
 
 typedef struct {
+    int pid;
     uint32_t pc;
     // Registros de 8 bits (uint8_t)
     uint8_t ax, bx, cx, dx;

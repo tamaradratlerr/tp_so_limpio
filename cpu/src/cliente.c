@@ -5,12 +5,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+t_log* logger;
+ t_cpu_sockets sockets;
+
 int main(void)
 {
     /* Iniciamos el Logger y Config*/
-
-    t_cpu_sockets sockets;
-    t_log* logger = iniciar_logger();
+    logger = iniciar_logger();
     t_config* config = iniciar_config();
 
     if (logger == NULL || config == NULL) {
@@ -73,18 +74,18 @@ int main(void)
     int control_loop = 1;
     while (control_loop == 1){
     
-        char* instruccion_raw = fetch(); 
+        char* instruccion_raw = fetch(sockets); 
 
-    if (instruccion_raw != NULL) {
+        if (instruccion_raw != NULL) {
         decode(instruccion_raw); 
-    }
+        }
 
-    execute();
+        execute();
 
-    interrupciones();
+        interrupciones();
 
-    liberar_instruccion(instruccion_decodificada);
-    instruccion_decodificada = NULL;
+        liberar_instruccion(instruccion_decodificada);
+        instruccion_decodificada = NULL;
     
     }
 }
@@ -173,7 +174,7 @@ int recibir_pid (int socket_cliente){
 
 t_contexto* contexto_actual; 
 
-void fetch() {
+char* fetch() {
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 
              contexto_actual->pc);
@@ -188,7 +189,7 @@ void fetch() {
     eliminar_paquete(paquete);
 
     // recibimos el string de la instrucción
-    char* instruccion_raw = recibir_string(sockets.conexion_kernel_memory);
+    char* instruccion_raw = recibir_string(sockets.conexion_kernel_memory); //Hacer recibir string
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");
@@ -206,7 +207,7 @@ t_instruccion* instruccion_decodificada;
 void decode(char* instruccion_raw) {
     char** tokens = string_split(instruccion_raw, " ");
     
-    if (token == NULL) return EXIT;
+    if (tokens == NULL) return EXIT;
 
     instruccion_decodificada = malloc(sizeof(t_instruccion));
     instruccion_decodificada->cant_params = 0;
@@ -291,6 +292,22 @@ void execute() {
     t_instruccion* instr = instruccion_decodificada;
     
     switch (instr->codigo) {
+        case NOOP:      
+            ejecutar_noop(instr);      
+            break;
+        
+        case SET:      
+            ejecutar_set(instr);      
+            break;
+
+         case MOV_IN:      
+            ejecutar_mov_out(instr);      
+            break;
+
+        case MOV_OUT:      
+            ejecutar_mov_out(instr);      
+            break;
+
         case SUM:      
             ejecutar_sum(instr);      
             break;
@@ -332,7 +349,108 @@ void execute() {
             break;
     }
 }
+
+void ejecutar_noop (t_instruccion* instr){
+
+    //No hace nada
+
+}
+
+void ejecutar_set (t_instruccion* instr){
+
+    char* reg_dest_nombre = instr->params[0];
+
+    if (es_registro_32bits(reg_dest_nombre)){
+        uint32_t valor = (uint32_t) strtoul(instr->params[1], NULL, 10);
+        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
+        
+        *dest = valor;
+
+        log_info(logger, "[EXEC] SET 32b: %s = %u", reg_dest_nombre, *dest);
+    }
+    else {
+        uint8_t valor = (uint8_t) strtoul(instr->params[1], NULL, 10);
+        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
+
+        *dest = valor;
+
+        log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
+    }
+
+}
+
+void ejecutar_mov_in (t_instruccion* instr){
+
+    char* reg_dest_nombre = instr->params[0];
+
+    if (es_registro_32bits(reg_dest_nombre)){
+        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
+        uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
+    
+        // Comunicación con Memory Stick
+        void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
+        *dest = *(uint32_t*)buffer;
+        free(buffer);
+
+        log_info(logger, "[EXEC] MOV_IN 32b: %s = %u", reg_dest_nombre, *dest);
+    }   
+    else {
+        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
+        uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
+    
+        // Comunicación con Memory Stick
+        void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
+        *dest = *(uint8_t*)buffer;
+        free(buffer);
+
+        log_info(logger, "[EXEC] MOV_IN 32b: %s = %u", reg_dest_nombre, *dest);
+
+
+    }
+}
+
+void ejecutar_mov_out (t_instruccion* instr){
+
+    char* reg_dest_nombre = instr->params[0];
+
+    if (es_registro_32bits(reg_dest_nombre)){
+        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
+        uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
+    
+        // Comunicación con Memory Stick
+        void* buffer = (void*)dest;
+        escribir_en_memoria(dir_fisica, buffer, sizeof(uint32_t));
+        free(buffer);
+
+        log_info(logger, "[EXEC] MOV_OUT 32b: %s = %u", reg_dest_nombre, *dest);
+    }   
+    else {
+        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
+        uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
+    
+        // Comunicación con Memory Stick
+        void* buffer = (void*)dest;
+        escribir_en_memoria(dir_fisica, buffer, sizeof(uint8_t));
+        free(buffer);
+
+        log_info(logger, "[EXEC] MOV_OUT 8b: %s = %u", reg_dest_nombre, *dest);
+
+
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
 void ejecutar_sum(t_instruccion* instr) {
+    
     char* reg_dest_nombre = instr->params[0];
     char* reg_orig_nombre = instr->params[1];
 
@@ -378,8 +496,8 @@ void ejecutar_jnz(t_instruccion* instr) {
     }
 }
 
-
 void ejecutar_copy_mem(t_instruccion* instr) {
+    
     // obtener tamaño que puede ser un número fijo (atoi) o un registro
     int tamanio;
     if (isdigit(instr->params[0][0])) {

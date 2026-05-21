@@ -206,6 +206,8 @@ t_instruccion* instruccion_decodificada;
 void decode(char* instruccion_raw) {
     char** tokens = string_split(instruccion_raw, " ");
     
+    if (token == NULL) return EXIT;
+
     instruccion_decodificada = malloc(sizeof(t_instruccion));
     instruccion_decodificada->cant_params = 0;
 
@@ -226,8 +228,9 @@ void decode(char* instruccion_raw) {
     free(instruccion_raw);
 }
 
-// función para traducir el string al enum de instru
 
+
+// función para traducir el string al enum de instru
 
 /* no use switch proque cuando le pregunte a gemini si estaba bien programado me dijo
    que: Usar if-else con strcmp es necesario en C porque los switch no pueden evaluar 
@@ -257,6 +260,31 @@ t_instruccion_code identificar_codigo(char* token) {
     if (token == NULL) return EXIT;
 }
 
-void execute(); /*COMPLETAR*/
+void execute() {
+    t_instruccion* instr = instruccion_decodificada;
+    
+    switch (instr->codigo) {
+        case SUM:      
+            ejecutar_sum(instr);      
+            break;
+
+        case SUB:
+            ejecutar_sub(instr);
+            break;
+
+        case JNZ:
+            ejecutar_jnz(instr);
+            break;
+    
+        case COPY_MEM:
+            ejecutar_copy_mem(instr);
+            break;
+
+        default:
+            log_warning(logger, "Instruccion no definida en execute");
+            break;
+    }
+}
+
 
 void interrupciones(); /*COMPLETAR*/

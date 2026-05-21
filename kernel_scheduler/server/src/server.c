@@ -115,6 +115,10 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 // La interfaz de IO nos manda este opcode cuando termina de operar
                 io_libre(cliente_fd); 
                 break;
+
+            case MUTEX_CREATE:
+                mutex_create(cliente_fd);
+                break;
             
             case -1:
                 log_info(logger, "El cliente se desconectó.");
@@ -611,9 +615,7 @@ void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos 
 	//con la CPU
 	
     //NUEVA_CPU,
-    void nueva_cpu (void* arg) {
-    
-        int cliente_fd = (intptr_t)arg;
+    void nueva_cpu (int cliente_fd) {
 
         CPU* info_cpu = malloc(sizeof(CPU));
 
@@ -631,14 +633,12 @@ void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos 
         //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE
         }
     //CPU_LIBRE,
-    void cpu_libre (void* arg){
-   
-    int cliente_fd = (intptr_t)arg;
+    void cpu_libre (int cliente_fd){
 
     mandar_proceso_cpu(cliente_fd);
 }
     //FIN_PROCESO,
-    void fin_proceso (void* arg){ /*HACER*/
+    void fin_proceso (int cliente_fd){ /*HACER*/
 
     
 
@@ -650,8 +650,57 @@ void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos 
     //syscalls de la CPU --- Descripcion de cada una esta en el TP.
     
     //MUTEX_CREATE,
+    void mutex_create (int socket_cliente){
+
+        enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
+
+        char* mutex_id = recibir_mensaje (socket_cliente);
+
+        mutex_cpu* mutex = malloc(sizeof(mutex_cpu));
+
+        mutex->mutex_id = mutex_id;
+        mutex->valor = 1;
+        
+        list_add(lista_mutex, mutex);
+
+        enviar_op_code(OK, socket_cliente);
+        
+    }
     //MUTEX_LOCK,
+    void mutex_lock (int socket_cliente){
+
+        enviar_op_code(OK, socket_cliente);
+
+        char* mutex_id = recibir_mensaje (socket_cliente);
+
+        mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
+
+        while (mutex->valor =! 1){
+
+            sleep(1000); //para que la espera activa sea menos grave
+
+            log_info (logger, "El mutex %d esta bloqueado", mutex->mutex_id);
+        }
+        
+        pthread_mutex_lock (&mutex_simulados);
+        mutex->valor = 0;    
+        pthread_mutex_unlock (&mutex_simulados);
+
+        enviar_op_code(OK, socket_cliente);
+    }
     //MUTEX_UNLOK,
+    void mutex_unlock (int socket_cliente){
+
+        enviar_op_code(OK, socket_cliente);
+
+        char* mutex_id = recibir_mensaje (socket_cliente);
+
+        mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
+
+        pthread_mutex_lock (&mutex_simulados);
+        mutex->valor = 1;
+        pthread_mutex_unlock (&mutex_simulados);
+    }
     //MEM_ALLOC,
     //MEM_FREE,
     //INIT_PROC,
@@ -700,7 +749,13 @@ void* hilo_quantum(void* arg) { //Funcion que se encarga de MANEJAR los tiempos 
 
 
 
-
+bool es_el_mutex_buscado(void* elemento, void* contexto) {
+    mutex_cpu* un_mutex = (mutex_cpu*) elemento;
+    char* id_buscado = (char*) contexto;
+    
+    // strcmp devuelve 0 si los strings son exactamente iguales
+    return strcmp(un_mutex->mutex_id, id_buscado) == 0;
+}
 
 
 

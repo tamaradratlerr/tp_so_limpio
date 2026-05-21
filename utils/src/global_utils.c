@@ -234,13 +234,14 @@ void enviar_op_code (op_code code_op, int socket_cliente) {
 
 }
 
-void recibir_mensaje(int socket_cliente)
+char* recibir_mensaje (int socket_cliente)
 {
 	int size;
 	char* buffer = recibir_buffer(&size, socket_cliente);
 	log_info(logger, "Me llego el mensaje %s", buffer);
-	free(buffer);
-}
+	
+    return buffer;
+} //HAY QUE LIBERAR LA MEMORIA DSP DE LLAMAR A ESTA FUNCION
 
 /*-----     SISTEMA     -----*/
 

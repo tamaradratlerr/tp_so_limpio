@@ -118,6 +118,8 @@ typedef struct{
 
 
 
+
+
 /*-----     FUNCIONES     -----*/
 
 /*-----     COMUNICACION CLIENTE - SERVIDOR     -----*/
@@ -150,7 +152,7 @@ t_list* recibir_paquete(int);
 
 void iterator(char* value);
 
-void recibir_mensaje(int);
+char* recibir_mensaje(int);
 
 int esperar_cliente(int);
 

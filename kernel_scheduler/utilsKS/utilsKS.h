@@ -15,7 +15,7 @@ char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int interv
 
 listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
 listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
-
+t_list* lista_mutex;
 
 typedef struct {
 
@@ -76,6 +76,13 @@ typedef enum
 
 }IO_OPCODE;
 
+typedef struct{
+
+    char* mutex_id;
+    int valor;
+
+}mutex_cpu;
+
 
 /* Semaforos tipo Mutex*/
 pthread_mutex_t sem_procesos_new; //Semaforo para lista de NEWS
@@ -88,7 +95,8 @@ pthread_mutex_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
 pthread_mutex_t mutex_cpus;
 pthread_mutex_t mutex_ios;
 pthread_t hilo_timer;
-pthread_mutex_t mutex_ready; 
+pthread_mutex_t mutex_ready;
+pthread_mutex_t mutex_simulados; 
 //FALTA PONER LAS DEMAS MUTEX?
 
 /*-----     FUNCIONES      -----*/

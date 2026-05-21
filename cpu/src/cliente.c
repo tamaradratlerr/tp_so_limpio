@@ -306,11 +306,147 @@ void execute() {
         case COPY_MEM:
             ejecutar_copy_mem(instr);
             break;
+        
+        case SLEEP:
+
+            break;
+        
+        case STDOUT:
+
+            break;
+        
+        case STDIN:
+
+            break;
+        
+        case INIT_PROC:
+
+            break;
+
+        case EXIT:
+        
+            break;
 
         default:
             log_warning(logger, "Instruccion no definida en execute");
             break;
     }
 }
+void ejecutar_sum(t_instruccion* instr) {
+    char* reg_dest_nombre = instr->params[0];
+    char* reg_orig_nombre = instr->params[1];
+
+    if (es_registro_32bits(reg_dest_nombre)) {
+        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
+        uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
+        *dest += *orig;
+        log_info(logger, "[EXEC] SUM 32b: %s = %u", reg_dest_nombre, *dest);
+    } else {
+        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
+        uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
+        *dest += *orig;
+        log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
+    }
+}
+
+void ejecutar_sub(t_instruccion* instr) {
+    char* reg_dest_nombre = instr->params[0];
+    char* reg_orig_nombre = instr->params[1];
+
+    if (es_registro_32bits(reg_dest_nombre)) {
+        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
+        uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
+        *dest -= *orig;
+        log_info(logger, "[EXEC] SUB 32b: %s = %u", reg_dest_nombre, *dest);
+    } else {
+        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
+        uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
+        *dest -= *orig;
+        log_info(logger, "[EXEC] SUB 8b: %s = %u", reg_dest_nombre, *dest);
+    }
+}
+
+void ejecutar_jnz(t_instruccion* instr) {
+    // los JNZ --> gemini dice que no es necesario los de 8 bits xq generalmente operan sobre registros de 32 bits (como el PC o contadores)
+    uint32_t* registro = (uint32_t*)obtener_registro(instr->params[0]);
+    if (*registro != 0) {
+
+        /*atoi toma una cadena de caracteres q contiene números y la traduce a su valor numérico real en meomria
+        --> Si no usas atoi estarías intentando asignar una dirección de memoria (donde vive el texto "5")*/
+        contexto_actual->pc = (uint32_t)atoi(instr->params[1]);
+        log_info(logger, "[EXEC] JNZ: Salto a PC %u", contexto_actual->pc);
+    }
+}
+
+
+void ejecutar_copy_mem(t_instruccion* instr) {
+    // obtener tamaño que puede ser un número fijo (atoi) o un registro
+    int tamanio;
+    if (isdigit(instr->params[0][0])) {
+        tamanio = atoi(instr->params[0]);
+    } else {
+        // Si el parámetro no es un número, asumimos que es un registro
+        uint32_t* reg_tam = (uint32_t*)obtener_registro(instr->params[0]);
+        tamanio = *reg_tam;
+    }
+
+    // obtener direcciones lógicas desde los registros SI y DI
+    uint32_t* dir_logica_origen = (uint32_t*)obtener_registro("SI");
+    uint32_t* dir_logica_destino = (uint32_t*)obtener_registro("DI");
+
+    // COMUNICACIÓN COM MMU (CP 3?) para obtener direcciones físicas
+    uint32_t dir_fisica_origen = pedir_direccion_a_mmu(*dir_logica_origen);
+    uint32_t dir_fisica_destino = pedir_direccion_a_mmu(*dir_logica_destino);
+    
+    // Comunicación con Memory Stick
+    void* buffer = leer_de_memoria(dir_fisica_origen, tamanio);
+    escribir_en_memoria(dir_fisica_destino, buffer, tamanio);
+    
+    free(buffer);
+    
+    log_info(logger, "[EXEC] COPY_MEM: Copiados %d bytes de SI(log:%u) a DI(log:%u)", 
+             tamanio, *dir_logica_origen, *dir_logica_destino);
+}
+
+
+void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
+
+    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
+    t_paquete* paquete = crear_paquete(LEER_MEMORIA);
+    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(int));
+    
+    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    eliminar_paquete(paquete);
+
+    // recibir la respuesta (el buffer con los datos)
+    // asumiendo que el protocolo de las chicas devuelve un buffer de bytes
+    void* buffer = malloc(tamanio);
+    recibir_datos(sockets.conexion_kernel_memory, buffer, tamanio); 
+    
+    return buffer;
+}
+
+void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
+    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
+    t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
+    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(int));
+    agregar_a_paquete(paquete, buffer, tamanio);
+    
+    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    eliminar_paquete(paquete);
+    
+    // 2. Esperar confirmación de la memoria
+    int resultado = recibir_operacion(sockets.conexion_kernel_memory);
+    if (resultado != OK) {
+        log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
+    }
+}
+
+/*  Cuando hagamos MMU tenemos que hacer:
+   1) pedir_direccion_a_mmu  
+
+*/
 
 void interrupciones(); /*COMPLETAR*/

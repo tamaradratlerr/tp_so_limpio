@@ -30,7 +30,9 @@ typedef struct {
 typedef enum{
 
     //solicitud para km
-    SOLICITUD_INSTRUCCION
+    SOLICITUD_INSTRUCCION,
+    LEER_MEMORIA,
+    ESCRIBIR_MEMORIA
 
 }op_code;
 

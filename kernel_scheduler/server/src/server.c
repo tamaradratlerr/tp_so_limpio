@@ -672,7 +672,9 @@ void nueva_io (void* arg){
 // STDIN
 void io_stdin(t_list* lista) {
 
-    PCB* pcb = (PCB*)list_get(lista, 0);
+    uint32_t pid = *(uint32_t*)list_get(lista, 0);
+    PCB* pcb = buscar_pcb_por_pid(pid);
+
     char* nombre_io = (char*)list_get(lista, 1);
 
     uint32_t dir = *(uint32_t*)list_get(lista, 2);
@@ -700,7 +702,8 @@ void io_stdin(t_list* lista) {
 
 // STDOUT
 void atender_io_stdout(t_list* lista) {
-    PCB* pcb = (PCB*)list_get(lista, 0);
+    uint32_t pid_recibido = *(uint32_t*)list_get(lista, 0);
+    PCB* pcb = buscar_pcb_por_pid(pid_recibido); 
     char* nombre_io = (char*)list_get(lista, 1);
     uint32_t dir = *(uint32_t*)list_get(lista, 2);
     uint32_t tam = *(uint32_t*)list_get(lista, 3);
@@ -724,6 +727,31 @@ void atender_io_stdout(t_list* lista) {
     mandar_proceso_io(interfaz);
 }
 
+
+PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
+    t_list* listas_a_revisar[] = { 
+        ListaProcesos-> new, ListaProcesos->rdy, 
+        ListaProcesos-> rnn, ListaProcesos->bck, 
+        ListaProcesos-> ext 
+    };
+
+    for (int i = 0; i < 5; i++) {
+        t_list* lista_actual = listas_a_revisar[i];
+        
+        t_list_iterator* it = list_iterator_create(lista_actual);
+        while (list_iterator_has_next(it)) {
+            PCB* pcb = (PCB*) list_iterator_next(it);
+            if (pcb->pid == pid_recibido) {
+                list_iterator_destroy(it);
+                return pcb; 
+            }
+        }
+        list_iterator_destroy(it);
+    }
+
+    return NULL; 
+
+}
 
 //INIT PROC
 init_proc(int socket_cliente){

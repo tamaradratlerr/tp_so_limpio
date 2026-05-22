@@ -27,6 +27,8 @@ int main(void)
 	
 	ip_km = config_get_string_value(config, "IP_KM");
 
+	//SACAMOS LOS DEMÁS PARA PROBAR CON KM
+
 	puerto_km = config_get_string_value(config, "PUERTO_KM");
 
 	planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
@@ -45,24 +47,24 @@ int main(void)
 
 	// Creamos una conexión hacia el servidor
 	printf("Intentando conectar al servidor...\n");
-	conexion = crear_conexion(ip_km, puerto_km);
+	conexion.km = crear_conexion(ip_km, puerto_km);
 
-	if (conexion != -1) {
-		printf("Conexión establecida, socket: %d\n", conexion);
+	if (conexion.km != -1) {
+		printf("Conexión establecida, socket: %d\n", conexion.km);
 	} else {
 		printf("No se pudo conectar.\n");
 	}
-	if(conexion < 0){
+	if(conexion.km < 0){
 		log_error(logger, "error de la conexión");
-		terminar_programa(conexion, logger, config);
+		terminar_programa(conexion.km, logger, config);
 		return 1; //termino el programa
 	}
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_mensaje("me conecte KS con KM", conexion);
+	enviar_mensaje("me conecte KS con KM", conexion.km);
 
 	// Armamos y enviamos el paquete
-	paquete(conexion);
+	paquete(conexion.km);
 
 
 
@@ -80,7 +82,7 @@ int main(void)
 
 
 
-	terminar_programa(conexion, logger, config);
+	terminar_programa(conexion.km, logger, config);
 
 
 

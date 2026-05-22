@@ -20,10 +20,18 @@ typedef enum
     CONTEXTO_EJECUTAR,
     INTERRUPT,
     TERMINO_PROCESO,
+    
+    BLOQUEAR_PROCESO,
+    ks_IO_STDOUT,
+    ks_IO_STDIN,
+    ks_INIT_PROC,
+    ks_EXIT,
+
 
     // CPU con la Memory Stick
     FETCH_INSTRUCCION,
-    LLEGO_INSTRUCCION
+    LLEGO_INSTRUCCION,
+
 } op_code;
 
 

@@ -55,22 +55,23 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     MUTEX_UNLOK,
     MEM_ALLOC,
     MEM_FREE,
-    INIT_PROC,
-    EXIT,
+    ks_INIT_PROC,
+    ks_EXIT,
 
 
     //con el KM
     MEM_CORRUPT, //cortar todo con esta
 
-	//con la IO
     NUEVA_IO,
     DESALOJO_IO_SLEEP,
     ATENDER_INSTRUCCION_IO,
     DESALOJO_IO_STDOUT,
+    ks_BLOQUEAR_PROCESO,
     IO_LIBRE,
-	SLEEP, 
-	STDIN,
-	STDOUT
+    ks_SLEEP,
+    ks_IO_STDOUT,
+	ks_IO_STDIN,
+    ERROR
 
 }op_code;
 

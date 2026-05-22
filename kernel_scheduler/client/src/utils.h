@@ -16,8 +16,7 @@ typedef enum
 	MENSAJE,
 	PAQUETE, 
 
-	//Con la kernel memory
-	INFO_PROCESO
+	
 }op_code;
 
 typedef struct {

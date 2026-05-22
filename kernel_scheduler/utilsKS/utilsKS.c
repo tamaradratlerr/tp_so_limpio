@@ -47,6 +47,7 @@ IO* buscar_io_por_nombre(char* nombre_buscado) {
     return io_encontrada;
 }
 
+
 // Auxiliar para buscar la IO por su FILE DESCRIPTOR (Socket)
 IO* buscar_io_por_fd(int fd_buscado) {
     IO* io_encontrada = NULL;

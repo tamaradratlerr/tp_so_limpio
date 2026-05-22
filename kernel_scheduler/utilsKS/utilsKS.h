@@ -6,7 +6,10 @@
 t_config* config = NULL;
 
 
-int conexion;
+typedef struct{
+    int km, cpu, io;
+} t_conexion;
+
 char* ip;
 char* puerto;
 char* valor;
@@ -67,6 +70,10 @@ typedef enum
     //No lo estamos Usado ahora, deberiamos cambiar cuando leemos el config y darle valor de esta estructura de datos
 }algortimoEnUso;
 
+typedef struct {
+    PCB* pcb;
+    int tiempo_ms;
+} t_timer_args;
 
 typedef enum
 {
@@ -97,6 +104,7 @@ pthread_mutex_t mutex_ios;
 pthread_t hilo_timer;
 pthread_mutex_t mutex_ready;
 pthread_mutex_t mutex_simulados; 
+pthread_mutex_t mutex_cola_exec;
 //FALTA PONER LAS DEMAS MUTEX?
 
 /*-----     FUNCIONES      -----*/

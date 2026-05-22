@@ -664,7 +664,7 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
 void ejecutar_sleep(t_instruccion* instr) {
     char* tiempo = strdup(instr->params[0]);
     
-    gestionar_desalojo_por_syscall(tiempo, ks_BLOQUEAR_PROCESO);    
+    gestionar_desalojo_por_syscall(tiempo, ks_SLEEP);    
 
     if (recibir_operacion(sockets.conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
@@ -731,33 +731,53 @@ void enviar_contexto_a_kernel_memory() {
 }
 
 void ejecutar_stdout(t_instruccion* instr) {
-    char* mensaje = instr->params[0];
-    log_info(logger, "PID: %d - Ejecutando STDOUT: %s", contexto_actual->pid, mensaje);
+    char* interfaz_nombre = instr->params[0];
+    char* registro_datos = instr->params[1];
+    
+    uint32_t pid_actual = contexto_actual->pid;
+    uint32_t direccion_fisica = obtener_direccion_del_registro(registro_datos);
+    uint32_t tamanio = obtener_tamanio_del_registro(registro_datos);
 
-    enviar_op_code(ks_IO_STDOUT, sockets.conexion_kernel_scheduler);
+    log_info(logger, "PID: %u - Ejecutando STDOUT en interfaz: %s", pid_actual, interfaz_nombre);
 
-    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
-        
-        t_paquete* paquete = crear_paquete(ks_IO_STDOUT);
-        agregar_a_paquete(paquete, mensaje, strlen(mensaje) + 1);
-        enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
-        eliminar_paquete(paquete);
+    t_paquete* paquete = crear_paquete(ks_IO_STDOUT);
 
-        if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
-            log_info(logger, "Mensaje impreso por el Kernel.");
-        }
-    }
+    agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
+
+    int nombre_len = strlen(interfaz_nombre) + 1;
+    agregar_a_paquete(paquete, &nombre_len, sizeof(int));
+    agregar_a_paquete(paquete, interfaz_nombre, nombre_len);
+
+    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
+
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+
+    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
 }
 
 void ejecutar_stdin(t_instruccion* instr) {
     char* interfaz = instr->params[0];
-    char* registro_destino = instr->params[1]; 
-
-    enviar_op_code(ks_IO_STDIN, sockets.conexion_kernel_scheduler);
+    char* registro_destino = instr->params[1];
+    
+    uint32_t direccion_fisica = obtener_direccion_del_registro(registro_destino); // Implementa esto según tu lógica
+    uint32_t tamanio = obtener_tamanio_del_registro(registro_destino);           // Implementa esto según tu lógica
+    uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
     t_paquete* paquete = crear_paquete(ks_IO_STDIN);
-    agregar_a_paquete(paquete, interfaz, strlen(interfaz) + 1);
-    agregar_a_paquete(paquete, registro_destino, strlen(registro_destino) + 1);
+
+    
+    agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
+    
+    int nombre_len = strlen(interfaz) + 1;
+    agregar_a_paquete(paquete, &nombre_len, sizeof(int));
+    agregar_a_paquete(paquete, interfaz, nombre_len);
+    
+    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
+    
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+
     enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 

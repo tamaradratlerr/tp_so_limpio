@@ -96,43 +96,6 @@ t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_
 }
 
 
-// **original del TP0, no me parece necesaria**
-
-// void leer_consola(t_log* logger)
-// {
-// 	char* leido;
-
-// 	// La primera te la dejo de yapa
-// 	leido = readline("> ");
-
-// 	// El resto, las vamos leyendo y logueando hasta recibir un string vacío
-// 	while(strcmp(leido, "") != 0){
-		
-// 		log_info(logger, "Mensaje: %s", leido);
-// 		free(leido);
-// 		leido = readline("> ");
-	
-// 	}
-	
-// }
-
-// **Original del TP0 me parece que no sirce pero se puede reutilizar** //
-// void paquete(int conexion)
-// {
-// 	char* leido;
-// 	t_paquete* paquete = crear_paquete();
-
-// 	//¿¿¿Completar para cargar los paquetes???
-	
-// 	free(leido);
-
-// 	enviar_paquete(paquete, conexion);
-// 	eliminar_paquete(paquete);
-	
-	
-// }
-
-
 void terminar_programa(int conexion, t_log* logger, t_config* config) //libera la memoria del logger y el config
 {
 	log_destroy(logger);

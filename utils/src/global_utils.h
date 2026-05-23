@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
-
 #ifndef GLOBAL_UTILS_H_
 #define GLOBAL_UTILS_H_
 
@@ -71,8 +69,12 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     ks_SLEEP,
     ks_IO_STDOUT,
 	ks_IO_STDIN,
-    ERROR
+    ERROR,
 
+    /* Codigos de operacion de IO */
+    STDIN,
+	STDOUT,
+	SLEEP
 }op_code;
 
 typedef struct {

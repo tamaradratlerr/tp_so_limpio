@@ -46,66 +46,58 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 	int cod_op = recibir_operacion(fd_conexion);
 	char* mseg;
 	char* useg;
+	int pid;
+
+	/* FALTA Deserealizar el mansaje que llega del KS y obtener los datos
+		para procesarlos aca abajo. Ver la estructura que se envía con el KS */
 
 	/* Realizo la accion de la IO correspondiente */
 	switch (cod_op) {
 		case SLEEP:
 			/*Recibo tiempo T en milisegundos del KS.*/
-			recibir_mensaje(fd_conexion, paquete_io);
-			mseg = paquete_io->buffer->stream;
-			//	pid = paquete_io->buffer->stream; ACA TENGO QUE PEDIR EL PID DE ALGUNA MANERA PARA IMPRIMIRLO.
+			recibir_mensaje(fd_conexion, paquete);
+			mseg = paquete->buffer->stream;
+			/* FALTA */
+			// pid =  paquete->buffer->pid;
+			pid = 100; 	// Esta mockeado, TRAER el valor desde la struct que me llega del KS
 
 			/* Ejecuto el tiempo de sleep que me envió el Kernel Scheduler */
 			log_info(logger, "## PID: %s - Haciendo sleep por %s milisegundos.", pid, mseg);
 			useg = atoi(mseg) * 1000;
 			usleep(useg);
 			/* Le aviso al KS que fue OK */
-			enviar_mensaje("Finalizo OK",fd_conexion);
+			enviar_mensaje("OK", fd_conexion);
 			break;
 
 		case STDIN:
-
 			/* FALTA */
-
-			lista = recibir_mensaje(fd_conexion);	/* FALTA */
+			/* Aca hay que enviar la  */
+			lista = recibir_mensaje(fd_conexion, paquete);
 			log_info(logger, "Me llegaron los siguientes valores:\n");
 			list_iterate(lista, (void*) iterator);	/* FALTA */
+
+			/* Cuando este listo el mansaje a enviar, hay que enviarlo con "t_io_stdin_send" 
+				O se puede usar otra estructura, o definirlo con el KS.*/
+
 			break;
 
 		case STDOUT:
-
 			/* FALTA */
-
-			lista = recibir_mensaje(fd_conexion);	/* FALTA */
+			lista = recibir_mensaje(fd_conexion, paquete);
 			break;
 
 		case -1:
-
 			log_error(logger, "El cliente se desconectó");
 			close(fd_conexion);
 			return NULL;
 
 		default:
 			log_warning(logger,"IO desconocida.");
-			
 			/* Deberia avisar al KS que la IO no existe */
-			/* FALTA */
-			
 			break;
 	}
 
 	eliminar_paquete(paquete_io);
-}
-
-op_code recibir_operacion(int fd) {
-    
-    op_code cod_op;
-    if (recv(fd, &cod_op, sizeof(op_code), MSG_WAITALL) > 0) {
-        return cod_op;
-    } else {
-        close(fd);
-        return -1; 
-    }
 }
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
@@ -181,7 +173,7 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente)
 	free(a_enviar);
 }
 
-t_list* recibir_paquete(int socket_cliente)		// ver si es necesario, si no, repito el recibir_mensaje 2 veces y listo.
+t_list* recibir_paquete(int socket_cliente)
 {
 	int size;
 	int desplazamiento = 0;

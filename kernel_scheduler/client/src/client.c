@@ -3,38 +3,31 @@
 #include <commons/config.h>
 #include <readline/readline.h>
 #include <string.h>
+#include "../utilsKS/utilsKS.h"
 
 t_log_level log_level;
 
+// declaracion variables globales
+int contador_pid = 0;
+
+
 int main(void)
 {
-	/*---------------------------------------------------PARTE 2-------------------------------------------------------------*/
-
-	int conexion;
-	char* ip;
-	char* puerto;
-	char* valor;
-	char *ip_km, *puerto_km, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
-	t_log* logger;
-	t_config* config;
-
-	/* ---------------- LOGGING ---------------- */
-
+	
+		
 	logger = iniciar_logger();
 
 
-	// Usando el logger creado previamente
-	// Escribi: "Hola! Soy un log"
 
 
 	/* ---------------- ARCHIVOS DE CONFIGURACION ---------------- */
 
 	config = iniciar_config();
 
-	// Usando el config creado previamente, leemos los valores del config y los 
-	// dejamos en las variables 'ip', 'puerto' y 'valor'
-
+	
 	ip_km = config_get_string_value(config, "IP_KM");
+
+	//SACAMOS LOS DEMÁS PARA PROBAR CON KM
 
 	puerto_km = config_get_string_value(config, "PUERTO_KM");
 
@@ -43,41 +36,61 @@ int main(void)
 	intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
 	tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
 	
-	
+
 	log_info(logger, "Soy un Log");
 	/* ---------------- LEER DE CONSOLA ---------------- */
 
 	leer_consola(logger);
 
-	/*---------------------------------------------------PARTE 3-------------------------------------------------------------*/
+	/*---------------------------------------------------CONEXION CON KM-------------------------------------------------------------*/
 
-	// ADVERTENCIA: Antes de continuar, tenemos que asegurarnos que el servidor esté corriendo para poder conectarnos a él
 
 	// Creamos una conexión hacia el servidor
 	printf("Intentando conectar al servidor...\n");
-	conexion = crear_conexion(ip_km, puerto_km);
+	conexion.km = crear_conexion(ip_km, puerto_km);
 
-	if (conexion != -1) {
-		printf("Conexión establecida, socket: %d\n", conexion);
+	if (conexion.km != -1) {
+		printf("Conexión establecida, socket: %d\n", conexion.km);
 	} else {
 		printf("No se pudo conectar.\n");
 	}
-	if(conexion < 0){
+	if(conexion.km < 0){
 		log_error(logger, "error de la conexión");
-		terminar_programa(conexion, logger, config);
+		terminar_programa(conexion.km, logger, config);
 		return 1; //termino el programa
 	}
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_mensaje("me conecte KS con KM", conexion);
+	enviar_mensaje("me conecte KS con KM", conexion.km);
 
 	// Armamos y enviamos el paquete
-	paquete(conexion);
+	paquete(conexion.km);
 
-	terminar_programa(conexion, logger, config);
 
-	/*---------------------------------------------------PARTE 5-------------------------------------------------------------*/
-	// Proximamente
+
+
+
+
+
+
+
+
+
+	//while que chequee lista ready y cpus y arranque la planificación
+
+
+
+
+
+	terminar_programa(conexion.km, logger, config);
+
+
+
+
+
+
+
+
 }
 
 t_log* iniciar_logger(void)
@@ -156,3 +169,44 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 	/* Y por ultimo, hay que liberar lo que utilizamos (conexion, log y config) 
 	  con las funciones de las commons y del TP mencionadas en el enunciado */
 }
+
+
+
+/*-------CHECKPOINT 2-------------------------------------------------------------------------------------------------------*/
+
+
+void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+    
+    
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
+	
+    enviarProcesoKM(nuevoPcb, path, fd_km);
+
+	contador_pid++;
+}
+
+
+
+void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
+	
+	t_paquete* paquete = crear_paquete();
+	
+	agregar_a_paquete(paquete, pcb ->PID, sizeof(int));
+
+	agregar_a_paquete(paquete, pcb ->PPID, sizeof(int));
+
+	agregar_a_paquete(paquete, pcb -> UID, sizeof(int));
+
+	agregar_a_paquete(paquete, &path, sizeof(char*));
+	
+
+	enviar_paquete(paquete, fd_km);
+    eliminar_paquete(paquete);
+
+	//enviar señal de que se conecto
+
+}
+
+
+
+

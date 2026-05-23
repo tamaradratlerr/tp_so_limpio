@@ -17,41 +17,139 @@ void* serializar_paquete(t_paquete* paquete, int bytes)
 	return magic;
 }
 
-int crear_conexion(char *ip, char* puerto)
+
+void crear_buffer(t_paquete* paquete)
 {
-    struct addrinfo hints, *server_info;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    // 1. Obtener info de dirección
-    if(getaddrinfo(ip, puerto, &hints, &server_info) != 0) {
-        fprintf(stderr, "Error en getaddrinfo\n");
-        return -1;
-    }
-
-    // 2. Crear el socket
-    int socket_cliente = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
-    if(socket_cliente == -1) {
-        freeaddrinfo(server_info);
-        return -1;
-    }
-
-    // 3. Intentar conectar
-    if(connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen) == -1) {
-        // Si entra acá, la conexión NO se realizó
-        perror("ERROR AL CONECTAR"); 
-        close(socket_cliente); // Cerramos el socket porque no sirve para nada
-        freeaddrinfo(server_info);
-        return -1; // Devolvemos -1 para avisar al main que falló
-    }
-
-    freeaddrinfo(server_info);
-    return socket_cliente;
+	paquete->buffer = malloc(sizeof(t_buffer));
+	paquete->buffer->size = 0;
+	paquete->buffer->stream = NULL;
 }
 
-// *** funcion enviar mensaje (creo que no es necesaria) *** //
+// *** creamos los paquetes para las tres opciones de mensajes *** //
+t_paquete* crear_paquete_io(op_code io)
+{
+	t_paquete* paquete = malloc(sizeof(t_paquete));
+	paquete->codigo_operacion = io;
+	crear_buffer(paquete);
+	return paquete;
+}
+
+int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
+{
+	t_paquete* paquete = malloc(sizeof(t_paquete));	/* Liberar al final */
+	paquete->buffer = malloc(sizeof(t_buffer));		/* Liberar al final */
+
+	/*   DESDE ACA FALTA LO ULTIMO PARA MANEJAR CADA IO */
+    t_list* lista;
+
+	/* Leo la IO (Código de operación) que envió el Kernel Scheduler */
+	int cod_op = recibir_operacion(fd_conexion);
+	char* mseg;
+	char* useg;
+
+	/* Realizo la accion de la IO correspondiente */
+	switch (cod_op) {
+		case SLEEP:
+			/*Recibo tiempo T en milisegundos del KS.*/
+			recibir_mensaje(fd_conexion, paquete_io);
+			mseg = paquete_io->buffer->stream;
+			//	pid = paquete_io->buffer->stream; ACA TENGO QUE PEDIR EL PID DE ALGUNA MANERA PARA IMPRIMIRLO.
+
+			/* Ejecuto el tiempo de sleep que me envió el Kernel Scheduler */
+			log_info(logger, "## PID: %s - Haciendo sleep por %s milisegundos.", pid, mseg);
+			useg = atoi(mseg) * 1000;
+			usleep(useg);
+			/* Le aviso al KS que fue OK */
+			enviar_mensaje("Finalizo OK",fd_conexion);
+			break;
+
+		case STDIN:
+
+			/* FALTA */
+
+			lista = recibir_mensaje(fd_conexion);	/* FALTA */
+			log_info(logger, "Me llegaron los siguientes valores:\n");
+			list_iterate(lista, (void*) iterator);	/* FALTA */
+			break;
+
+		case STDOUT:
+
+			/* FALTA */
+
+			lista = recibir_mensaje(fd_conexion);	/* FALTA */
+			break;
+
+		case -1:
+
+			log_error(logger, "El cliente se desconectó");
+			close(fd_conexion);
+			return NULL;
+
+		default:
+			log_warning(logger,"IO desconocida.");
+			
+			/* Deberia avisar al KS que la IO no existe */
+			/* FALTA */
+			
+			break;
+	}
+
+	eliminar_paquete(paquete_io);
+}
+
+op_code recibir_operacion(int fd) {
+    
+    op_code cod_op;
+    if (recv(fd, &cod_op, sizeof(op_code), MSG_WAITALL) > 0) {
+        return cod_op;
+    } else {
+        close(fd);
+        return -1; 
+    }
+}
+
+void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
+{
+	paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio + sizeof(int));
+
+	memcpy(paquete->buffer->stream + paquete->buffer->size, &tamanio, sizeof(int));
+	memcpy(paquete->buffer->stream + paquete->buffer->size + sizeof(int), valor, tamanio);
+
+	paquete->buffer->size += tamanio + sizeof(int);
+}
+
+void* recibir_buffer(int* size, int socket_cliente)
+{
+	void * buffer;
+	/* Recibo el tamaño del stream */
+	recv(socket_cliente, size, sizeof(int), MSG_WAITALL);
+	buffer = malloc(*size);
+	/* Recibo el stream */
+	recv(socket_cliente, buffer, *size, MSG_WAITALL);
+
+	return buffer;
+}
+
+void recibir_mensaje(int socket_cliente, t_paquete* paquete_io)
+{
+	int size;
+	int desplazamiento = 0;
+	int tamanio;
+	
+	/* Recibo el stream */
+	char* buffer = recibir_buffer(&size, socket_cliente);
+
+	/* Copio el tamaño*/
+	paquete_io->buffer->size = size;
+
+	/* Reservo memoria para el stream */
+	paquete_io->buffer->stream = malloc(size);
+
+	/* Copio el stream */
+	memcpy(paquete_io->buffer->stream, buffer, size);
+
+	free(buffer);
+}
 
 void enviar_mensaje(char* mensaje, int socket_cliente)
 {
@@ -73,55 +171,6 @@ void enviar_mensaje(char* mensaje, int socket_cliente)
 	eliminar_paquete(paquete);
 }
 
-
-void crear_buffer(t_paquete* paquete)
-{
-	paquete->buffer = malloc(sizeof(t_buffer));
-	paquete->buffer->size = 0;
-	paquete->buffer->stream = NULL;
-}
-
-
-// *** creamos los paquetes para las tres opciones de mensajes *** //
-t_paquete* crear_sleep(void) 
-{
-	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = SLEEP;
-	crear_buffer(paquete);
-	return paquete;
-}
-
-t_paquete* crear_stdin(void)
-{
-	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = STDIN;
-	crear_buffer(paquete);
-	return paquete;
-}
-
-t_paquete* crear_stdout(void)
-{
-	t_paquete* paquete = malloc(sizeof(t_paquete));
-	paquete->codigo_operacion = STDOUT;
-	crear_buffer(paquete);
-	return paquete;
-}
-
-
-
-
-void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
-{
-	paquete->buffer->stream = realloc(paquete->buffer->stream, paquete->buffer->size + tamanio + sizeof(int));
-
-	memcpy(paquete->buffer->stream + paquete->buffer->size, &tamanio, sizeof(int));
-	memcpy(paquete->buffer->stream + paquete->buffer->size + sizeof(int), valor, tamanio);
-
-	paquete->buffer->size += tamanio + sizeof(int);
-}
-
-
-
 void enviar_paquete(t_paquete* paquete, int socket_cliente)
 {
 	int bytes = paquete->buffer->size + 2*sizeof(int);
@@ -130,6 +179,28 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente)
 	send(socket_cliente, a_enviar, bytes, 0);
 
 	free(a_enviar);
+}
+
+t_list* recibir_paquete(int socket_cliente)		// ver si es necesario, si no, repito el recibir_mensaje 2 veces y listo.
+{
+	int size;
+	int desplazamiento = 0;
+	void * buffer;
+	t_list* valores = list_create();
+	int tamanio;
+
+	buffer = recibir_buffer(&size, socket_cliente);
+	while(desplazamiento < size)
+	{
+		memcpy(&tamanio, buffer + desplazamiento, sizeof(int));
+		desplazamiento+=sizeof(int);
+		char* valor = malloc(tamanio);
+		memcpy(valor, buffer+desplazamiento, tamanio);
+		desplazamiento+=tamanio;
+		list_add(valores, valor);
+	}
+	free(buffer);
+	return valores;
 }
 
 void eliminar_paquete(t_paquete* paquete)

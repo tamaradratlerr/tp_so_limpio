@@ -1,9 +1,3 @@
-#ifndef _POSIX_C_SOURCE 200112L
-#define _POSIX_C_SOURCE 200112L
-#endif    
-
-
-
 #ifndef UTILS_H_
 #define UTILS_H_
 
@@ -16,27 +10,63 @@
 #include<netdb.h>
 #include<string.h>
 #include<commons/log.h>
+#include<commons/collections/list.h>
 
 
-// def de estructura de paquete que viaja a K.S
 typedef enum
 {
-	//original TP0
-    MENSAJE, //0
-	//PAQUETE, 
-    
-    // *** Comunicacion con K.S *** //
-    STDIN, //1
-	STDOUT, //2
-	SLEEP  //3
-	
-}op_code;
+	GENERIC,
+    MENSAJE,
+	PAQUETE,
 
+    STDIN,
+	STDOUT,
+	SLEEP,
+} op_code;
+
+/* Este ya no va mas */
 typedef struct
 {
 	int size;
 	void* stream;
 } t_buffer;
+
+
+typedef struct {
+    uint32_t size; // Tamaño del payload
+    uint32_t offset; // Desplazamiento dentro del payload
+    void* stream; // Payload
+} t_buffer;
+
+/***** Tipos de datos que procesara el IO *****/
+/*----- STDIN -----*/
+typedef struct
+{
+	uint32_t pid;
+    uint32_t bytes_to_read;
+} t_io_stdin_recv;
+typedef struct
+{
+	uint32_t pid;
+    uint32_t input_length;
+	char* input;
+} t_io_stdin_send;
+
+/*----- STDOUT -----*/
+typedef struct
+{
+	uint32_t pid;
+    uint32_t nombre_length;
+    char* nombre;
+} t_io_stdout;
+
+/*----- SLEEP -----*/
+typedef struct
+{
+	uint32_t pid;
+    uint32_t time;
+} t_io_sleep;
+/*******************************************/
 
 typedef struct
 {
@@ -45,27 +75,27 @@ typedef struct
 } t_paquete;
 
 
-// *** llamadas a funciones *** //
-
 //void enviar_mensaje(char* mensaje, int socket_cliente);
 
-int crear_conexion(char* ip, char* puerto);
+/* Creación de paquete segun tipo de io */
+t_paquete* crear_paquete_io(op_code);
 
-//creacion de paquete segun tipo de mensaje
-t_paquete* crear_sleep(void);
-t_paquete* crear_stdin(void);
-t_paquete* crear_stdout(void);
+int atender_peticiones_del_KS(int, t_log*);
 
-void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
+int recibir_operacion(int);
 
-void enviar_paquete(t_paquete* paquete, int socket_cliente);
+void agregar_a_paquete(t_paquete*, void*, int);
 
-void liberar_conexion(int socket_cliente);
+void* serializar_paquete(t_paquete*, int);
 
-void eliminar_paquete(t_paquete* paquete);
+void enviar_mensaje(char*, int);
 
-void* serializar_paquete(t_paquete* paquete, int bytes);
+void enviar_paquete(t_paquete*, int)
 
-void enviar_mensaje(char* mensaje, int socket_cliente);
+t_list* recibir_paquete(int);
+
+void eliminar_paquete(t_paquete*);
+
+void liberar_conexion(int);
 
 #endif /* UTILS_H_ */

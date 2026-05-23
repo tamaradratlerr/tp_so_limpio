@@ -9,16 +9,19 @@
 #include<readline/readline.h>
 
 #include "utils.h"
+#include "utils/global_utils.h"
 
 
-t_log* iniciar_logger(char* log_level);
+t_log* iniciar_logger(char* log_level, char* file, char* process_name, char* is_active_console);
 
-t_config* iniciar_config(void);
+t_config* iniciar_config(char* path);
 
 //void leer_consola(t_log*); *** No parece necesario ***
 
 //void paquete(int);*** No parece necesario ***
 
 void terminar_programa(int, t_log*, t_config*);
+
+void validar_argumentos(int, char**);
 
 #endif /* CLIENT_H_ */

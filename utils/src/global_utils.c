@@ -119,9 +119,48 @@ void liberar_conexion(int socket_cliente) {
     close(socket_cliente);
 }
 
+int esperar_cliente(int socket_servidor){
+	// Aceptamos un nuevo cliente
+	int socket_cliente = accept(socket_servidor, NULL, NULL);
+    
+    if (socket_cliente == -1) {
+        log_info(logger, "Error al aceptar al cliente");
+        return -1;
+    }
+
+	log_info(logger, "Se conecto un Cliente!");
+
+	return socket_cliente;
+}
+
+int iniciar_servidor(void){
+	int socket_servidor;
+
+	struct addrinfo hints, *servinfo, *p;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	getaddrinfo(NULL, PUERTO, &hints, &servinfo);
+
+	// Creamos el socket de escucha del servidor
+    socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+
+    // Asociamos el socket a un puerto
+    bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen);
+
+    // Escuchamos las conexiones entrantes
+    listen(socket_servidor, SOMAXCONN);
+	
+	freeaddrinfo(servinfo);
+	log_info(logger, "Listo para escuchar Clientes");
+
+	return socket_servidor;
+}
 
 /*-----     RECEPCION DE INFORMACION     -----*/
-
 
 void* recibir_buffer(int* size, int socket_cliente) {
     void * buffer;
@@ -144,7 +183,35 @@ op_code recibir_operacion (int socket_cliente) {
     }
 }
 
+t_list* recibir_paquete(int socket_cliente){
+    int size;
+    int desplazamiento = 0;
+    void * buffer;
+    t_list* valores = list_create();
+    int tamanio;
 
+    buffer = recibir_buffer(&size, socket_cliente);
+
+    while(desplazamiento < size)
+    {
+        // 1. Leemos el tamaño del próximo dato (casteando a char*)
+        memcpy(&tamanio, (char*)buffer + desplazamiento, sizeof(int));
+        desplazamiento += sizeof(int);
+
+        // 2. Reservamos memoria para el dato
+        char* valor = malloc(tamanio);
+        
+        // 3. Leemos el dato en sí
+        memcpy(valor, (char*)buffer + desplazamiento, tamanio);
+        desplazamiento += tamanio;
+
+        // 4. Lo guardamos en la lista
+        list_add(valores, valor);
+    }
+
+    free(buffer);
+    return valores;
+}
 
 /*-----     MANEJO DE MENSAJES     -----*/
 
@@ -168,3 +235,17 @@ void enviar_op_code (op_code code_op, int socket_cliente) {
 
 }
 
+char* recibir_mensaje (int socket_cliente)
+{
+	int size;
+	char* buffer = recibir_buffer(&size, socket_cliente);
+	log_info(logger, "Me llego el mensaje %s", buffer);
+	
+    return buffer;
+} //HAY QUE LIBERAR LA MEMORIA DSP DE LLAMAR A ESTA FUNCION
+
+/*-----     SISTEMA     -----*/
+
+void iterator(char* value) {
+	log_info(logger,"%s", value);
+}

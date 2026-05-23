@@ -1,7 +1,38 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-#include "../../utils/src/global_utils.h"
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <string.h>
+#include <commons/log.h>
+#include <utilsKS/utilsKS.h>
+typedef enum
+{
+    MENSAJE,
+    PAQUETE,
+
+    // CPU con el Kernel Scheduler
+    CONTEXTO_EJECUTAR,
+    INTERRUPT,
+    TERMINO_PROCESO,
+    
+    BLOQUEAR_PROCESO,
+    ks_IO_STDOUT,
+    ks_IO_STDIN,
+    ks_INIT_PROC,
+    ks_EXIT,
+
+
+    // CPU con la Memory Stick
+    FETCH_INSTRUCCION,
+    LLEGO_INSTRUCCION,
+
+} op_code;
 
 
 

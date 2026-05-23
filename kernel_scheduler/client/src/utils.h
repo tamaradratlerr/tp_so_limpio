@@ -9,15 +9,14 @@
 #include<netdb.h>
 #include<string.h>
 #include<commons/log.h>
+#include<utilsKS/utilsKS.h>
 
 typedef enum
 {
 	MENSAJE,
 	PAQUETE, 
 
-	//Con la kernel memory
-	CONTEXTO, 
-	INSTRUCCION
+	
 }op_code;
 
 typedef struct {
@@ -30,6 +29,8 @@ typedef struct {
     op_code codigo_operacion;
     t_buffer* buffer;
 } t_paquete;
+
+
 
 
 

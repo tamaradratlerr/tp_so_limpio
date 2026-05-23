@@ -20,15 +20,7 @@ listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
 listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
 t_list* lista_mutex;
 
-typedef struct {
 
-    PCB* pcb;
-    IO_OPCODE tipo_operacion;   
-    int tiempo_sleep;     
-    uint32_t dir_fisica;  
-    uint32_t tamano;
-         
-} t_pedido_io;
 
 
 //Estructura de dato que identifica todas las listas de los procesos
@@ -50,7 +42,6 @@ typedef struct {
     int fd; 
     bool enUso;                 
     char* nombre;             
-    t_queue* cola_bloqueados; // cola de las so-commons para guardar los t_pedido_io*
 
 } IO;
 
@@ -58,6 +49,7 @@ typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs co
     
     t_list* cpu;
     t_list* io;
+    t_list* io_ready;
 
 }listas_suplementarias;
 

@@ -50,34 +50,71 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 	/* Realizo la accion de la IO correspondiente */
 	switch (cod_op) {
 		case SLEEP:
-			/*Recibo tiempo T en milisegundos del KS.*/
-			recibir_mensaje(fd_conexion, paquete_io);
-			mseg = paquete_io->buffer->stream;
-			//	pid = paquete_io->buffer->stream; ACA TENGO QUE PEDIR EL PID DE ALGUNA MANERA PARA IMPRIMIRLO.
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			
+			t_io_sleep* datos = (t_io_sleep*)paquete_io->buffer->stream;
+			
+			uint32_t pid = datos->pid;
+			uint32_t mseg = datos->time;
 
-			/* Ejecuto el tiempo de sleep que me envió el Kernel Scheduler */
-			log_info(logger, "## PID: %s - Haciendo sleep por %s milisegundos.", pid, mseg);
-			useg = atoi(mseg) * 1000;
+			log_info(logger, "## PID: %u - Haciendo sleep por %u milisegundos.", pid, mseg);
+			
+			useconds_t useg = mseg * 1000;
 			usleep(useg);
-			/* Le aviso al KS que fue OK */
-			enviar_mensaje("Finalizo OK",fd_conexion);
+			
+			enviar_mensaje("Finalizo OK", fd_conexion);
+			
+			eliminar_paquete(paquete_io);
 			break;
 
-		case STDIN:
+		case STDIN: 1
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			
+			t_io_stdin_recv* datos = (t_io_stdin_recv*)paquete_io->buffer->stream;
+			
+			uint32_t pid = datos->pid;
+			uint32_t bytes_a_leer = datos->bytes_to_read;
 
-			/* FALTA */
-
-			lista = recibir_mensaje(fd_conexion);	/* FALTA */
-			log_info(logger, "Me llegaron los siguientes valores:\n");
-			list_iterate(lista, (void*) iterator);	/* FALTA */
+			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
+			
+			char* buffer_lectura = malloc(bytes_a_leer);
+			fgets(buffer_lectura, bytes_a_leer, stdin);
+			
+			free(buffer_lectura);
+			eliminar_paquete(paquete_io);
 			break;
 
-		case STDOUT:
-
-			/* FALTA */
-
-			lista = recibir_mensaje(fd_conexion);	/* FALTA */
+		case STDOUT: 
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			
+			void* stream_ptr = paquete_io->buffer->stream;
+			
+			t_io_stdout* datos = (t_io_stdout*)stream_ptr;
+			stream_ptr += sizeof(t_io_stdout);
+			
+			char* nombre_interfaz = malloc(datos->nombre_length);
+			memcpy(nombre_interfaz, stream_ptr, datos->nombre_length);
+			stream_ptr += datos->nombre_length;
+			
+			
+			uint32_t bytes_leidos = (uint32_t)((void*)stream_ptr - paquete_io->buffer->stream);
+			uint32_t tam_contenido = paquete_io->buffer->size - bytes_leidos;
+			
+			char* texto_a_imprimir = malloc(tam_contenido + 1);
+			memcpy(texto_a_imprimir, stream_ptr, tam_contenido);
+			texto_a_imprimir[tam_contenido] = '\0'; // Terminador de string
+			
+			log_info(logger, "## PID: %u - Operación STDOUT", datos->pid);
+			log_info(logger, "Interfaz: %s", nombre_interfaz);
+			printf("PID %u (%s) escribio: %s\n", datos->pid, nombre_interfaz, texto_a_imprimir);
+			
+			enviar_mensaje("Finalizo OK", fd_conexion);
+			
+			free(nombre_interfaz);
+			free(texto_a_imprimir);
+			eliminar_paquete(paquete_io);
 			break;
+
 
 		case -1:
 

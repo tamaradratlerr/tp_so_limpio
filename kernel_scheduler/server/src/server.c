@@ -95,15 +95,13 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
             case ks_IO_STDIN: 
                 // viene de la cpu 
-                lista = recibir_paquete(cliente_fd); 
-                io_stdin(lista); 
-                list_destroy_and_destroy_elements(lista, free);
+                IO* io = queue_pop(list_suplementarias -> io_ready)
+                io_stdin(cliente_fd, io.fd); 
                 break;
 
             case ks_IO_STDOUT: 
-                lista = recibir_paquete(cliente_fd); 
-                atender_io_stdout(lista); 
-                list_destroy_and_destroy_elements(lista, free);
+                IO* io = queue_pop(list_suplementarias -> io_ready)
+                atender_io_stdout(cliente_fd, io.d); 
                 break;
 
             case IO_LIBRE: 
@@ -532,36 +530,49 @@ void mutex_unlock (int socket_cliente){
    
 
     //SLEEP
-sleep(int socket_cpu){
+void sleep(int socket_cpu, int socket_io) {
 
-        t_paquete* paquete = recibir_paquete(socket_cpu);
-                
-        int pid_a_bloquear;
-        memcpy(&pid_a_bloquear, paquete->buffer->stream, sizeof(int));
-               
-        char* tiempo_str = (char*)(paquete->buffer->stream + sizeof(int));
-        int tiempo_ms = atoi(tiempo_str); 
-                
-        log_info(logger, "Recibida syscall SLEEP (PID: %d, Tiempo: %d ms)", pid_a_bloquear, tiempo_ms);
-                
-        eliminar_paquete(paquete);
+    t_paquete* paquete_cpu = recibir_paquete(socket_cpu);
+    int pid_a_bloquear;
+    memcpy(&pid_a_bloquear, paquete_cpu->buffer->stream, sizeof(int));
+    
+    char* tiempo_str = (char*)(paquete_cpu->buffer->stream + sizeof(int));
+    int tiempo_ms = atoi(tiempo_str); 
+    
+    log_info(logger, "Recibida syscall SLEEP (PID: %d, Tiempo: %d ms)", pid_a_bloquear, tiempo_ms);
+    eliminar_paquete(paquete_cpu);
 
-        PCB* pcb = encontrar_pcb_rnn_por_pid(pid_a_bloquear);
-                
-        if (pcb != NULL) {
-            list_remove_element(listasProcesos -> rnn, pcb);
-            cambiar_estado_pcb(pcb, BCK);
-            list_add(listasProcesos -> bck, pcb);
-                    
-            iniciar_timer_bloqueo(pcb, tiempo_ms);
-                    
-            enviar_op_code(OK, socket_cpu);
+    PCB* pcb = encontrar_pcb_rnn_por_pid(pid_a_bloquear);
+    
+    if (pcb != NULL) {
+        // Mover a bloqueados
+        list_remove_element(listasProcesos->rnn, pcb);
+        cambiar_estado_pcb(pcb, BCK);
+        list_add(listasProcesos->bck, pcb);
+        
+        // comunicación con la io-----
+        
+        t_io_sleep* datos_io = malloc(sizeof(t_io_sleep));
+        datos_io->pid = (uint32_t)pid_a_bloquear;
+        datos_io->time = (uint32_t)tiempo_ms;
 
-        } else {
-            log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
-            enviar_op_code(ERROR, socket_cpu);
-        }
+        t_paquete* paquete_para_io = crear_paquete(ks_SLEEP); // Opcode SLEEP
+        buffer_add(paquete_para_io->buffer, datos_io, sizeof(t_io_sleep));
+        
+        enviar_paquete(paquete_para_io, socket_io);
+        
+        free(datos_io);
+        eliminar_paquete(paquete_para_io);
+        
+        enviar_op_code(OK, socket_cpu);
+        
+        
+    } else {
+        log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
+        enviar_op_code(ERROR, socket_cpu);
     }
+}
+
 
 PCB* encontrar_pcb_rnn_por_pid(int pid) {
     pthread_mutex_lock(&sem_procesos_exit); 
@@ -580,40 +591,6 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
     return pcb_buscado;
 }
 
-void iniciar_timer_bloqueo(t_pcb* pcb, int tiempo_ms) {
-    pthread_t hilo_timer;
-    
-    t_timer_args* args = malloc(sizeof(t_timer_args));
-    args->pcb = pcb;
-    args->tiempo_ms = tiempo_ms;
-
-    pthread_create(&hilo_timer, NULL, ejecutar_sleep_asincrono, args);
-    pthread_detach(hilo_timer);
-}
-
-
-void* ejecutar_sleep_asincrono(void* args) {
-    t_timer_args* datos = (t_timer_args*)args;
-    
-    usleep(datos->tiempo_ms * 1000); 
-    
-    pthread_mutex_lock(&sem_procesos_block);
-    list_remove_element(listasProcesos -> bck, datos->pcb); 
-    pthread_mutex_unlock(&sem_procesos_block);
-
-    pthread_mutex_lock(&sem_procesos_ready);
-    cambiar_estado_pcb(datos -> pcb, RDY);
-    agregar_lista_ready(datos -> pcb);
-    pthread_mutex_unlock(&sem_procesos_ready);
-    
-    log_info(logger, "PID %d finalizó SLEEP, movido a READY.", datos->pcb->pid);
-    
-    
-    free(datos); 
-    return NULL;
-}
-
-
     
     //MEM_CORRUPT, /*cortar todo con esta*/
 
@@ -626,21 +603,17 @@ void io_libre (void* arg) {
     pthread_mutex_lock(&mutex_ios);
     IO* interfaz = buscar_io_por_fd(io_fd);
     
-    t_pedido_io* pedido_terminado = queue_pop(interfaz->cola_bloqueados);
     interfaz->enUso = false;
     pthread_mutex_unlock(&mutex_ios);
 
-    PCB* pcb_a_ready = pedido_terminado->pcb;
-
-    cambiar_estado_pcb(pcb_a_ready, RDY);
     
     pthread_mutex_lock(&mutex_ready);
-    list_add(cola_ready, pcb_a_ready); 
+    list_remove(list_suplementarias->io, interfaz);
+    list_add(list_suplementarias->io_ready, interfaz); 
     pthread_mutex_unlock(&mutex_ready);
 
-    log_info(logger, "PID %u finalizó IO en %s y vuelve a READY", pcb_a_ready->data.PID, interfaz->nombre);
+    log_info(logger, "finalizó IO en %s y vuelve a READY", interfaz->nombre);
 
-    free(pedido_terminado);
 
     mandar_proceso_io(interfaz);
 }
@@ -657,10 +630,9 @@ void nueva_io (void* arg){
    
     info_io->nombre = recibir_string(cliente_fd); 
     
-    info_io->cola_bloqueados = queue_create(); 
                 
     pthread_mutex_lock(&mutex_ios);
-    list_add(list_suplementarias->io, info_io);
+    list_add(list_suplementarias->io_ready, info_io);
     pthread_mutex_unlock(&mutex_ios);
 
     enviar_op_code (OK, cliente_fd);
@@ -670,63 +642,73 @@ void nueva_io (void* arg){
 
 
 // STDIN
-void io_stdin(t_list* lista) {
+void io_stdin(int socket_cpu, int socket_io) {
+    t_paquete* paquete = recibir_paquete(socket_cpu);
+    
+    uint32_t pid;
+    memcpy(&pid, paquete->buffer->stream, sizeof(uint32_t));
+    int offset = sizeof(uint32_t);
+    
+    int nombre_len;
+    memcpy(&nombre_len, paquete->buffer->stream + offset, sizeof(int));
+    offset += sizeof(int);
+    
+    char* nombre_io = malloc(nombre_len);
+    memcpy(nombre_io, paquete->buffer->stream + offset, nombre_len);
+    offset += nombre_len;
+    
+    uint32_t dir, tam;
+    memcpy(&dir, paquete->buffer->stream + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&tam, paquete->buffer->stream + offset, sizeof(uint32_t));
 
-    uint32_t pid = *(uint32_t*)list_get(lista, 0);
-    PCB* pcb = buscar_pcb_por_pid(pid);
-
-    char* nombre_io = (char*)list_get(lista, 1);
-
-    uint32_t dir = *(uint32_t*)list_get(lista, 2);
-    uint32_t tam = *(uint32_t*)list_get(lista, 3);
-
-    IO* interfaz = buscar_io_por_nombre(nombre_io); 
-
-    t_pedido_io* pedido = malloc(sizeof(t_pedido_io));
-    pedido->pcb = pcb;
-    pedido->tipo_operacion = IO_STDIN;
-    pedido->dir_fisica = dir;
-    pedido->tamano = tam;
-
+    //bloqueo el proceso
+    PCB* pcb = encontrar_pcb_por_pid(pid);
     cambiar_estado_pcb(pcb, BCK);
 
-    pthread_mutex_lock(&mutex_ios);
-    queue_push(interfaz->cola_bloqueados, pedido);
-    pthread_mutex_unlock(&mutex_ios);
+    t_io_stdin_recv* datos_para_io = malloc(sizeof(t_io_stdin_recv));
+    datos_para_io->pid = pid;
+    datos_para_io->bytes_to_read = tam; // Se lo pasamos a la IO
 
-    log_info(logger, "PID %d bloqueado en %s (STDIN - Dir: %u, Tam: %u)", pcb->data.PID, nombre_io, dir, tam);
+    t_paquete* paquete_io = crear_paquete(ks_IO_STDIN);
+    buffer_add(paquete_io->buffer, datos_para_io, sizeof(t_io_stdin_recv));
+    
+    enviar_paquete(paquete_io, socket_io);
 
-    mandar_proceso_io(interfaz);
+    free(nombre_io);
+    free(datos_para_io);
+    eliminar_paquete(paquete);
+    eliminar_paquete(paquete_io); 
 }
 
 
 // STDOUT
 void atender_io_stdout(t_list* lista) {
-    uint32_t pid_recibido = *(uint32_t*)list_get(lista, 0);
-    PCB* pcb = buscar_pcb_por_pid(pid_recibido); 
+    uint32_t pid = *(uint32_t*)list_get(lista, 0);
     char* nombre_io = (char*)list_get(lista, 1);
     uint32_t dir = *(uint32_t*)list_get(lista, 2);
     uint32_t tam = *(uint32_t*)list_get(lista, 3);
-
+    
+    PCB* pcb = buscar_pcb_por_pid(pid);
     IO* interfaz = buscar_io_por_nombre(nombre_io); 
-
-    t_pedido_io* pedido = malloc(sizeof(t_pedido_io));
-    pedido->pcb = pcb;
-    pedido->tipo_operacion = IO_STDOUT;
-    pedido->dir_fisica = dir;
-    pedido->tamano = tam;
-
+    
     cambiar_estado_pcb(pcb, BCK);
+    // ... iria la lógica de cola de io ...
+    t_paquete* paquete_io = crear_paquete(ks_IO_STDOUT);
+    
+    t_io_stdout* datos_io = malloc(sizeof(t_io_stdout));
+    datos_io->pid = pid;
+    datos_io->nombre_length = strlen(nombre_io) + 1;
+    datos_io->nombre = strdup(nombre_io); 
 
-    pthread_mutex_lock(&mutex_ios);
-    queue_push(interfaz->cola_bloqueados, pedido);
-    pthread_mutex_unlock(&mutex_ios);
+    buffer_add(paquete_io->buffer, datos_io, sizeof(t_io_stdout)); // Esto envía la estructura
+    buffer_add(paquete_io->buffer, nombre_io, datos_io->nombre_length);
+    enviar_paquete(paquete_io, interfaz->socket);
 
-    log_info(logger, "PID %d bloqueado en %s (STDOUT - Dir: %u, Tam: %u)", pcb->data.PID, nombre_io, dir, tam);
-
-    mandar_proceso_io(interfaz);
+    free(datos_io->nombre);
+    free(datos_io);
+    eliminar_paquete(paquete_io);
 }
-
 
 PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
     t_list* listas_a_revisar[] = { 

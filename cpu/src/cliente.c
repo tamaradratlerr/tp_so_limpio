@@ -771,9 +771,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     int nombre_len = strlen(interfaz) + 1;
     agregar_a_paquete(paquete, &nombre_len, sizeof(int));
     agregar_a_paquete(paquete, interfaz, nombre_len);
-    
     agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
-    
     agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
 
     enviar_paquete(paquete, sockets.conexion_kernel_scheduler);

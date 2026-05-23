@@ -7,9 +7,19 @@
 #include <pthread.h>     
 
 // Estructuras del Sistema (typedef struct)
+
+typedef enum {
+    NUEVA_CPU = 1,
+    SOLICITUD_INSTRUCCION,
+    LEER_MEMORIA,
+    ESCRIBIR_MEMORIA,
+    km_GUARDAR_CONTEXTO
+} op_code;
 typedef struct {
-    int ax, bx, cx, dx;
-    int pc; 
+    uint8_t ax, bx, cx, dx;         // 8 bits
+    uint32_t eax, ebx, ecx, edx;    // 32 bits
+    uint32_t si, di;                // 32 bits
+    uint32_t pc;                    // 32 bits
 } t_registros;
 
 typedef struct {
@@ -51,14 +61,18 @@ void* recibir_buffer(int* size, int socket_cliente);
 void recibir_mensaje(int socket_cliente);
 t_list* recibir_paquete(int socket_cliente);
 
+// Gestión Interna de Procesos y Contextos
 t_contexto* crear_contexto(int pid);
 void agregar_contexto(int pid);
 void manejar_crear_proceso(int socket_cliente);
-
 int buscar_indice_proceso(int pid);
 int buscar_indice_contexto(int pid);
 void manejar_finalizar_proceso(int socket_cliente);
-void manejar_pedido_instruccion_cpu(int socket_cliente);
 
+// Espejos de Ciclo de Instrucción de CPU (Mocks y Reales)
+void manejar_pedido_instruccion_cpu(int socket_cliente);
+void manejar_lectura_memoria(int socket_cliente);
+void manejar_escritura_memoria(int socket_cliente);
+void manejar_guardar_contexto(int socket_cliente);
 
 #endif /* UTILS_H_ */

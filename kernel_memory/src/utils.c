@@ -85,25 +85,6 @@ t_list* recibir_paquete(int socket_cliente) {
 
 //“almacenar un contexto de ejecución por PID”
 
-//registros
-typedef struct {
-    int ax, bx, cx, dx;
-    int pc; //program counter
-} t_registros;
-
-//segmentos
-typedef struct {
-    int id;
-    int base;
-    int limite;
-} t_segmento;
-
-//contexto de ejecucion
-typedef struct {
-    int pid;
-    t_registros registros; //una copia de todos los registros de la CPU
-    t_list* tabla_segmentos; //tabla de segmentos asociada a dicho Proceso.
-} t_contexto;
 
 //“Este módulo deberá mantener el contexto de ejecución de cada Proceso del sistema”
 //-> tengo que guardar TODOS los contextos de TODOS los procesos
@@ -113,12 +94,8 @@ typedef struct {
 
 t_list* lista_contextos;
 pthread_mutex_t mutex_contextos;
-
 t_list* lista_procesos;
 pthread_mutex_t mutex_procesos;
-
-t_log* logger;
-void inicializar_utils(void);
 
 void inicializar_utils(void) {
     lista_contextos = list_create();
@@ -134,12 +111,7 @@ t_contexto* crear_contexto(int pid) {
     ctx->pid = pid;
 
     //inicializar todos los registros asociados con el valor 0
-    ctx->registros.ax = 0;
-    ctx->registros.bx = 0;
-    ctx->registros.cx = 0;
-    ctx->registros.dx = 0;
-    ctx->registros.pc = 0;
-
+    memset(&(ctx->registros), 0, sizeof(ctx->registros));
     ctx->tabla_segmentos = list_create();
 
     return ctx;
@@ -154,23 +126,16 @@ list_add(lista_contextos, ctx); //lo guardo en mi lista
 pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
 }
 
-//en utils.h
-typedef struct {
-    int pid;
-    t_list* instrucciones;
-} t_proceso;
-//---------
-
 //recibir pid y path
 //pid identificar el proceso y path ¨direccion¨ para abrir el archivo
 void manejar_crear_proceso(int socket_cliente) {
 
     t_list* paquete = recibir_paquete(socket_cliente);
 
-    int pid = atoi(list_get(paquete, 0));
-    char* path = list_get(paquete, 1);
+    char* texto_pid = (char*) list_get(paquete, 0);
+    char* path      = (char*) list_get(paquete, 1);
 
-
+    int pid = atoi(texto_pid);
 //“Abrir archivo con fopen”
 //abrir el archivo donde están las instrucciones del proceso para leer instrucciones
 //y poder crear el proceso
@@ -180,6 +145,7 @@ FILE* archivo = fopen(path, "r"); //abro el archivo
 //validar error
 if (archivo == NULL) {
     log_error(logger, "No se pudo abrir el archivo: %s", path);
+    list_destroy_and_destroy_elements(paquete, free);
     return;
 }
 
@@ -321,26 +287,20 @@ void manejar_finalizar_proceso(int socket_cliente) {
     //libero el paquete recibido por socket
     list_destroy_and_destroy_elements(paquete, free);
 }
-void manejar_pedido_instruccion_cpu(int socket_cpu) {
-    // Recibo el paquete de la CPU (Trae PID y PC)
-    t_list* paquete = recibir_paquete(socket_cpu);
-
+void manejar_pedido_instruccion_cpu(int socket_cliente) {
+    t_list* paquete = recibir_paquete(socket_cliente);
     int pid = atoi(list_get(paquete, 0));
     int pc = atoi(list_get(paquete, 1));
 
-    //  Busco el proceso en memoria 
     int indice = buscar_indice_proceso(pid);
     if (indice == -1) {
         log_error(logger, "CPU pidió instrucción para PID: %d inexistente", pid);
-        
-        // Le avisamos a la CPU que hubo un error enviando un string vacío o de control
         int tam_error = strlen("ERROR") + 1;
         void* error_buffer = malloc(sizeof(int) + tam_error);
         memcpy(error_buffer, &tam_error, sizeof(int));
         memcpy(error_buffer + sizeof(int), "ERROR", tam_error);
-        send(socket_cpu, error_buffer, sizeof(int) + tam_error, 0);
+        send(socket_cliente, error_buffer, sizeof(int) + tam_error, 0);
         free(error_buffer);
-
         list_destroy_and_destroy_elements(paquete, free);
         return;
     }
@@ -348,13 +308,11 @@ void manejar_pedido_instruccion_cpu(int socket_cpu) {
     pthread_mutex_lock(&mutex_procesos);
     t_proceso* proceso = list_get(lista_procesos, indice);
     
-    // Obtengo la instrucción correspondiente al PC
-    char* instruccion = list_get(proceso->instrucciones, pc);
+    // SOLUCIÓN AL ERROR: Le agregamos el casteo (char*) para que el compilador no chille
+    char* instruccion = (char*)list_get(proceso->instrucciones, pc);
     pthread_mutex_unlock(&mutex_procesos);
 
-    // Armao el buffer para enviarle el string a la CPU
-    // Formato clásico: [ tam_string (int) | string (char*) ]
-    int tam_instruccion = strlen(instruccion) + 1; // +1 por el '\0'
+    int tam_instruccion = strlen(instruccion) + 1; 
     int tam_a_enviar = sizeof(int) + tam_instruccion;
     void* buffer_enviar = malloc(tam_a_enviar);
 
@@ -362,12 +320,57 @@ void manejar_pedido_instruccion_cpu(int socket_cpu) {
     memcpy(buffer_enviar + desplazamiento, &tam_instruccion, sizeof(int));
     desplazamiento += sizeof(int);
     memcpy(buffer_enviar + desplazamiento, instruccion, tam_instruccion);
-
    
-    send(socket_cpu, buffer_enviar, tam_a_enviar, 0);
-
+    send(socket_cliente, buffer_enviar, tam_a_enviar, 0);
     log_info(logger, "## CPU - PID: %d - Leyendo PC: %d - Instrucción: %s", pid, pc, instruccion);
 
     free(buffer_enviar);
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
+void manejar_lectura_memoria(int socket_cliente) {
+    t_list* paquete = recibir_paquete(socket_cliente);
+    int tamanio = *(int*)list_get(paquete, 1);
+
+    // MOCK: Devolvemos espacio simulado vacío
+    void* datos_falsos = calloc(1, tamanio); 
+    send(socket_cliente, datos_falsos, tamanio, 0);
+
+    log_info(logger, "## MOCK LECTURA - Enviados %d bytes en cero a CPU", tamanio);
+
+    free(datos_falsos);
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
+void manejar_escritura_memoria(int socket_cliente) {
+    t_list* paquete = recibir_paquete(socket_cliente);
+
+    // MOCK: Respondemos con confirmación fija (OK = 1)
+    int confirmacion = 1; 
+    send(socket_cliente, &confirmacion, sizeof(int), 0);
+
+    log_info(logger, "## MOCK ESCRITURA - Confirmado OK a CPU sin impacto fisico");
+
+    list_destroy_and_destroy_elements(paquete, free);
+}
+
+void manejar_guardar_contexto(int socket_cliente) {
+    t_list* paquete = recibir_paquete(socket_cliente);
+    
+    int pid = *(int*)list_get(paquete, 0);
+    uint32_t pc = *(uint32_t*)list_get(paquete, 1);
+
+    int indice = buscar_indice_contexto(pid);
+    if (indice != -1) {
+        pthread_mutex_lock(&mutex_contextos);
+        t_contexto* ctx = list_get(lista_contextos, indice);
+        
+        // Salvamos el PC de manera genérica
+        ctx->registros.pc = pc; 
+        
+        pthread_mutex_unlock(&mutex_contextos);
+        log_info(logger, "## Contexto Resguardado (MOCK) - PID: %d - PC: %u", pid, pc);
+    }
+
     list_destroy_and_destroy_elements(paquete, free);
 }

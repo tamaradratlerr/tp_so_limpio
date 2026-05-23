@@ -35,37 +35,46 @@ typedef enum
 } op_code;
 
 
-typedef struct {
-    uint32_t size; // Tamaño del payload
-    uint32_t offset; // Desplazamiento dentro del payload
-    void* stream; // Payload
-} t_buffer;
 
 typedef struct {
-    op_code codigo_operacion;
-    t_buffer* buffer;
-} t_paquete;
+    int pid;
+    uint32_t pc;
+    // Registros de 8 bits (uint8_t)
+    uint8_t ax, bx, cx, dx;
+    // Registros de 32 bits (uint32_t)
+    uint32_t eax, ebx, ecx, edx;
+    uint32_t si, di;
+} t_contexto;
 
-// --- Red ---
-int crear_conexion(char* ip, char* puerto);
-void liberar_conexion(int socket_cliente);
+typedef enum {
+    NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT,
+    MUTEX_CREATE, MUTEX_LOCK, MUTEX_UNLOCK, 
+    MEM_ALLOC, MEM_FREE, SLEEP, 
+    STDOUT, STDIN, INIT_PROC, EXIT
+} t_instruccion_code;
 
-// --- Mensajes Simples ---
-// Esta queda para enviar strings planos
-void enviar_mensaje(char* mensaje, int socket_cliente);
+typedef struct {
+    t_instruccion_code codigo;
+    char* params[3]; // en los ejemplos ponían como mucho 3 parámetros
+    int cant_params;
+} t_instruccion;
 
-// --- Paquetes ---
-t_paquete* crear_paquete(op_code codigo);
-void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
-void eliminar_paquete(t_paquete* paquete);
+typedef enum{
 
-// CAMBIO AQUÍ: Se renombra para evitar conflicto con enviar_mensaje(char*, int)
-void enviar_paquete(t_paquete* paquete, int socket_cliente);
+    //solicitud para km
+    SOLICITUD_INSTRUCCION,
+    LEER_MEMORIA,
+    ESCRIBIR_MEMORIA,
+    km_GUARDAR_CONTEXTO,
 
-// Serialización (Asegurate de que esté declarada aquí para que utils.c la reconozca)
-void* serializar_paquete(t_paquete* paquete, int bytes);
+    //con ks
+    ks_BLOQUEAR_PROCESO,
+    ks_SLEEP,
+    ks_IO_STDOUT,
+    ks_IO_STDIN,
+    ks_INIT_PROC,
+    ks_EXIT
 
-// --- Recepción ---
-op_code recibir_operacion(int socket_cliente);
-void* recibir_buffer(int* size, int socket_cliente);
+}op_code;
+
 #endif /* UTILS_H_ */

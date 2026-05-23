@@ -172,7 +172,7 @@ void* recibir_buffer(int* size, int socket_cliente) {
     return NULL;
 }
 
-op_code recibir_operacion(int socket_cliente) {
+op_code recibir_operacion (int socket_cliente) {
     
     op_code cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(op_code), MSG_WAITALL) > 0) {
@@ -223,6 +223,7 @@ void enviar_mensaje (char* mensaje, int socket_cliente) {
     enviar_paquete(paquete, socket_cliente);
     eliminar_paquete(paquete);
 }
+
 
 void enviar_op_code (op_code code_op, int socket_cliente) {
 

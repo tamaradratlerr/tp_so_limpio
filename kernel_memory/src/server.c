@@ -1,11 +1,10 @@
 #include "utils.h"
+#include <sys/socket.h>
+#include <pthread.h>
+#include <commons/config.h>
 
 t_log* logger;
 t_config* config;
-
-void imprimir_paquete(char* valor) {
-    log_info(logger, "Dato del paquete: %s", valor);
-}
 
 void atender_cliente(void* arg) {
     int cliente_fd = *(int*)arg;
@@ -13,28 +12,47 @@ void atender_cliente(void* arg) {
 
     while (1) {
         int cod_op = recibir_operacion(cliente_fd);
+        
         switch (cod_op) {
-            case MENSAJE:
-                recibir_mensaje(cliente_fd);
+            case NUEVA_CPU:
+                log_info(logger, "CPU detectada. Confirmando Handshake...");
+                int ok = 1;
+                send(cliente_fd, &ok, sizeof(int), 0); 
                 break;
-            case PAQUETE:
-                t_list* lista = recibir_paquete(cliente_fd);
-                log_info(logger, "Paquete recibido de socket %d:", cliente_fd);
-                list_iterate(lista, (void*)imprimir_paquete);
-                list_destroy_and_destroy_elements(lista, free);
+
+            case SOLICITUD_INSTRUCCION:
+                manejar_pedido_instruccion_cpu(cliente_fd);
                 break;
+
+            case LEER_MEMORIA:
+                manejar_lectura_memoria(cliente_fd); 
+                break;
+
+            case ESCRIBIR_MEMORIA:
+                manejar_escritura_memoria(cliente_fd);
+                break;
+
+            case km_GUARDAR_CONTEXTO:
+                manejar_guardar_contexto(cliente_fd);
+                break;
+
+            // Espacio libre para cuando agregues los del Kernel más adelante:
+            // case CREAR_PROCESO: manejar_crear_proceso(cliente_fd); break;
+            // case FINALIZAR_PROCESO: manejar_finalizar_proceso(cliente_fd); break;
+
             case -1:
                 log_error(logger, "Desconexion en socket %d", cliente_fd);
+                close(cliente_fd);
                 return;
+
             default:
-                log_warning(logger, "Op desconocida en socket %d", cliente_fd);
+                log_warning(logger, "Op desconocida (%d) en socket %d", cod_op, cliente_fd);
                 break;
         }
     }
 }
 
 int main(void) {
-
     config = config_create("kernel_memory.config");
     if (config == NULL) {
         perror("No se pudo leer el config");
@@ -46,12 +64,13 @@ int main(void) {
 
     log_info(logger, "Config cargado. Estrategia: %s", config_get_string_value(config, "ALLOCATION_STRATEGY"));
 
+    inicializar_utils();
 
     char* puerto = config_get_string_value(config, "PUERTO_ESCUCHA");
     int server_fd = iniciar_servidor(puerto);
     log_info(logger, "Kernel Memory escuchando en puerto %s", puerto);
 
-    // 4. Bucle de conexiones (Multihilo)
+    // Bucle de conexiones (Multihilo)
     while (1) {
         int cliente_fd = esperar_cliente(server_fd);
         log_info(logger, "### Nueva conexion detectada ###");
@@ -64,5 +83,6 @@ int main(void) {
         pthread_detach(hilo);
     }
 
+    config_destroy(config);
     return 0;
 }

@@ -46,8 +46,115 @@ int main(int argc, char** argv)
     {
 		/* Bucle principal de la IO */
         status = atender_peticiones_del_KS(fd_conexion, logger);
-    }
+		op_code cod_op = recibir_operacion(fd_conexion);
+		
+
+		switch (cod_op) {
+		case SLEEP:
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			
+			t_io_sleep* datos = (t_io_sleep*)paquete_io->buffer->stream;
+			
+			uint32_t pid = datos->pid;
+			uint32_t mseg = datos->time;
+
+			log_info(logger, "## PID: %u - Haciendo sleep por %u milisegundos.", pid, mseg);
+			
+			useconds_t useg = mseg * 1000;
+			usleep(useg);
+			
+			enviar_mensaje("Finalizo OK", fd_conexion);
+			enviar_opcode(fd_conexion, IO_LIBRE);
+			eliminar_paquete(paquete_io);
+			break;
+
+		case STDIN: 
+			// recibir del ks la instrucción
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			t_io_stdin_recv* datos = (t_io_stdin_recv*)paquete_io->buffer->stream;
+			
+			uint32_t pid = datos->pid;
+			uint32_t bytes_a_leer = datos->bytes_to_read;
+			uint32_t direccion_logica = datos->direccion_logica;
+
+			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
+			
+			// leer 
+			char* buffer_usuario = malloc(bytes_a_leer);
+			// Usamos read para garantizar el tamaño exacto sin basura
+			read(STDIN_FILENO, buffer_usuario, bytes_a_leer);
+
+			// devolver al ks los datos leídos para que él los reenvíe al km
+			t_paquete* paquete_retorno = crear_paquete(IO_STDIN_RETORNO);
+			agregar_a_paquete(paquete_retorno, &pid, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, &direccion_logica, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, &bytes_a_leer, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
+			
+			enviar_paquete(paquete_retorno, fd_conexion); 
+			enviar_opcode(fd_conexion, IO_LIBRE);
+			free(buffer_usuario);
+			eliminar_paquete(paquete_io);
+			eliminar_paquete(paquete_retorno);
+			break;
+
+		case STDOUT: 
+			// recibir del ks
+			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			
+			// Deserializar [pid, tam, datos]
+			uint32_t pid, tam;
+			void* stream = paquete_io->buffer->stream;
+			memcpy(&pid, stream, sizeof(uint32_t));
+			memcpy(&tam, stream + sizeof(uint32_t), sizeof(uint32_t));
+			
+			char* datos_a_imprimir = malloc(tam + 1);
+			memcpy(datos_a_imprimir, stream + (sizeof(uint32_t) * 2), tam);
+			datos_a_imprimir[tam] = '\0'; // Asegurar fin de cadena
+
+			// imprimir en consola
+			log_info(logger, "## PID: %u - Operación STDOUT. Imprimiendo: %s", pid, datos_a_imprimir);
+			printf("%s\n", datos_a_imprimir);
+
+			// notificar al ks que terminó
+			t_paquete* paquete_fin = crear_paquete(IO_STDOUT_RETORNO);
+			agregar_a_paquete(paquete_fin, &pid, sizeof(uint32_t));
+			enviar_paquete(paquete_fin, fd_conexion);
+			enviar_opcode(fd_conexion, IO_LIBRE);
+			free(datos_a_imprimir);
+			eliminar_paquete(paquete_io);
+			eliminar_paquete(paquete_fin);
+			break;
+
+
+
+		case -1:
+
+			log_error(logger, "El cliente se desconectó");
+			close(fd_conexion);
+			return NULL;
+
+		default:
+			log_warning(logger,"IO desconocida.");
+			
+			break;
+	}
+
+		eliminar_paquete(paquete_io);
+	}
 	
+	}
+	
+
+
+
+	
+
+
+
+
+
+
 	terminar_programa(fd_conexion, logger, io_config);
 
 	return 0;
@@ -109,4 +216,8 @@ void validar_argumentos(int argc, char** argv) {
         fprintf(stderr, "Error, faltan argumentos. \nUso: %s <arg1> <arg2>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
+}
+
+void enviar_opcode(int fd, op_code codigo) {
+    send(fd, &codigo, sizeof(op_code), 0);
 }

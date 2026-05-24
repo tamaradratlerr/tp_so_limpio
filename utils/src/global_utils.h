@@ -66,10 +66,20 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     DESALOJO_IO_STDOUT,
     ks_BLOQUEAR_PROCESO,
     IO_LIBRE,
+    km_IO_STDOUT,
+    km_IO_STDIN,
+
+    //cpu con km
     ks_SLEEP,
     ks_IO_STDOUT,
 	ks_IO_STDIN,
     ERROR,
+    
+
+
+    //de la io al ks
+    IO_STDIN_RETORNO,
+    IO_STDOUT_RETORNO
 
     /* Codigos de operacion de IO */
     STDIN,
@@ -121,6 +131,35 @@ typedef struct{
 
 
 
+
+
+/***** Tipos de datos que procesara el IO *****/
+/*----- STDIN -----*/
+typedef struct
+{
+	uint32_t pid;
+    uint32_t bytes_to_read;
+} t_io_stdin_recv;
+typedef struct
+{
+	uint32_t pid;
+    uint32_t input_length;
+	char* input;
+} t_io_stdin_send;
+
+/*----- STDOUT -----*/
+typedef struct
+{
+	uint32_t pid;
+    uint32_t nombre_length;
+    char* nombre;
+} t_io_stdout;
+
+/*----- SLEEP -----*/
+typedef struct {
+    uint32_t pid;
+    uint32_t time;
+} t_io_sleep;
 
 
 /*-----     FUNCIONES     -----*/

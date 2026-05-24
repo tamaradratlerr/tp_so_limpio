@@ -13,35 +13,39 @@
 #include<commons/collections/list.h>
 
 
-/***** Tipos de datos que procesara el IO *****/
-/*----- STDIN -----*/
-typedef struct
+typedef enum
 {
-	uint32_t pid;
-    uint32_t bytes_to_read;
-} t_io_stdin_recv;
-typedef struct
-{
-	uint32_t pid;
-    uint32_t input_length;
-	char* input;
-} t_io_stdin_send;
+	GENERIC,
+    MENSAJE,
+	PAQUETE,
 
-/*----- STDOUT -----*/
-typedef struct
-{
-	uint32_t pid;
-    uint32_t nombre_length;
-    char* nombre;
-} t_io_stdout;
+    STDIN,
+	STDOUT,
+	SLEEP,
+} op_code;
 
-/*----- SLEEP -----*/
+/* Este ya no va mas */
 typedef struct
 {
-	uint32_t pid;
-    uint32_t time;
-} t_io_sleep;
-/*******************************************/
+	int size;
+	void* stream;
+} t_buffer;
+
+
+typedef struct {
+    uint32_t size; // Tamaño del payload
+    uint32_t offset; // Desplazamiento dentro del payload
+    void* stream; // Payload
+} t_buffer;
+
+typedef struct
+{
+	op_code codigo_operacion;
+	t_buffer* buffer;
+} t_paquete;
+
+
+//void enviar_mensaje(char* mensaje, int socket_cliente);
 
 /* Creación de paquete segun tipo de io */
 t_paquete* crear_paquete_io(op_code);

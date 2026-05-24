@@ -76,12 +76,25 @@ int main(void)
 
         if (instruccion_raw != NULL) {
         decode(instruccion_raw); 
+        contexto_actual->pc++; // lo pongo aca y no despues de execute porque gemini me dice esto:
+        /*
+                Si la instrucción es un JMP o una instrucción de salto, el execute()
+                mismo puede sobreescribir el PC con una nueva dirección. Si hubieras incrementado
+                el PC después del execute, el valor del salto podría quedar mal calculado o ser sobrescrito incorrectamente.
+        */
+        execute();
         }
 
-        execute();
+        
 
         //falta poner pc++
-        interrupciones(); // --> aca como haríamos?
+        
+        int cod_op = recibir_operacion(sockets.conexion_kernel_dispatch);
+        if (cod_op == DESALOJO) {
+            interrupciones();
+            continue; // Saltamos el ciclo de ejecución actual
+        }
+    }
 
         liberar_instruccion(instruccion_decodificada);
         instruccion_decodificada = NULL;
@@ -686,11 +699,16 @@ void limpiar_contexto_actual() {
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
 
     enviar_contexto_a_kernel_memory(); 
-
     t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
-    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    agregar_a_paquete(paquete, valor, strlen(valor) + 1);
-    
+
+    if(strcmp(valor) == -1){
+        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    }
+    else{
+        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+        agregar_a_paquete(paquete, valor, strlen(valor) + 1);
+    }
+      
     enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
@@ -729,58 +747,76 @@ void enviar_contexto_a_kernel_memory() {
 }
 
 void ejecutar_stdout(t_instruccion* instr) {
-    char* interfaz_nombre = instr->params[0];
-    char* registro_datos = instr->params[1];
+    char* reg_dir = instr->params[0];
+    char* reg_tam = instr->params[1];
+
+    uint32_t pid_actual = proceso_en_ejecucion->pid;
     
-    uint32_t pid_actual = contexto_actual->pid;
-    uint32_t direccion_fisica = obtener_direccion_del_registro(registro_datos);
-    uint32_t tamanio = obtener_tamanio_del_registro(registro_datos);
+    uint32_t direccion_logica;
+    void* ptr_dir = obtener_registro(reg_dir);
+    direccion_logica = es_registro_32bits(reg_dir) ? *(uint32_t*)ptr_dir : (uint32_t)(*(uint8_t*)ptr_dir);
+
+    uint32_t tamanio;
+    void* ptr_tam = obtener_registro(reg_tam);
+    tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
     log_info(logger, "PID: %u - Ejecutando STDOUT en interfaz: %s", pid_actual, interfaz_nombre);
 
     t_paquete* paquete = crear_paquete(ks_IO_STDOUT);
 
     agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
-
-    int nombre_len = strlen(interfaz_nombre) + 1;
-    agregar_a_paquete(paquete, &nombre_len, sizeof(int));
-    agregar_a_paquete(paquete, interfaz_nombre, nombre_len);
-
-    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
-
+    agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
     agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
 
+    // Enviar a ks y desalojar proceso
     enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
+    gestionar_desalojo_por_syscall(-1, ks_IO_STDOUT);
 }
 
 void ejecutar_stdin(t_instruccion* instr) {
-    char* interfaz = instr->params[0];
-    char* registro_destino = instr->params[1];
+
+    char* reg_dir = instr->params[1];
+    char* reg_tam = instr->params[2];
+
+    uint32_t direccion_logica;
+    uint32_t tamanio;
+
+    // --- Extraer Dirección ---
+    void* ptr_dir = obtener_registro(reg_dir);
+    if (es_registro_32bits(reg_dir)) {
+        direccion_logica = *(uint32_t*)ptr_dir;
+    } else {
+        direccion_logica = (uint32_t)(*(uint8_t*)ptr_dir); // Casteo de 8 bits
+    }
+
+    // --- Extraer Tamaño ---
+    void* ptr_tam = obtener_registro(reg_tam);
+    if (es_registro_32bits(reg_tam)) {
+        tamanio = *(uint32_t*)ptr_tam;
+    } else {
+        tamanio = (uint32_t)(*(uint8_t*)ptr_tam);
+    }
+
     
-    uint32_t direccion_fisica = obtener_direccion_del_registro(registro_destino); // Implementa esto según tu lógica
-    uint32_t tamanio = obtener_tamanio_del_registro(registro_destino);           // Implementa esto según tu lógica
+    uint32_t tamanio = obtener_tamanio_del_registro(instr->params[1]); 
+    uint32_t direccion_logica = obtener_direccion_del_registro(instr->params[1]); 
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
     t_paquete* paquete = crear_paquete(ks_IO_STDIN);
 
-    
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
     agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
     
-    int nombre_len = strlen(interfaz) + 1;
-    agregar_a_paquete(paquete, &nombre_len, sizeof(int));
-    agregar_a_paquete(paquete, interfaz, nombre_len);
-    
-    agregar_a_paquete(paquete, &direccion_fisica, sizeof(uint32_t));
-    
-    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
 
     enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    gestionar_desalojo_por_syscall(registro_destino, ks_IO_STDIN);
+    gestionar_desalojo_por_syscall(-1, ks_IO_STDIN);
 }
+
 
 void ejecutar_init_proc(t_instruccion* instr) {
     char* path = instr->params[0];
@@ -823,4 +859,10 @@ void ejecutar_exit() {
 
 */
 
-void interrupciones(); /*COMPLETAR*/
+void interrupciones(){
+    //  sería la interrupción de COMPACTACIÖN por parte de la ks asi que habría que sacar el proceso
+    //  corriendo actualmente en esta cpu (y se lo enviamos a todas las cpus)
+
+    gestionar_desalojo_por_syscall(-1, DESALOJO);
+
+}

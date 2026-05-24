@@ -46,8 +46,6 @@ void enviar_desalojo(int socket_cliente);
 
 void nueva_io (void* arg);
 
-void io_libre (void* arg);
-
 void atender_io_sleep(t_list* lista);
 
 void atender_io_stdin(t_list* lista);

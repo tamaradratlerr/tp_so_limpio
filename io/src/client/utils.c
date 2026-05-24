@@ -52,52 +52,6 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 		para procesarlos aca abajo. Ver la estructura que se envía con el KS */
 
 	/* Realizo la accion de la IO correspondiente */
-	switch (cod_op) {
-		case SLEEP:
-			/*Recibo tiempo T en milisegundos del KS.*/
-			recibir_mensaje(fd_conexion, paquete);
-			mseg = paquete->buffer->stream;
-			/* FALTA */
-			// pid =  paquete->buffer->pid;
-			pid = 100; 	// Esta mockeado, TRAER el valor desde la struct que me llega del KS
-
-			/* Ejecuto el tiempo de sleep que me envió el Kernel Scheduler */
-			log_info(logger, "## PID: %s - Haciendo sleep por %s milisegundos.", pid, mseg);
-			useg = atoi(mseg) * 1000;
-			usleep(useg);
-			/* Le aviso al KS que fue OK */
-			enviar_mensaje("OK", fd_conexion);
-			break;
-
-		case STDIN:
-			/* FALTA */
-			/* Aca hay que enviar la  */
-			lista = recibir_mensaje(fd_conexion, paquete);
-			log_info(logger, "Me llegaron los siguientes valores:\n");
-			list_iterate(lista, (void*) iterator);	/* FALTA */
-
-			/* Cuando este listo el mansaje a enviar, hay que enviarlo con "t_io_stdin_send" 
-				O se puede usar otra estructura, o definirlo con el KS.*/
-
-			break;
-
-		case STDOUT:
-			/* FALTA */
-			lista = recibir_mensaje(fd_conexion, paquete);
-			break;
-
-		case -1:
-			log_error(logger, "El cliente se desconectó");
-			close(fd_conexion);
-			return NULL;
-
-		default:
-			log_warning(logger,"IO desconocida.");
-			/* Deberia avisar al KS que la IO no existe */
-			break;
-	}
-
-	eliminar_paquete(paquete_io);
 }
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)

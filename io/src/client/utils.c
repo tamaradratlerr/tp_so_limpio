@@ -46,19 +46,12 @@ int atender_peticiones_del_KS(int fd_conexion, t_log* logger)
 	int cod_op = recibir_operacion(fd_conexion);
 	char* mseg;
 	char* useg;
+	int pid;
+
+	/* FALTA Deserealizar el mansaje que llega del KS y obtener los datos
+		para procesarlos aca abajo. Ver la estructura que se envía con el KS */
 
 	/* Realizo la accion de la IO correspondiente */
-}
-
-op_code recibir_operacion(int fd) {
-    
-    op_code cod_op;
-    if (recv(fd, &cod_op, sizeof(op_code), MSG_WAITALL) > 0) {
-        return cod_op;
-    } else {
-        close(fd);
-        return -1; 
-    }
 }
 
 void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio)
@@ -134,7 +127,7 @@ void enviar_paquete(t_paquete* paquete, int socket_cliente)
 	free(a_enviar);
 }
 
-t_list* recibir_paquete(int socket_cliente)		// ver si es necesario, si no, repito el recibir_mensaje 2 veces y listo.
+t_list* recibir_paquete(int socket_cliente)
 {
 	int size;
 	int desplazamiento = 0;

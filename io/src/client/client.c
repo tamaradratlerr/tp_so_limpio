@@ -44,6 +44,7 @@ int main(int argc, char** argv)
 
 	while (status != -1)
     {
+		/* Bucle principal de la IO */
         status = atender_peticiones_del_KS(fd_conexion, logger);
 		op_code cod_op = recibir_operacion(fd_conexion);
 		
@@ -159,7 +160,7 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-/* 
+/*
  ****************
  *	Funciones	*
  ****************

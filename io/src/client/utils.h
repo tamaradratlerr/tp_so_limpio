@@ -52,8 +52,6 @@ t_paquete* crear_paquete_io(op_code);
 
 int atender_peticiones_del_KS(int, t_log*);
 
-int recibir_operacion(int);
-
 void agregar_a_paquete(t_paquete*, void*, int);
 
 void* serializar_paquete(t_paquete*, int);

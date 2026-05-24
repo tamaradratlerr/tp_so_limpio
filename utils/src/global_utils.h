@@ -68,10 +68,20 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
     DESALOJO_IO_STDOUT,
     ks_BLOQUEAR_PROCESO,
     IO_LIBRE,
+    km_IO_STDOUT,
+    km_IO_STDIN,
+
+    //cpu con km
     ks_SLEEP,
     ks_IO_STDOUT,
 	ks_IO_STDIN,
-    ERROR
+    ERROR,
+    
+
+
+    //de la io al ks
+    IO_STDIN_RETORNO,
+    IO_STDOUT_RETORNO
 
 }op_code;
 

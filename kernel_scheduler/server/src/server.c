@@ -87,7 +87,10 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 // Se conecta una interfaz de IO al Kernel por primera vez
                 nueva_io(cliente_fd); 
                 break;
-
+            case DESALOJO:
+                //por parte de la km
+                deslojarTodasCpus();
+                break;
             case ks_SLEEP: 
                
                 sleep(cliente_fd); 
@@ -469,6 +472,15 @@ void fin_proceso (int cliente_fd){ /*HACER*/
 
 }
     //DESALOJO,
+void deslojarTodasCpus() {
+    int cantidad = list_size(list_suplementarias->cpu);
+    
+    for(int i = 0; i < cantidad; i++) {
+        int socket_cpu = *(int*)list_get(list_suplementarias->cpu, i);
+        enviar_op_code(socket_cpu, DESALOJO); 
+    }
+}
+
     //PCB,
 
     //syscalls de la CPU --- Descripcion de cada una esta en el TP.
@@ -561,6 +573,15 @@ void sleep(int socket_cpu, int socket_io) {
         
         enviar_paquete(paquete_para_io, socket_io);
         
+        // recibir el IO_LIBRE
+        op_code op_libre = recibir_operacion(io_socket);
+        if (op_libre == IO_LIBRE) {
+            log_info(logger, "IO liberada tras SLEEP");
+            IO* interfaz = buscar_io_por_fd(io_socket);
+            interfaz->enUso = false;
+            queue_push(list_suplementarias->io_ready, interfaz);
+        }
+
         free(datos_io);
         eliminar_paquete(paquete_para_io);
         
@@ -596,27 +617,6 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
 
 	//con la IO
 
-    //IO_LIBRE,
-void io_libre (void* arg) { 
-    int io_fd = (intptr_t)arg;
-
-    pthread_mutex_lock(&mutex_ios);
-    IO* interfaz = buscar_io_por_fd(io_fd);
-    
-    interfaz->enUso = false;
-    pthread_mutex_unlock(&mutex_ios);
-
-    
-    pthread_mutex_lock(&mutex_ready);
-    list_remove(list_suplementarias->io, interfaz);
-    list_add(list_suplementarias->io_ready, interfaz); 
-    pthread_mutex_unlock(&mutex_ready);
-
-    log_info(logger, "finalizó IO en %s y vuelve a READY", interfaz->nombre);
-
-
-    mandar_proceso_io(interfaz);
-}
 
 void nueva_io (void* arg){
 
@@ -633,6 +633,7 @@ void nueva_io (void* arg){
                 
     pthread_mutex_lock(&mutex_ios);
     list_add(list_suplementarias->io_ready, info_io);
+    list_add(list_suplementarias->io, info_io);
     pthread_mutex_unlock(&mutex_ios);
 
     enviar_op_code (OK, cliente_fd);
@@ -642,73 +643,114 @@ void nueva_io (void* arg){
 
 
 // STDIN
-void io_stdin(int socket_cpu, int socket_io) {
+void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
+    //recibimos de CPU
     t_paquete* paquete = recibir_paquete(socket_cpu);
     
-    uint32_t pid;
+    uint32_t tam, dir, pid;
+    memcpy(&tam, paquete->buffer->stream, sizeof(uint32_t));
+    memcpy(&dir, paquete->buffer->stream + sizeof(uint32_t), sizeof(uint32_t));
     memcpy(&pid, paquete->buffer->stream, sizeof(uint32_t));
-    int offset = sizeof(uint32_t);
-    
-    int nombre_len;
-    memcpy(&nombre_len, paquete->buffer->stream + offset, sizeof(int));
-    offset += sizeof(int);
-    
-    char* nombre_io = malloc(nombre_len);
-    memcpy(nombre_io, paquete->buffer->stream + offset, nombre_len);
-    offset += nombre_len;
-    
-    uint32_t dir, tam;
-    memcpy(&dir, paquete->buffer->stream + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&tam, paquete->buffer->stream + offset, sizeof(uint32_t));
 
-    //bloqueo el proceso
-    PCB* pcb = encontrar_pcb_por_pid(pid);
-    cambiar_estado_pcb(pcb, BCK);
 
-    t_io_stdin_recv* datos_para_io = malloc(sizeof(t_io_stdin_recv));
-    datos_para_io->pid = pid;
-    datos_para_io->bytes_to_read = tam; // Se lo pasamos a la IO
-
+    // enviar a IO
     t_paquete* paquete_io = crear_paquete(ks_IO_STDIN);
-    buffer_add(paquete_io->buffer, datos_para_io, sizeof(t_io_stdin_recv));
-    
+    agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
+    agregar_a_paquete(paquete_io, &dir, sizeof(uint32_t));
+    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));    enviar_paquete(paquete_io, socket_io);
+
     enviar_paquete(paquete_io, socket_io);
 
-    free(nombre_io);
-    free(datos_para_io);
+    //recibir por IO
+    op_code cod_op = recibir_operacion(socket_io);
+
+    if (cod_op == IO_STDIN_RETORNO) {
+        t_paquete* paquete_datos = recibir_paquete(socket_io);
+        
+        void* stream_datos = paquete_datos->buffer->stream;
+        void* buffer_usuario = stream_datos + (3 * sizeof(uint32_t));
+
+        // enviar a KM
+        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
+        agregar_a_paquete(paquete_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem, &dir, sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem, buffer_usuario, tam);
+        
+        enviar_paquete(paquete_mem, socket_memoria);
+
+        eliminar_paquete(paquete_datos);
+        eliminar_paquete(paquete_mem);
+    }
+
+    // recibir el IO_LIBRE
+    op_code op_libre = recibir_operacion(io_socket);
+    if (op_libre == IO_LIBRE) {
+        log_info(logger, "IO liberada tras STDIN");
+        IO* interfaz = buscar_io_por_fd(io_socket);
+        interfaz->enUso = false;
+        queue_push(list_suplementarias->io_ready, interfaz);
+    }
+
+
     eliminar_paquete(paquete);
-    eliminar_paquete(paquete_io); 
+    eliminar_paquete(paquete_io);
+
 }
 
 
 // STDOUT
-void atender_io_stdout(t_list* lista) {
+void atender_io_stdout(t_list* lista, int io_socket) {
+
+    // deserializar lo que viene de la CPU
     uint32_t pid = *(uint32_t*)list_get(lista, 0);
-    char* nombre_io = (char*)list_get(lista, 1);
-    uint32_t dir = *(uint32_t*)list_get(lista, 2);
-    uint32_t tam = *(uint32_t*)list_get(lista, 3);
+    uint32_t dir = *(uint32_t*)list_get(lista, 1);
+    uint32_t tam = *(uint32_t*)list_get(lista, 2);
     
+    // bloquear PCB
     PCB* pcb = buscar_pcb_por_pid(pid);
-    IO* interfaz = buscar_io_por_nombre(nombre_io); 
+    cambiar_estado_pcb(pcb, BCK); // O el estado que uses
     
-    cambiar_estado_pcb(pcb, BCK);
-    // ... iria la lógica de cola de io ...
+    // pedir datos a km (Lo pide el enunciado yo mucho no entendi para qué)
+    t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
+    agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
+    agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
+    agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
+    enviar_paquete(req_mem, socket_memoria); 
+    eliminar_paquete(req_mem);
+
+    // recibir de km
+    t_paquete* resp_mem = recibir_paquete(socket_memoria);
+    void* datos_leidos = resp_mem->buffer->stream; // Los bytes traídos de memoria
+
+    // enviar a io
     t_paquete* paquete_io = crear_paquete(ks_IO_STDOUT);
     
-    t_io_stdout* datos_io = malloc(sizeof(t_io_stdout));
-    datos_io->pid = pid;
-    datos_io->nombre_length = strlen(nombre_io) + 1;
-    datos_io->nombre = strdup(nombre_io); 
-
-    buffer_add(paquete_io->buffer, datos_io, sizeof(t_io_stdout)); // Esto envía la estructura
-    buffer_add(paquete_io->buffer, nombre_io, datos_io->nombre_length);
-    enviar_paquete(paquete_io, interfaz->socket);
-
-    free(datos_io->nombre);
-    free(datos_io);
+    agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
+    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
+    agregar_a_paquete(paquete_io, datos_leidos, tam); // Los datos que vinieron de memoria
+    
+    enviar_paquete(paquete_io, io_socket);
     eliminar_paquete(paquete_io);
+
+    // El KS se queda esperando que la IO termine de imprimir
+    op_code cod_op = recibir_operacion(io_socket);
+    
+    if (cod_op == IO_STDOUT_RETORNO) {
+        t_paquete* paquete_fin = recibir_paquete(io_socket);
+        eliminar_paquete(paquete_fin);
+    }
+
+    // recibir el IO_LIBRE
+    op_code op_libre = recibir_operacion(io_socket);
+    if (op_libre == IO_LIBRE) {
+        log_info(logger, "IO liberada tras STDOUT");
+        IO* interfaz = buscar_io_por_fd(io_socket);
+        interfaz->enUso = false;
+        queue_push(list_suplementarias->io_ready, interfaz);
+    }
+    eliminar_paquete(resp_mem);
 }
+
 
 PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
     t_list* listas_a_revisar[] = { 
@@ -776,42 +818,7 @@ void enviar_proceso_nuevo_KM(int pid, char* path) {
     log_info(logger, "Se notificó a Memoria la creación del proceso PID: %d, Path: %s", pid, path);
 }
 
-void mandar_proceso_io(IO* interfaz) {
-    pthread_mutex_lock(&mutex_ios);
-    
-    // Si la interfaz no está haciendo nada y hay alguien esperando
-    if (!interfaz->enUso && !queue_is_empty(interfaz->cola_bloqueados)) {
-        
-        // Miramos el pedido pero NO lo sacamos de la cola todavía (lo sacamos en io_libre)
-        t_pedido_io* pedido = queue_peek(interfaz->cola_bloqueados);
-        interfaz->enUso = true;
-        pthread_mutex_unlock(&mutex_ios);
 
-        // Armamos el paquete que va a viajar hacia el módulo de la IO externa
-        t_paquete* paquete = crear_paquete(pedido->tipo_operacion);
-        
-        // Dependiendo de qué operacion sea, le metemos sus datos al paquete
-        switch(pedido->tipo_operacion) {
-            case IO_SLEEP:
-                agregar_a_paquete(paquete, &(pedido->tiempo_sleep), sizeof(int));
-                break;
-                
-            case IO_STDIN:
-            case IO_STDOUT:
-                agregar_a_paquete(paquete, &(pedido->dir_fisica), sizeof(uint32_t));
-                agregar_a_paquete(paquete, &(pedido->tamano), sizeof(uint32_t));
-                agregar_a_paquete(paquete, &(pedido->pcb->data.PID), sizeof(int));
-                break;
-        }
-
-        enviar_paquete(paquete, interfaz->fd);
-        eliminar_paquete(paquete);
-        
-        log_info(logger, "Kernel: Orden enviada a la interfaz %s para el PID %d", interfaz->nombre, pedido->pcb->data.PID);
-    } else {
-        pthread_mutex_unlock(&mutex_ios);
-    }
-}
 
 
 
@@ -871,4 +878,4 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
 }
 
 
-
+//

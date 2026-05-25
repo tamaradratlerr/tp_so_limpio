@@ -79,7 +79,7 @@ typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y K
 
     //de la io al ks
     IO_STDIN_RETORNO,
-    IO_STDOUT_RETORNO
+    IO_STDOUT_RETORNO,
 
     /* Codigos de operacion de IO */
     STDIN,

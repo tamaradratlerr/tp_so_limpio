@@ -21,9 +21,9 @@ int main(void)
 
     /* ---------------- CONEXIONES ---------------- */
 
-    sockets.conexion_kernel_memory    = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
-    enviar_op_code (NUEVA_CPU, sockets.conexion_kernel_memory);
-    op_code handshake_km = recibir_operacion(sockets.conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
+    sockets->conexion_kernel_memory    = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+    enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
+    op_code handshake_km = recibir_operacion(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
     
     if(handshake_km != 1){
         log_error(logger, "Error en HandShake con Kernel Memory.");
@@ -31,9 +31,9 @@ int main(void)
 
     
 
-    sockets.conexion_memory_stick     = conexion_memory_stick(config, logger, MEMORY_STICK);
-    enviar_op_code (NUEVA_CPU, sockets.conexion_memory_stick);
-    op_code handshake_ms = recibir_operacion(sockets.conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
+    sockets->conexion_memory_stick     = conexion_memory_stick(config, logger, MEMORY_STICK);
+    enviar_op_code (NUEVA_CPU, sockets->conexion_memory_stick);
+    op_code handshake_ms = recibir_operacion(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
     
      if(handshake_ms != 1){
         log_error(logger, "Error en HandShake con Memory Stick.");
@@ -41,9 +41,9 @@ int main(void)
     
     
     
-    sockets.conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
-    enviar_op_code (NUEVA_CPU, sockets.conexion_kernel_scheduler);
-    op_code handshake_ks = recibir_operacion(sockets.conexion_kernel_scheduler); //Se espera que se devueva el op_code OK (1)
+    sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
+    enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_scheduler);
+    op_code handshake_ks = recibir_operacion(sockets->conexion_kernel_scheduler); //Se espera que se devueva el op_code OK (1)
     
      if(handshake_ks != 1){
         log_error(logger, "Error en HandShake con Kernel Scheduler.");
@@ -51,7 +51,7 @@ int main(void)
 
 
     // Validacion de conexiones (Si falla una conexión crítica, cerramos)
-    if (sockets.conexion_kernel_memory < 0 || sockets.conexion_kernel_scheduler < 0 || sockets.conexion_memory_stick < 0) {
+    if (sockets->conexion_kernel_memory < 0 || sockets->conexion_kernel_scheduler < 0 || sockets->conexion_memory_stick < 0) {
         
         log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
         
@@ -64,10 +64,10 @@ int main(void)
 
 
     //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
-    enviar_op_code (CPU_LIBRE, sockets.conexion_kernel_scheduler);
+    enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
 
     //Recibir PID
-    int PID = recibir_pid(sockets.conexion_kernel_scheduler);
+    int PID = recibir_pid(sockets->conexion_kernel_scheduler);
 
     int control_loop = 1;
     while (control_loop == 1){
@@ -86,10 +86,7 @@ int main(void)
         }
 
         
-
-        //falta poner pc++
-        
-        int cod_op = recibir_operacion(sockets.conexion_kernel_dispatch);
+        int cod_op = recibir_operacion(sockets->conexion_kernel_dispatch);
         if (cod_op == DESALOJO) {
             interrupciones();
             continue; // Saltamos el ciclo de ejecución actual
@@ -99,8 +96,8 @@ int main(void)
         liberar_instruccion(instruccion_decodificada);
         instruccion_decodificada = NULL;
     
-    }
 }
+
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
 
@@ -117,7 +114,7 @@ t_log* iniciar_logger(void)
 t_config* iniciar_config(void)
 {
     char* path = "cpu.config";
-    nuevo_config = config_create(path);
+    t_config* nuevo_config  = config_create(path);
     if (nuevo_config == NULL) {
         printf("¡No se pudo crear el config!\n");
     }
@@ -184,7 +181,7 @@ int recibir_pid (int socket_cliente){
 }
 
 
-t_contexto* contexto_actual; 
+
 
 char* fetch() {
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
@@ -197,11 +194,11 @@ char* fetch() {
     agregar_a_paquete(paquete, &(contexto_actual->pid), sizeof(int));
     agregar_a_paquete(paquete, &(contexto_actual->pc), sizeof(uint32_t));
 
-    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
 
     // recibimos el string de la instrucción
-    char* instruccion_raw = recibir_string(sockets.conexion_kernel_memory); //Hacer recibir string
+    char* instruccion_raw = recibir_string(sockets->conexion_kernel_memory); //Hacer recibir string
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");
@@ -214,7 +211,6 @@ char* fetch() {
 
 
 
-t_instruccion* instruccion_decodificada; 
 
 void decode(char* instruccion_raw) {
     char** tokens = string_split(instruccion_raw, " ");
@@ -551,14 +547,14 @@ void ejecutar_mutex_create(t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_CREATE, sockets.conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
     
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR EL ERROR.
 
-    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
     
     log_info(logger, ""); //Completar LOG
@@ -569,14 +565,14 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_LOCK, sockets.conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
     log_info (logger, ""); //Completar LOG
@@ -587,14 +583,14 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_UNLOCK, sockets.conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (mutex_id, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
     log_info (logger, ""); //Completar LOG
@@ -606,17 +602,17 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     char* tamanio = instr->params[1];
     op_code err;
 
-    enviar_op_code (MEM_ALLOC, sockets.conexion_kernel_scheduler); //Envia la señal
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    enviar_op_code (MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (id_segmento, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
 
-    enviar_mensaje (tamanio, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
     log_info (logger, ""); //Completar LOG
             
@@ -627,12 +623,12 @@ void ejecutar_mem_free (t_instruccion* instr){
     char* id_segmento = instr->params[0];
     op_code err;
 
-    enviar_op_code (MEM_FREE, sockets.conexion_kernel_scheduler); //Envia la señal
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    enviar_op_code (MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (id_segmento, sockets.conexion_kernel_scheduler); // Se manda el nombre del semaforo
-    err = recibir_operacion (sockets.conexion_kernel_scheduler); // Espera Respuesta de OK
+    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
 }
@@ -644,13 +640,13 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
     agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
     agregar_a_paquete(paquete, &tamanio, sizeof(int));
     
-    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
 
     // recibir la respuesta (el buffer con los datos)
     // asumiendo que el protocolo de las chicas devuelve un buffer de bytes
     void* buffer = malloc(tamanio);
-    recibir_datos(sockets.conexion_kernel_memory, buffer, tamanio); 
+    recibir_datos(sockets->conexion_kernel_memory, buffer, tamanio); 
     
     return buffer;
 }
@@ -662,11 +658,11 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     agregar_a_paquete(paquete, &tamanio, sizeof(int));
     agregar_a_paquete(paquete, buffer, tamanio);
     
-    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
     
     // esperar confirmación de la memoria
-    int resultado = recibir_operacion(sockets.conexion_kernel_memory);
+    int resultado = recibir_operacion(sockets->conexion_kernel_memory);
     if (resultado != OK) {
         log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
     }
@@ -677,7 +673,7 @@ void ejecutar_sleep(t_instruccion* instr) {
     
     gestionar_desalojo_por_syscall(tiempo, ks_SLEEP);    
 
-    if (recibir_operacion(sockets.conexion_kernel_scheduler) != OK) {
+    if (recibir_operacion(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
     }
 }
@@ -709,10 +705,10 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
         agregar_a_paquete(paquete, valor, strlen(valor) + 1);
     }
       
-    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    op_code status = recibir_operacion(sockets.conexion_kernel_scheduler);
+    op_code status = recibir_operacion(sockets->conexion_kernel_scheduler);
     
     if(status == OK) {
         log_info(logger, "Desalojo confirmado. Limpiando CPU.");
@@ -769,7 +765,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
 
     // Enviar a ks y desalojar proceso
-    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
     gestionar_desalojo_por_syscall(-1, ks_IO_STDOUT);
@@ -811,7 +807,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
     
 
-    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
     gestionar_desalojo_por_syscall(-1, ks_IO_STDIN);
@@ -824,15 +820,15 @@ void ejecutar_init_proc(t_instruccion* instr) {
 
     log_info(logger, "PID %d solicitando crear nuevo proceso: %s", contexto_actual->pid, path);
 
-    enviar_op_code(ks_INIT_PROC, sockets.conexion_kernel_scheduler);
+    enviar_op_code(ks_INIT_PROC, sockets->conexion_kernel_scheduler);
 
     t_paquete* paquete = crear_paquete(ks_INIT_PROC);
     agregar_a_paquete(paquete, path, strlen(path) + 1);
     agregar_a_paquete(paquete, &prioridad, sizeof(int));
-    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+    if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "Proceso creado exitosamente por el Kernel.");
     }
 }
@@ -840,14 +836,14 @@ void ejecutar_init_proc(t_instruccion* instr) {
 void ejecutar_exit() {
     log_info(logger, "PID: %d - Ejecutando EXIT", contexto_actual->pid);
 
-    enviar_op_code(ks_EXIT, sockets.conexion_kernel_scheduler);
+    enviar_op_code(ks_EXIT, sockets->conexion_kernel_scheduler);
 
     t_paquete* paquete = crear_paquete(ks_EXIT);
     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    enviar_paquete(paquete, sockets.conexion_kernel_scheduler);
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    if (recibir_operacion(sockets.conexion_kernel_scheduler) == OK) {
+    if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
         debe_desalojar_cpu = true;

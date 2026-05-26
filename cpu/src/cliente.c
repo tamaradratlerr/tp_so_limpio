@@ -86,7 +86,8 @@ int main(void)
         }
 
         
-        int cod_op = recibir_operacion(sockets->conexion_kernel_dispatch);
+        //enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); "idea para mejorar la comu"
+        int cod_op = recibir_operacion(sockets->conexion_kernel_scheduler);
         if (cod_op == DESALOJO) {
             interrupciones();
             continue; // Saltamos el ciclo de ejecución actual
@@ -188,7 +189,10 @@ char* fetch() {
              contexto_actual->pid, 
              contexto_actual->pc);
 
-    // solicitud para la km
+    
+    //enviar_op_code(FETCH, sockets->kernel_memory); "Como sugerencia para que sea mejor la comu"
+
+             // solicitud para la km
     // FIJANOS QUE EL PPROTOCOLO CONCIDA CON KM (PID y PC)
     t_paquete* paquete = crear_paquete(SOLICITUD_INSTRUCCION);
     agregar_a_paquete(paquete, &(contexto_actual->pid), sizeof(int));
@@ -225,7 +229,7 @@ void decode(char* instruccion_raw) {
 
     // cargamos los parámetros (los tokens restantes)
     int i = 1;
-    while (tokens[i] != NULL) {
+    while(tokens[i] != NULL) {
         instruccion_decodificada->params[instruccion_decodificada->cant_params] = strdup(tokens[i]);
         instruccion_decodificada->cant_params++;
         i++;
@@ -606,12 +610,12 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
     err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
 
-    enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); 
     err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
     log_info (logger, ""); //Completar LOG
@@ -627,7 +631,7 @@ void ejecutar_mem_free (t_instruccion* instr){
     err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return //MARCAR ERROR
 
-    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
+    enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
     err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) return; //MARCAR ERROR
 
@@ -635,6 +639,8 @@ void ejecutar_mem_free (t_instruccion* instr){
 
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
 
+    //enviar_op_code(LEER_MEMORIA, sockets->conexion_kernel_memory); "idea pera mejorar la comu"
+   
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
     t_paquete* paquete = crear_paquete(LEER_MEMORIA);
     agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
@@ -646,12 +652,15 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
     // recibir la respuesta (el buffer con los datos)
     // asumiendo que el protocolo de las chicas devuelve un buffer de bytes
     void* buffer = malloc(tamanio);
-    recibir_datos(sockets->conexion_kernel_memory, buffer, tamanio); 
+    recibir_datos(sockets->conexion_kernel_memory, buffer, tamanio); //deberiamos ver si no sirve un recibir paquete
     
     return buffer;
 }
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
+    
+    //enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_kernel_memory); "idea pera mejorar la comu"
+    
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
     t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
     agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
@@ -669,6 +678,7 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
 }
 
 void ejecutar_sleep(t_instruccion* instr) {
+    
     char* tiempo = strdup(instr->params[0]);
     
     gestionar_desalojo_por_syscall(tiempo, ks_SLEEP);    
@@ -704,7 +714,10 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
         agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
         agregar_a_paquete(paquete, valor, strlen(valor) + 1);
     }
-      
+     
+    
+    //enviar_op_code (identificador, sockets->conexion_kernel_scheduler); "idea para que el KS sepa que va a recibir"
+
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
@@ -717,6 +730,8 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
 }
 
 void enviar_contexto_a_kernel_memory() {
+
+    //enviar_op_code(identificador, sockets->conexion_kernel_memory); "Idea para mejorar la comu"
 
     t_paquete* paquete = crear_paquete(km_GUARDAR_CONTEXTO);
 
@@ -737,7 +752,7 @@ void enviar_contexto_a_kernel_memory() {
     agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
 
-    enviar_paquete(paquete, sockets.conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
 
 }

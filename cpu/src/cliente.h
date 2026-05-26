@@ -13,6 +13,7 @@ t_contexto* contexto_actual;
 t_instruccion* instruccion_decodificada; 
 t_cpu_sockets* sockets;
 
+
 typedef struct {
     int conexion_kernel_memory;
     int conexion_kernel_scheduler;

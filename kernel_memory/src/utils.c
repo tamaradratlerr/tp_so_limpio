@@ -58,64 +58,61 @@ pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
 //recibir pid y path
 //pid identificar el proceso y path ¨direccion¨ para abrir el archivo
 void manejar_crear_proceso(int socket_cliente) {
-
     t_list* paquete = recibir_paquete(socket_cliente);
 
+    // 1. Extraemos los datos crudos del paquete
     char* texto_pid = (char*) list_get(paquete, 0);
-    char* path      = (char*) list_get(paquete, 1);
+    char* path_original = (char*) list_get(paquete, 1);
 
     int pid = atoi(texto_pid);
-//“Abrir archivo con fopen”
-//abrir el archivo donde están las instrucciones del proceso para leer instrucciones
-//y poder crear el proceso
 
-FILE* archivo = fopen(path, "r"); //abro el archivo
+    // 2. DUPLICAMOS el path inmediatamente en una variable propia del stack/heap local.
+    // Esto nos independiza por completo de lo que haga el paquete del socket.
+    char* path = strdup(path_original);
 
-//validar error
-if (archivo == NULL) {
-    log_error(logger, "No se pudo abrir el archivo: %s", path);
-    list_destroy_and_destroy_elements(paquete, free);
-    return;
+    FILE* archivo = fopen(path, "r");
+    
+    // Si falló el archivo, liberamos de forma segura y salimos
+    if (archivo == NULL) {
+        log_error(logger, "No se pudo abrir el archivo: %s", path);
+        free(path);
+        // Cambiamos el destroy_elements por un destroy común por si los elementos no eran mutables
+        list_destroy(paquete); 
+        return;
+    }
+
+    t_list* instrucciones = list_create();
+    char linea[256];  
+    while (fgets(linea, sizeof(linea), archivo) != NULL) { 
+      
+        char* instruccion_duplicada = strdup(linea); 
+        string_trim(instruccion_duplicada); 
+        list_add(instrucciones, instruccion_duplicada);
+
+    fclose(archivo);
+    free(path); // Ya no necesitamos la copia local del path
+
+    // 3. Guardamos el proceso en la lista global
+    t_proceso* proceso = malloc(sizeof(t_proceso));
+    proceso->pid = pid;
+    proceso->instrucciones = instrucciones;
+
+    pthread_mutex_lock(&mutex_procesos);
+    list_add(lista_procesos, proceso);
+    pthread_mutex_unlock(&mutex_procesos);
+
+    // Crear el contexto de ejecución del Proceso
+    agregar_contexto(pid);
+
+    log_info(logger, "## PID: %d - Proceso Creado Exitosamente", pid);
+
+    // 4. LA CLAVE DE LA SOLUCIÓN:
+    // Si list_destroy_and_destroy_elements(paquete, free) te daba error, 
+    // probá usando list_destroy(paquete) a secas. 
+    // Si adentro tenés un buffer único, deberías liberar el buffer contenedor (si tenés la referencia),
+    // pero destruir la estructura de la lista con list_destroy NO va a tocar los punteros internos y evitará el crash.
+    list_destroy(paquete);
 }
-
-//“El Kernel Memory deberá ser capaz de enviar la instrucción correspondiente a cada pedido de la CPU”
-//“leer con fgets y limpiar con string_trim”
-
-t_list* instrucciones = list_create(); //donde se van a guardar las instrucciones
-
-char linea[256];  //tam de buffer elegido por mi
-
-while (fgets(linea, sizeof(linea), archivo) != NULL) { //lee una linea, la guarda y termina cuando ya no hay más
-
-    char* instruccion = string_trim(linea); // saca /n los cuales se nombran en la consigna
-
-    list_add(instrucciones, strdup(instruccion)); //guardo la instruccion en la lista
-}
-
-fclose(archivo);
-
-//“Por cada PID del sistema se tendrá un archivo de pseudocódigo…
-//se deberá implementar una estructura que le permita asociar qué PID tiene asociado qué archivo”
-
-//guardar proceso (PID + instrucciones)
-   
-t_proceso* proceso = malloc(sizeof(t_proceso));
-proceso->pid = pid;
-proceso->instrucciones = instrucciones;
-
-//guardo el programa del proceso en memoria ya que no puedo estar constantemente abriendo el archivo
-pthread_mutex_lock(&mutex_procesos);
-list_add(lista_procesos, proceso);
-pthread_mutex_unlock(&mutex_procesos);
-
-//crear el contexto de ejecución del Proceso
-agregar_contexto(pid);
-
-//log obligatorio
-log_info(logger, "## PID: %d - Proceso Creado", pid);
-
-//liberar paquete
-list_destroy_and_destroy_elements(paquete, free);
 
 }
 

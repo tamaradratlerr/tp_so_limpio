@@ -4,16 +4,18 @@
 #include <commons/collections/list.h>
 #include <commons/log.h> 
 #include <commons/string.h>
-#include <pthread.h>     
-
-// Estructuras del Sistema (typedef struct)
+#include <pthread.h>   
+#include <stdint.h>
 
 typedef enum {
-    NUEVA_CPU = 1,
+    NUEVA_CPU,
+    NUEVO_KERNEL,
     SOLICITUD_INSTRUCCION,
     LEER_MEMORIA,
     ESCRIBIR_MEMORIA,
-    km_GUARDAR_CONTEXTO
+    km_GUARDAR_CONTEXTO,
+    ks_INIT_PROC,
+    ks_EXIT
 } op_code;
 typedef struct {
     uint8_t ax, bx, cx, dx;         // 8 bits

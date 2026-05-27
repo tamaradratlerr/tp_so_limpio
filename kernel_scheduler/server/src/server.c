@@ -336,7 +336,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     pcb ->estado_pcb = nuevoEstado;
 }
 
-int enviar_pcb(int PCB_ID, int socket_cliente){ /* Funcion que manda PCB a un cliente */
+int enviar_pid(int PCB_ID, int socket_cliente){ /* Funcion que manda PCB a un cliente */
 	
     t_paquete* paquete = malloc(sizeof(t_paquete));
 
@@ -558,9 +558,9 @@ void sleep(int socket_cpu, int socket_io) {
     
     if (pcb != NULL) {
         // Mover a bloqueados
-        list_remove_element(listasProcesos->rnn, pcb);
         cambiar_estado_pcb(pcb, BCK);
-        list_add(listasProcesos->bck, pcb);
+        list_remove_element(listasProcesos->rnn, pcb);
+        agregar_proceso_lista(pcb);
         
         // comunicación con la io-----
         
@@ -785,9 +785,7 @@ init_proc(int socket_cliente){
 
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
-    PCB* nuevo_pcb = crear_pcb(path, prioridad);
-
-    enviar_proceso_nuevo_KM(nuevo_pcb->pid, path);
+    crearNuevoProceso(logger, path, sockets.conexion_memoria)
 
     if (recibir_operacion(sockets.conexion_memoria) == OK) {
     log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->pid);
@@ -802,21 +800,6 @@ init_proc(int socket_cliente){
     eliminar_paquete(paquete);
 }
 
-void enviar_proceso_nuevo_KM(int pid, char* path) {
-    t_paquete* paquete = crear_paquete(PROCESO_NUEVO);
-
-    agregar_a_paquete(paquete, &pid, sizeof(int));
-
-    int path_len = strlen(path) + 1;
-    agregar_a_paquete(paquete, &path_len, sizeof(int));
-    agregar_a_paquete(paquete, path, path_len);
-
-    enviar_paquete(paquete, conexion.km);
-
-    eliminar_paquete(paquete);
-
-    log_info(logger, "Se notificó a Memoria la creación del proceso PID: %d, Path: %s", pid, path);
-}
 
 
 

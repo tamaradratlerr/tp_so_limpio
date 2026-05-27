@@ -82,16 +82,19 @@ int main(void)
                 mismo puede sobreescribir el PC con una nueva dirección. Si hubieras incrementado
                 el PC después del execute, el valor del salto podría quedar mal calculado o ser sobrescrito incorrectamente.
         */
-        execute();
-        }
 
-        
         //enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); "idea para mejorar la comu"
         int cod_op = recibir_operacion(sockets->conexion_kernel_scheduler);
         if (cod_op == DESALOJO) {
             interrupciones();
             continue; // Saltamos el ciclo de ejecución actual
         }
+        
+        execute();
+        }
+
+        
+        
     }
 
         liberar_instruccion(instruccion_decodificada);
@@ -652,7 +655,7 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
     // recibir la respuesta (el buffer con los datos)
     // asumiendo que el protocolo de las chicas devuelve un buffer de bytes
     void* buffer = malloc(tamanio);
-    recibir_datos(sockets->conexion_kernel_memory, buffer, tamanio); //deberiamos ver si no sirve un recibir paquete
+    recibir_paquete(sockets->conexion_kernel_memory, buffer, tamanio); //deberiamos ver si no sirve un recibir paquete
     
     return buffer;
 }
@@ -696,9 +699,6 @@ void limpiar_contexto_actual() {
         contexto_actual = NULL;
     }
 
-   
-    memset(&registros_cpu, 0, sizeof(t_contexto));
-
     log_info(logger, "Contexto limpio. CPU lista para recibir nuevo PID.");
 }
 
@@ -707,6 +707,7 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     enviar_contexto_a_kernel_memory(); 
     t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
 
+    
     if(strcmp(valor) == -1){
         agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     }
@@ -812,7 +813,7 @@ void ejecutar_stdin(t_instruccion* instr) {
 
     
     uint32_t tamanio = obtener_tamanio_del_registro(instr->params[1]); 
-    uint32_t direccion_logica = obtener_direccion_del_registro(instr->params[1]); 
+    uint32_t direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
     t_paquete* paquete = crear_paquete(ks_IO_STDIN);
@@ -861,7 +862,6 @@ void ejecutar_exit() {
     if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
-        debe_desalojar_cpu = true;
     }
 }
 

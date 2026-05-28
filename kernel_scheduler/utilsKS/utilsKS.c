@@ -2,7 +2,6 @@
 
 void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
-    
     PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
 	
     enviarProcesoKM(nuevoPcb, path, fd_km);

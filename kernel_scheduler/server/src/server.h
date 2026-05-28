@@ -3,6 +3,10 @@
 
 #include "utils.h"
  
+t_conexion conexion;
+
+t_log* logger;
+
 
 /*----------------------------------FUNCIONES------------------------------------------*/
 
@@ -34,7 +38,7 @@ void ready_FIFO(PCB* pcb_nuevo); //Funcion que a partir del ALGORITMO FIFO agreg
 
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado); //Funcion que cambia el estado actual y estado anterior de un PCB
 
-void enviar_pcb(int PCB_ID, int socket_cliente); //Funcion que manda PID a un cliente 
+int enviar_pcb(int PCB_ID, int socket_cliente); //Funcion que manda PID a un cliente 
 
 /*-----                     GESTION DE CPUs                     -----*/
 
@@ -54,7 +58,6 @@ void atender_io_stdout(t_list* lista);
 
 void mandar_proceso_io(IO* interfaz);
 
-void io_libre (void* arg);
 
 /*-----                     GESTION DE HILOS                     -----*/
 
@@ -75,11 +78,11 @@ void* hilo_quantum(void* arg);
 	//con la CPU
 	
     //NUEVA_CPU,
-    void nueva_cpu (void* arg);
+    void nueva_cpu (int ciente_fd);
     //CPU_LIBRE,
-    void cpu_libre (void* arg);
+    void cpu_libre (int cliente_fd);
      //FIN_PROCESO,
-    void fin_proceso (void* arg);
+    void fin_proceso (int cliente_fd);
     //DESALOJO,
     //PCB,
 
@@ -101,7 +104,7 @@ void* hilo_quantum(void* arg);
 	//con la IO
 
     //IO_LIBRE,
-    void io_libre (void* arg);
+    void io_libre (int cliente_fd);
 	//SLEEP, 
 	//STDIN,
 	//STDOUT

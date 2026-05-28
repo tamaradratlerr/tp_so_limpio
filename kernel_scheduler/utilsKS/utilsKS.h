@@ -3,6 +3,9 @@
 
 #include "../../utils/src/global_utils.h"
 
+int contador_pid = 0;
+
+
 typedef struct{
     int km, cpu, io;
 } t_conexion;

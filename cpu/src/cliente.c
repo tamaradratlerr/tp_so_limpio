@@ -3,8 +3,10 @@
 int main(void)
 {
     /* ---------------- Iniciamos el Logger y Config ----------------*/
-    logger = iniciar_logger();
-    t_config* config = iniciar_config();
+
+    t_log* logger = iniciar_logger();
+    t_config* config = iniciar_config();    
+    
 
     if (logger == NULL || config == NULL) {
         return EXIT_FAILURE;
@@ -15,7 +17,7 @@ int main(void)
 
     /* ---------------- CONEXIONES ---------------- */
 
-       sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+    sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
     op_code handshake_km = recibir_operacion(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
     
@@ -65,7 +67,7 @@ int main(void)
 
     /*----- SOLICITAMOS UN PROCESO -----*/
     control_loop00 = 1;
-    while(control_loop00 == 1)
+    while(control_loop00 == 1) //Este WHILE funciona para poder enviar nuevamente el CPU_LIBRE
     {
         
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler); //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
@@ -94,7 +96,7 @@ int main(void)
             liberar_instruccion(instruccion_decodificada);
             instruccion_decodificada = NULL;
             proceso_en_ejecucion->pid = NULL;
-            control_loop00 = apagar(); //apagar sea una funcion que segun el valor de una variable global corta la cpu o no
+            control_loop00 = apagar(); //apagar sea una funcion que segun el valor de una variable global corta la cpu o no //HACER
     }
 }
 
@@ -102,7 +104,7 @@ int main(void)
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
 
-t_log* iniciar_logger(void)
+t_log* iniciar_logger(void) 
 {
     // Usamos LOG_LEVEL_INFO por defecto para asegurar que se vea por consola
     t_log* nuevo_logger = log_create("cpu.log", "CPU", true, LOG_LEVEL_INFO);
@@ -199,9 +201,10 @@ char* fetch() {
 }
 
 void decode(char* instruccion_raw) {
+    
     char** tokens = string_split(instruccion_raw, " ");
     
-    if (tokens == NULL) return EXIT;
+    if (tokens == NULL) return EXIT_FAILURE;
 
     instruccion_decodificada = malloc(sizeof(t_instruccion));
     instruccion_decodificada->cant_params = 0;
@@ -307,6 +310,7 @@ void execute() {
 }
 
 void interrupciones(){
+    
     //  sería la interrupción de COMPACTACIÖN por parte de la ks asi que habría que sacar el proceso
     //  corriendo actualmente en esta cpu (y se lo enviamos a todas las cpus)
 
@@ -317,6 +321,7 @@ void interrupciones(){
 /* ---------------- FUNCIONES COMPLEMENTARIAS PARA CICLO DE INTRUCCION ---------------- */
 
 t_instruccion_code identificar_codigo(char* token) { // función para traducir el string al enum de instru
+    
     if (strcmp(token, "NOOP") == 0)          return NOOP;
     if (strcmp(token, "SET") == 0)           return SET;
     if (strcmp(token, "SUM") == 0)           return SUM;
@@ -337,10 +342,11 @@ t_instruccion_code identificar_codigo(char* token) { // función para traducir e
     if (strcmp(token, "EXIT") == 0)          return EXIT;
 
     // caso por defecto si no reconoce el comando
-    if (token == NULL) return EXIT;
+    if (token == NULL) return EXIT_FAILURE;
 }
 
 void* obtener_registro(char* nombre) {
+    
     // registros de 8 bits
     if (strcmp(nombre, "AX") == 0) return &(contexto_actual->ax);
     if (strcmp(nombre, "BX") == 0) return &(contexto_actual->bx);
@@ -361,6 +367,7 @@ void* obtener_registro(char* nombre) {
 }
 
 bool es_registro_32bits(char* nombre) {
+    
     // si empieza con E o es SI o DI o PC  es de 32 bits
     return (nombre[0] == 'E' || strcmp(nombre, "SI") == 0 || strcmp(nombre, "DI") == 0 || strcmp(nombre, "PC") == 0);
 }
@@ -378,6 +385,7 @@ void ejecutar_set (t_instruccion* instr){
     char* reg_dest_nombre = instr->params[0];
 
     if (es_registro_32bits(reg_dest_nombre)){
+        
         uint32_t valor = (uint32_t) strtoul(instr->params[1], NULL, 10);
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
         
@@ -386,6 +394,7 @@ void ejecutar_set (t_instruccion* instr){
         log_info(logger, "[EXEC] SET 32b: %s = %u", reg_dest_nombre, *dest);
     }
     else {
+        
         uint8_t valor = (uint8_t) strtoul(instr->params[1], NULL, 10);
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
 
@@ -401,6 +410,7 @@ void ejecutar_mov_in (t_instruccion* instr){
     char* reg_dest_nombre = instr->params[0];
 
     if (es_registro_32bits(reg_dest_nombre)){
+        
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
         uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
     
@@ -412,6 +422,7 @@ void ejecutar_mov_in (t_instruccion* instr){
         log_info(logger, "[EXEC] MOV_IN 32b: %s = %u", reg_dest_nombre, *dest);
     }   
     else {
+        
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
         uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
     
@@ -431,6 +442,7 @@ void ejecutar_mov_out (t_instruccion* instr){
     char* reg_dest_nombre = instr->params[0];
 
     if (es_registro_32bits(reg_dest_nombre)){
+        
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
         uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
     
@@ -442,6 +454,7 @@ void ejecutar_mov_out (t_instruccion* instr){
         log_info(logger, "[EXEC] MOV_OUT 32b: %s = %u", reg_dest_nombre, *dest);
     }   
     else {
+        
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
         uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
     
@@ -463,38 +476,49 @@ void ejecutar_sum(t_instruccion* instr) {
     char* reg_orig_nombre = instr->params[1];
 
     if (es_registro_32bits(reg_dest_nombre)) {
+        
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
         uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
         *dest += *orig;
+        
         log_info(logger, "[EXEC] SUM 32b: %s = %u", reg_dest_nombre, *dest);
     } else {
+        
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
         uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
         *dest += *orig;
+        
         log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
     }
 }
 
 void ejecutar_sub(t_instruccion* instr) {
+    
     char* reg_dest_nombre = instr->params[0];
     char* reg_orig_nombre = instr->params[1];
 
     if (es_registro_32bits(reg_dest_nombre)) {
+        
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
         uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
         *dest -= *orig;
+        
         log_info(logger, "[EXEC] SUB 32b: %s = %u", reg_dest_nombre, *dest);
     } else {
+        
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
         uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
         *dest -= *orig;
+       
         log_info(logger, "[EXEC] SUB 8b: %s = %u", reg_dest_nombre, *dest);
     }
 }
 
 void ejecutar_jnz(t_instruccion* instr) {
+    
     // los JNZ --> gemini dice que no es necesario los de 8 bits xq generalmente operan sobre registros de 32 bits (como el PC o contadores)
     uint32_t* registro = (uint32_t*)obtener_registro(instr->params[0]);
+    
     if (*registro != 0) {
 
         /*atoi toma una cadena de caracteres q contiene números y la traduce a su valor numérico real en meomria
@@ -539,7 +563,7 @@ void ejecutar_mutex_create(t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
     
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return EXIT_FAILURE;//MARCAR EL ERROR.
@@ -557,7 +581,7 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
@@ -575,7 +599,7 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
-    enviar_op_code (MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
@@ -594,7 +618,7 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     char* tamanio = instr->params[1];
     op_code err;
 
-    enviar_op_code (MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return EXIT_FAILURE; //MARCAR ERROR
 
@@ -615,7 +639,7 @@ void ejecutar_mem_free (t_instruccion* instr){
     char* id_segmento = instr->params[0];
     op_code err;
 
-    enviar_op_code (MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) return EXIT_FAILURE;
 
@@ -629,7 +653,7 @@ void ejecutar_sleep(t_instruccion* instr) {
     
     char* tiempo = strdup(instr->params[0]);
     
-    gestionar_desalojo_por_syscall(tiempo, ks_SLEEP);    
+    gestionar_desalojo_por_syscall(tiempo, gl_IO_SLEEP);    
 
     if (recibir_operacion(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
@@ -637,6 +661,7 @@ void ejecutar_sleep(t_instruccion* instr) {
 }
 
 void ejecutar_stdout(t_instruccion* instr) {
+    
     char* reg_dir = instr->params[0];
     char* reg_tam = instr->params[1];
 
@@ -652,7 +677,7 @@ void ejecutar_stdout(t_instruccion* instr) {
 
     log_info(logger, "PID: %u - Ejecutando STDOUT en interfaz: %s", pid_actual, interfaz_nombre);
 
-    t_paquete* paquete = crear_paquete(ks_IO_STDOUT);
+    t_paquete* paquete = crear_paquete(gl_IO_STDOUT);
 
     agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
     agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
@@ -662,7 +687,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    gestionar_desalojo_por_syscall(-1, ks_IO_STDOUT);
+    gestionar_desalojo_por_syscall(-1, gl_IO_STDOUT);
 }
 
 void ejecutar_stdin(t_instruccion* instr) {
@@ -694,7 +719,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     uint32_t direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
-    t_paquete* paquete = crear_paquete(ks_IO_STDIN);
+    t_paquete* paquete = crear_paquete(gl_IO_STDIN);
 
     agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
     agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
@@ -704,7 +729,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    gestionar_desalojo_por_syscall(-1, ks_IO_STDIN);
+    gestionar_desalojo_por_syscall(-1, gl_IO_STDIN);
 }
 
 void ejecutar_init_proc(t_instruccion* instr) {
@@ -714,9 +739,9 @@ void ejecutar_init_proc(t_instruccion* instr) {
 
     log_info(logger, "PID %d solicitando crear nuevo proceso: %s", contexto_actual->pid, path);
 
-    enviar_op_code(ks_INIT_PROC, sockets->conexion_kernel_scheduler);
+    enviar_op_code(gl_INIT_PROC, sockets->conexion_kernel_scheduler);
 
-    t_paquete* paquete = crear_paquete(ks_INIT_PROC);
+    t_paquete* paquete = crear_paquete(gl_INIT_PROC);
     agregar_a_paquete(paquete, path, strlen(path) + 1);
     agregar_a_paquete(paquete, &prioridad, sizeof(int));
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
@@ -748,6 +773,7 @@ void ejecutar_exit() {
 /* ------------------ Funciones Auxiliares ------------------*/
 
 void limpiar_contexto_actual() {
+    
     log_info(logger, "Limpiando contexto del proceso actual...");
 
     if (contexto_actual != NULL) {
@@ -813,7 +839,7 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     
-    enviar_op_code(ESCRIBIR_MEM, sockets->conexion_kernel_memory);
+    enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_kernel_memory);
 
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
     t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);

@@ -51,7 +51,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     // Syscalls de la CPU (Kernel Scheduler)
     gl_MUTEX_CREATE,
     gl_MUTEX_LOCK,
-    gl_MUTEX_UNLOK, 
+    gl_MUTEX_UNLOCK, 
     gl_MEM_ALLOC,
     gl_MEM_FREE,
     gl_IO_SLEEP,
@@ -66,8 +66,8 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
 
     //Ciclos CPU (para CPU -> KM)
     FETCH,
-    LEER_MEM,
-    ESCRIBIR_MEM,
+    LEER_MEMORIA,
+    ESCRIBIR_MEMORIA,
     CONTEXTO,
 
     //KM
@@ -80,8 +80,8 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     NUEVA_IO, //Se informa que hay una nueva IO
     IO_LIBRE, //Se informa que una cpu no tiene ningun PCB asociado
 
-    io_STDOUT, //Devolucion del IO STDOUT por parte de la IO
-    io_STDIN, //Devolucion del IO STDIN por parte de la IO
+    IO_STDOUT_RETORNO, //Devolucion del IO STDOUT por parte de la IO
+    IO_STDIN_RETORNO, //Devolucion del IO STDIN por parte de la IO
 
 
 } op_code;

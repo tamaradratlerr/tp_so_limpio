@@ -3,10 +3,14 @@
 
 #include "utils.h"
 
+t_config* config; 
+t_log* logger ;
+
 t_contexto* contexto_actual; //Variable global que almacena el valor de todos los registros
 t_instruccion* instruccion_decodificada; //Variable global que alamcena la intruccion a ejecutar
 t_cpu_sockets* sockets; //Variable global que almacena las direcciones de memoria
 t_proceso_ejec* proceso_en_ejecucion;
+
 int control_loop00;
 int control_loop;
 

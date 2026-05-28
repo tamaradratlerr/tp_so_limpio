@@ -1,15 +1,17 @@
 #include "server.h"
 
-t_conexion conexion;
+
 
 int main(void) {
+    
     pthread_mutex_init(&mutex_cpus, NULL);
 
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
     logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG); 
-    
+
+
     int server_fd = iniciar_servidor(); 
     log_info(logger, "Servidor listo para recibir clientes");
 
@@ -91,18 +93,18 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 //por parte de la km
                 deslojarTodasCpus();
                 break;
-            case ks_SLEEP: 
+            case gl_IO_SLEEP: 
                
                 sleep(cliente_fd); 
                 break;
 
-            case ks_IO_STDIN: 
+            case gl_IO_STDIN: 
                 // viene de la cpu 
                 IO* io = queue_pop(list_suplementarias -> io_ready);
                 io_stdin(cliente_fd, io.fd); 
                 break;
 
-            case ks_IO_STDOUT: 
+            case gl_IO_STDOUT: 
                 IO* io = queue_pop(list_suplementarias -> io_ready);
                 atender_io_stdout(cliente_fd, io.d); 
                 break;
@@ -113,15 +115,15 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 io_libre(cliente_fd); 
                 break;
 
-            case MUTEX_CREATE:
+            case gl_MUTEX_CREATE:
                 mutex_create(cliente_fd);
                 break;            
            
-            case ks_INIT_PROC:
+            case gl_INIT_PROC:
                 init_proc(cliente_fd);
                 break;
                         
-            case ks_EXIT:
+            case gl_EXIT:
                 exit_proceso(cliente_fd);
                 break;
             
@@ -376,7 +378,7 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
     return pcb_buscado;
 }
 
-PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) {
+PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) { //REVISAR POR REPETIDO
     
     for (int i = 0; i < list_size(listasProcesos->rnn); i++) {
         
@@ -501,7 +503,7 @@ void deslojarTodasCpus() {
     
     for(int i = 0; i < cantidad; i++) {
         int socket_cpu = *(int*)list_get(list_suplementarias->cpu, i);
-        enviar_op_code(socket_cpu, DESALOJO); 
+        enviar_op_code(DESALOJO, socket_cpu); 
     }
 }
 
@@ -561,21 +563,26 @@ void mutex_unlock (int socket_cliente){
         pthread_mutex_unlock (&mutex_simulados);
     }
 //MEM_ALLOC,
-void mem_alloc (); //Hacer
+void mem_alloc (){//Hacer
+
+}; 
 //MEM_FREE,
-void mem_free (); // Hacer
+void mem_free (){// Hacer
+
+} 
 //INIT PROC
 void init_proc(int socket_cliente){
+    
     t_paquete* paquete = recibir_paquete(socket_cliente);
     char* path = (char*)paquete->buffer->stream;
     int prioridad = *(int*)(paquete->buffer->stream + strlen(path) + 1);
 
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
-    crearNuevoProceso(logger, path, sockets.conexion_memoria)
+   crearNuevoProceso(logger, path, sockets.conexion_memoria);
 
     if (recibir_operacion(sockets.conexion_memoria) == OK) {
-    log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->pid);
+    log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->data.pid);
                     
     pthread_mutex_lock(&mutex_ready);
     cambiar_estado_pcb(nuevo_pcb, RDY);
@@ -635,7 +642,7 @@ void sleep(int socket_cpu, int socket_io) {
         datos_io->pid = (uint32_t)pid_a_bloquear;
         datos_io->time = (uint32_t)tiempo_ms;
 
-        t_paquete* paquete_para_io = crear_paquete(ks_SLEEP); // Opcode SLEEP
+        t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
         buffer_add(paquete_para_io->buffer, datos_io, sizeof(t_io_sleep));
         
         enviar_paquete(paquete_para_io, socket_io);
@@ -657,13 +664,11 @@ void sleep(int socket_cpu, int socket_io) {
         
     } else {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
-        enviar_op_code(ERROR, socket_cpu);
+        enviar_op_code(NOTOK, socket_cpu);
     }
 }
 //NUEVA_IO
-void nueva_io (void* arg){
-
-    int cliente_fd = (intptr_t)arg;
+void nueva_io (int cliente_fd){
 
     
     IO* info_io = malloc(sizeof(IO));
@@ -695,7 +700,7 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
 
 
     // enviar a IO
-    t_paquete* paquete_io = crear_paquete(ks_IO_STDIN);
+    t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
     agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &dir, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
@@ -766,7 +771,7 @@ void io_stdout(t_list* lista, int io_socket) {
     void* datos_leidos = resp_mem->buffer->stream; // Los bytes traídos de memoria
 
     // enviar a io
-    t_paquete* paquete_io = crear_paquete(ks_IO_STDOUT);
+    t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
     
     agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
@@ -804,7 +809,7 @@ void mem_corrupt (); // Hacer
 /*-----                     AUXILIARES                     -----*/
 
 void enviar_proceso_finalizar_KM(int pid){
-    t_paquete* paquete = crear_paquete(ks_EXIT);
+    t_paquete* paquete = crear_paquete(gl_EXIT);
     
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
     

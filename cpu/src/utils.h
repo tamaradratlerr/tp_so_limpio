@@ -2,7 +2,6 @@
 #define UTILS_H_
 
 #include <utilsKS/utilsKS.h>
-
 typedef struct {
     int pid;
     uint32_t pc;

@@ -4,7 +4,8 @@
 #include <commons/collections/list.h>
 #include <commons/log.h> 
 #include <commons/string.h>
-#include <pthread.h>   
+#include <pthread.h>  
+#include "../../utils/src/global_utils.h" 
 #include <stdint.h>
 
 typedef enum {
@@ -12,6 +13,7 @@ typedef enum {
     NUEVO_KERNEL,
     SOLICITUD_INSTRUCCION,
     LEER_MEMORIA,
+    ENVIAR_PROCESO, //recibir proceso de ks
     ESCRIBIR_MEMORIA,
     km_GUARDAR_CONTEXTO,
     ks_INIT_PROC,

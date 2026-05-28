@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <stdint.h>
 #include <commons/log.h>
 #include <errno.h>
 #include <commons/collections/list.h>
@@ -72,7 +73,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
 
     //KM
     MEM_CORRUPT, //ERROR que al recirbirlo por parte del KS (viene del KM) debe terminar todos los procesos y apagarse
-    
+    ENVIAR_PROCESO,
     km_IO_STDOUT, //Devolucion del IO STDOUT por parte de la KM
     km_IO_STDIN, //Devolucion del IO STDIN por parte de la KM
 
@@ -150,6 +151,7 @@ typedef struct
 {
 	uint32_t pid;
     uint32_t bytes_to_read;
+    uint32_t direccion_logica;
 } t_io_stdin_recv;
 typedef struct
 {

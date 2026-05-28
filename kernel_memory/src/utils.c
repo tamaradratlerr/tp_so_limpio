@@ -260,8 +260,8 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
 //Se conecta con ks: stdout
 void manejar_lectura_memoria(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
-    uint32_t dir_fisica = *(uint32_t)list_get(paquete, 1);
-    uint32_t tamanio = *(uint32_t*)list_get(paquete, 2);
+    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
 
     // MOCK: Devolvemos espacio simulado vacío
     void* datos_falsos = calloc(1, tamanio); 
@@ -325,7 +325,7 @@ void manejar_guardar_contexto(int socket_cliente) {
         ctx->di  = *(uint32_t*)list_get(paquete, 11);
         
         pthread_mutex_unlock(&mutex_contextos);
-        log_info(logger, "## Contexto Resguardado Completo - PID: %d - PC: %u", pid, ctx->registros.pc);
+        log_info(logger, "## Contexto Resguardado Completo - PID: %d - PC: %u", pid, ctx->pc);
     } else {
         log_error(logger, "No se encontró el contexto para el PID: %d al intentar resguardar", pid);
     }
@@ -361,7 +361,7 @@ void enviar_desalojo_ks(int socket_ks){
         
         */
 
-    enviar_op_code(DESALOJO, socket_ks)
+    enviar_op_code(DESALOJO, socket_ks);
 }
 
 void enviar_contexto_cpu(coket_cpu){

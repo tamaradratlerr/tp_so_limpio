@@ -15,6 +15,11 @@ void atender_cpu(int cpu_fd) {
             case SOLICITUD_INSTRUCCION:
                 manejar_pedido_instruccion_cpu(cpu_fd);
                 break;
+                
+            case ENVIAR_PROCESO:
+            //rescibir proceso de ks
+                recibir_proceso();
+                break;
 
             case LEER_MEMORIA:
                 manejar_lectura_memoria(cpu_fd); 

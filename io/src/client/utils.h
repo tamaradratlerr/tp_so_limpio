@@ -10,6 +10,7 @@
 #include<netdb.h>
 #include<string.h>
 #include<commons/log.h>
+
 #include<commons/collections/list.h>
 
 
@@ -58,7 +59,7 @@ void* serializar_paquete(t_paquete*, int);
 
 void enviar_mensaje(char*, int);
 
-void enviar_paquete(t_paquete*, int)
+void enviar_paquete(t_paquete*, int);
 
 t_list* recibir_paquete(int);
 

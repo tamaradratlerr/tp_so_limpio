@@ -3,7 +3,6 @@
 
 #include "utils.h"
  
-t_conexion conexion;
 
 t_log* logger;
 
@@ -16,7 +15,7 @@ void* atender_nuevo_cliente(void* argumento);
 
 /*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
 
-listas_procesos* Iniciar_listas_procesos (); //Funcion que inicializa listasProcesos (Variable Global) (HEAP)
+t_listas_procesos* Iniciar_listas_procesos (); //Funcion que inicializa listasProcesos (Variable Global) (HEAP)
 
 void terminar_listas_procesos (); //Funcion que libera la memoria de listasProcesos (HEAP)
 
@@ -47,26 +46,6 @@ void mandar_proceso_cpu(int socket_cliente);
 void enviar_desalojo(int socket_cliente);
 
 /*-----                     GESTION DE IOs                     -----*/
-
-void nueva_io (void* arg);
-
-void atender_io_sleep(t_list* lista);
-
-void atender_io_stdin(t_list* lista);
-
-void atender_io_stdout(t_list* lista);
-
-void mandar_proceso_io(IO* interfaz);
-
-
-/*-----                     GESTION DE HILOS                     -----*/
-
-void* hilo_quantum(void* arg);
-
-/*-----                     Funciones de SERVIDOR                     -----*/
-
-void* hilo_quantum(void* arg);
-
 /*-----                     GESTION DE OP_CODEs                     -----*/
 
     //OK, 

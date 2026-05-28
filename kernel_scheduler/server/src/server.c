@@ -1,6 +1,9 @@
 #include "server.h"
+#include <utilsKS/utilsKS.h>
+#include "../../utils/src/global_utils.h"
 
-
+t_listas_procesos* listasProcesos = NULL;
+t_listas_suplementarias* list_suplementarias = NULL;
 
 int main(void) {
     
@@ -94,19 +97,20 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 deslojarTodasCpus();
                 break;
             case gl_IO_SLEEP: 
-               
-                sleep(cliente_fd); 
+               //agarrar io de la lista de ios y mandar
+                IO* io = queue_pop(list_suplementarias -> io_ready);
+                io_sleep(cliente_fd, io -> fd); 
                 break;
 
             case gl_IO_STDIN: 
                 // viene de la cpu 
                 IO* io = queue_pop(list_suplementarias -> io_ready);
-                io_stdin(cliente_fd, io.fd); 
+                io_stdin(cliente_fd, io -> fd, info_km.conexion_km); 
                 break;
 
             case gl_IO_STDOUT: 
                 IO* io = queue_pop(list_suplementarias -> io_ready);
-                atender_io_stdout(cliente_fd, io.d); 
+                io_stdout(cliente_fd, io -> fd); 
                 break;
 
             case IO_LIBRE: 
@@ -150,7 +154,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 /*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
 
 
-listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas las listas de los Procesos*/
+t_listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas las listas de los Procesos*/
 
 	listasProcesos->new = list_create();
 	listasProcesos->rnn = list_create();
@@ -338,9 +342,9 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
 
 PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
     t_list* listas_a_revisar[] = { 
-        listaProcesos-> new, listaProcesos->rdy, 
-        listaProcesos-> rnn, listaProcesos->bck, 
-        listaProcesos-> ext 
+        listasProcesos-> new, listasProcesos->rdy, 
+        listasProcesos-> rnn, listasProcesos->bck, 
+        listasProcesos-> ext 
     };
 
     for (int i = 0; i < 5; i++) {
@@ -349,7 +353,7 @@ PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
         t_list_iterator* it = list_iterator_create(lista_actual);
         while (list_iterator_has_next(it)) {
             PCB* pcb = (PCB*) list_iterator_next(it);
-            if (pcb->pid == pid_recibido) {
+            if (pcb->data.PID == pid_recibido) {
                 list_iterator_destroy(it);
                 return pcb; 
             }
@@ -384,7 +388,7 @@ PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) { //REVISAR POR REPETIDO
         
         PCB* pcb_en_cpu = (PCB*) list_get(listasProcesos->rnn, i);
 
-        if (pcb_en_cpu != NULL && pcb_en_cpu->pid == pid_a_finalizar) {
+        if (pcb_en_cpu != NULL && pcb_en_cpu->data.PID == pid_a_finalizar) {
             return pcb_en_cpu;
         }
     }
@@ -451,7 +455,7 @@ bool es_la_cpu_buscada(void* elemento, void* contexto) {
 void enviar_desalojo(int socket_cliente){/* HACER  */
    
     
-   log_info(logger, "Enviado Desalojo a socket %d por fin de Quantum",cpu_libre->fd);
+   log_info(logger, "Enviado Desalojo a socket %d por fin de Quantum");
 
 }
 
@@ -579,10 +583,9 @@ void init_proc(int socket_cliente){
 
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
-   crearNuevoProceso(logger, path, sockets.conexion_memoria);
+    PCB* nuevo_pcb = crearNuevoProceso(logger, path, info_km.conexion_km);
 
-    if (recibir_operacion(sockets.conexion_memoria) == OK) {
-    log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->data.pid);
+    if (recibir_operacion(info_km.conexion_km) == OK) {
                     
     pthread_mutex_lock(&mutex_ready);
     cambiar_estado_pcb(nuevo_pcb, RDY);
@@ -616,7 +619,7 @@ void exit_proceso(int socket_cpu){
 /*-----Con la IO-----*/
 
 //SLEEP
-void sleep(int socket_cpu, int socket_io) {
+void io_sleep(int socket_cpu, int socket_io) {
 
     t_paquete* paquete_cpu = recibir_paquete(socket_cpu);
     int pid_a_bloquear;
@@ -648,10 +651,10 @@ void sleep(int socket_cpu, int socket_io) {
         enviar_paquete(paquete_para_io, socket_io);
         
         // recibir el IO_LIBRE
-        op_code op_libre = recibir_operacion(io_socket);
+        op_code op_libre = recibir_operacion(socket_io);
         if (op_libre == IO_LIBRE) {
             log_info(logger, "IO liberada tras SLEEP");
-            IO* interfaz = buscar_io_por_fd(io_socket);
+            IO* interfaz = buscar_io_por_fd(socket_io);
             interfaz->enUso = false;
             queue_push(list_suplementarias->io_ready, interfaz);
         }
@@ -690,62 +693,55 @@ void nueva_io (int cliente_fd){
 }
 // STDIN
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
-    //recibimos de CPU
     t_paquete* paquete = recibir_paquete(socket_cpu);
     
     uint32_t tam, dir, pid;
     memcpy(&tam, paquete->buffer->stream, sizeof(uint32_t));
     memcpy(&dir, paquete->buffer->stream + sizeof(uint32_t), sizeof(uint32_t));
-    memcpy(&pid, paquete->buffer->stream, sizeof(uint32_t));
+    memcpy(&pid, paquete->buffer->stream + (2 * sizeof(uint32_t)), sizeof(uint32_t));
 
-
-    // enviar a IO
     t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
     agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &dir, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
     enviar_paquete(paquete_io, socket_io);
+    eliminar_paquete(paquete_io); // Limpiamos tras enviar
 
-    enviar_paquete(paquete_io, socket_io);
-
-    //recibir por IO
     op_code cod_op = recibir_operacion(socket_io);
-
     if (cod_op == IO_STDIN_RETORNO) {
         t_paquete* paquete_datos = recibir_paquete(socket_io);
-		
-        uint32_t tam, direccion_logica;
+        
+        uint32_t direccion_logica, tam_datos;
+        memcpy(&direccion_logica, paquete_datos->buffer->stream, sizeof(uint32_t));
+        memcpy(&tam_datos, paquete_datos->buffer->stream + sizeof(uint32_t), sizeof(uint32_t));
 
-        memcpy(&direccion_logica, paquete->buffer->stream, sizeof(uint32_t));
-        memcpy(&tam, paquete->buffer->stream, sizeof(uint32_t));
+        // Aquí debes extraer los datos reales leídos por el IO
+        void* buffer_usuario = malloc(tam_datos);
+        memcpy(buffer_usuario, paquete_datos->buffer->stream + (2 * sizeof(uint32_t)), tam_datos);
 
-        // enviar a KM
         t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
         agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, &tam, sizeof(uint32_t));
-        
-        agregar_a_paquete(paquete_mem, buffer_usuario, tam);
+        agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem, buffer_usuario, tam_datos);
         
         enviar_paquete(paquete_mem, socket_memoria);
 
+        free(buffer_usuario); // Liberamos el malloc temporal
         eliminar_paquete(paquete_datos);
         eliminar_paquete(paquete_mem);
     }
 
-    // recibir el IO_LIBRE
-    op_code op_libre = recibir_operacion(io_socket);
+    op_code op_libre = recibir_operacion(socket_io);
     if (op_libre == IO_LIBRE) {
-        log_info(logger, "IO liberada tras STDIN");
-        IO* interfaz = buscar_io_por_fd(io_socket);
-        interfaz->enUso = false;
-        queue_push(list_suplementarias->io_ready, interfaz);
+        IO* interfaz = buscar_io_por_fd(socket_io);
+        if(interfaz != NULL) {
+            interfaz->enUso = false;
+            queue_push(list_suplementarias->io_ready, interfaz);
+        }
     }
-
-
     eliminar_paquete(paquete);
-    eliminar_paquete(paquete_io);
-
 }
+
 // STDOUT
 void io_stdout(t_list* lista, int io_socket) {
 
@@ -763,11 +759,11 @@ void io_stdout(t_list* lista, int io_socket) {
     agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
     agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
     agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
-    enviar_paquete(req_mem, socket_memoria); 
+    enviar_paquete(req_mem, info_km.conexion_km); 
     eliminar_paquete(req_mem);
 
     // recibir de km
-    t_paquete* resp_mem = recibir_paquete(socket_memoria);
+    t_paquete* resp_mem = recibir_paquete(info_km.conexion_km);
     void* datos_leidos = resp_mem->buffer->stream; // Los bytes traídos de memoria
 
     // enviar a io

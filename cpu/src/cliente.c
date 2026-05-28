@@ -675,7 +675,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     void* ptr_tam = obtener_registro(reg_tam);
     tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
-    log_info(logger, "PID: %u - Ejecutando STDOUT en interfaz: %s", pid_actual, interfaz_nombre);
+    log_info(logger, "PID: %u : %s", pid_actual);
 
     t_paquete* paquete = crear_paquete(gl_IO_STDOUT);
 
@@ -865,7 +865,7 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
 
     
-    if(strcmp(valor) == -1){
+    if(valor == -1){
         agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     }
     else{

@@ -50,7 +50,7 @@ int main(int argc, char** argv)
 		
 
 		switch (cod_op) {
-		case SLEEP:
+		case SLEEP:{
 			t_paquete* paquete_io = recibir_paquete(fd_conexion);
 			
 			t_io_sleep* datos = (t_io_sleep*)paquete_io->buffer->stream;
@@ -66,16 +66,16 @@ int main(int argc, char** argv)
 			enviar_mensaje("Finalizo OK", fd_conexion);
 			enviar_opcode(fd_conexion, IO_LIBRE);
 			eliminar_paquete(paquete_io);
-			break;
+			break;}
 
-		case STDIN: 
+		case STDIN: {
 			// recibir del ks la instrucción
 			t_paquete* paquete_io = recibir_paquete(fd_conexion);
-			t_io_stdin_recv* datos = (t_io_stdin_recv*)paquete_io->buffer->stream;
+			t_io_stdin_recv* datos_stdin = (t_io_stdin_recv*)paquete_io->buffer->stream;
 			
-			uint32_t pid = datos->pid;
-			uint32_t bytes_a_leer = datos->bytes_to_read;
-			uint32_t direccion_logica = datos->direccion_logica;
+			uint32_t pid = datos_stdin->pid;
+			uint32_t bytes_a_leer = datos_stdin -> bytes_to_read;
+			uint32_t direccion_logica = datos_stdin -> direccion_logica;
 
 			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
 			
@@ -96,9 +96,9 @@ int main(int argc, char** argv)
 			free(buffer_usuario);
 			eliminar_paquete(paquete_io);
 			eliminar_paquete(paquete_retorno);
-			break;
+			break;}
 
-		case STDOUT: 
+		case STDOUT: {
 			// recibir del ks
 			t_paquete* paquete_io = recibir_paquete(fd_conexion);
 			
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
 			eliminar_paquete(paquete_io);
 			eliminar_paquete(paquete_fin);
 			break;
-
+		}
 
 
 		case -1:
@@ -140,21 +140,9 @@ int main(int argc, char** argv)
 			break;
 	}
 
-		eliminar_paquete(paquete_io);
 	}
 	
-	}
 	
-
-
-
-	
-
-
-
-
-
-
 	terminar_programa(fd_conexion, logger, io_config);
 
 	return 0;

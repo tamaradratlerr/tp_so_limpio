@@ -2,7 +2,6 @@
 
 int contador_pid = 0;
 
-
 int main(void)
 {
 	
@@ -10,8 +9,8 @@ int main(void)
 	logger = iniciar_logger();
 	config = iniciar_config();
 
-	ip_km = config_get_string_value(config, "IP_KM");
-	puerto_km = config_get_string_value(config, "PUERTO_KM");
+	info_km.ip_km = config_get_string_value(config, "IP_KM");
+	info_km.puerto_km = config_get_string_value(config, "PUERTO_KM");
 	planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
 	listas_algortimo = config_get_string_value(config, "QUEUES_ALGORITHMS");
 	intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
@@ -22,27 +21,27 @@ int main(void)
 
 	// Creamos una conexión hacia el servidor
 	printf("Intentando conectar al servidor...\n");
-	conexion.km = crear_conexion(ip_km, puerto_km);
+	info_km.conexion_km = crear_conexion(info_km.ip_km, info_km.puerto_km, logger, KERNEL_MEMORY);
 
-	if (conexion.km != -1) {
-		printf("Conexión establecida, socket: %d\n", conexion.km);
+	if (info_km.conexion_km != -1) {
+		printf("Conexión establecida, socket: %d\n", info_km.conexion_km);
 	} else {
 		printf("No se pudo conectar.\n");
 	}
-	if(conexion.km < 0){
+	if(info_km.conexion_km < 0){
 		log_error(logger, "error de la conexión");
-		terminar_programa(conexion.km, logger, config);
+		terminar_programa(info_km.conexion_km, logger, config);
 		return 1; //termino el programa
 	}
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_mensaje("me conecte KS con KM", conexion.km);
+	enviar_mensaje("me conecte KS con KM", info_km.conexion_km);
 
 	// Armamos y enviamos el paquete
-	paquete(conexion.km);
+	paquete(info_km.conexion_km);
 
 
-	terminar_programa(conexion.km, logger, config);
+	terminar_programa(info_km.conexion_km, logger, config);
 
 }
 
@@ -53,7 +52,7 @@ t_log* iniciar_logger(void)
 {
 	t_log* nuevo_logger;
 
-	nuevo_logger = log_create("KS.log", "CLIENTE", true, log_level);
+	nuevo_logger = log_create("KS.log", "CLIENTE", true, "INFO");
 	
 	return nuevo_logger;
 }
@@ -82,7 +81,7 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 
 
 /* ---------------- FUNCIONES GENERALES ---------------- */
-void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
@@ -90,17 +89,15 @@ void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     enviarProcesoKM(nuevoPcb, path, fd_km);
 
 	contador_pid++;
+	
+	return nuevoPcb;
 }
 
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	
-	t_paquete* paquete = crear_paquete();
+	t_paquete* paquete = crear_paquete(ENVIAR_PROCESO);
 	
 	agregar_a_paquete(paquete, pcb->data.PID, sizeof(int));
-
-	agregar_a_paquete(paquete, pcb->data.PPID, sizeof(int));
-
-	agregar_a_paquete(paquete, pcb->data.UID, sizeof(int));
 
 	agregar_a_paquete(paquete, &path, sizeof(char*));
 	

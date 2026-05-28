@@ -185,10 +185,6 @@ void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	
 	agregar_a_paquete(paquete, pcb ->PID, sizeof(int));
 
-	agregar_a_paquete(paquete, pcb ->PPID, sizeof(int));
-
-	agregar_a_paquete(paquete, pcb -> UID, sizeof(int));
-
 	agregar_a_paquete(paquete, &path, sizeof(char*));
 	
 
@@ -197,7 +193,7 @@ void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 
 	//enviar señal de que se conecto
 
-}
+}//KM LO RECIBE EN: manejar_crear_proceso
 
 
 

@@ -657,7 +657,8 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     t_paquete* paquete_io = crear_paquete(ks_IO_STDIN);
     agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
     agregar_a_paquete(paquete_io, &dir, sizeof(uint32_t));
-    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));    enviar_paquete(paquete_io, socket_io);
+    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
+    enviar_paquete(paquete_io, socket_io);
 
     enviar_paquete(paquete_io, socket_io);
 
@@ -666,14 +667,17 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
 
     if (cod_op == IO_STDIN_RETORNO) {
         t_paquete* paquete_datos = recibir_paquete(socket_io);
-        
-        void* stream_datos = paquete_datos->buffer->stream;
-        void* buffer_usuario = stream_datos + (3 * sizeof(uint32_t));
+		
+        uint32_t tam, direccion_logica;
+
+        memcpy(&direccion_logica, paquete->buffer->stream, sizeof(uint32_t));
+        memcpy(&tam, paquete->buffer->stream, sizeof(uint32_t));
 
         // enviar a KM
         t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
-        agregar_a_paquete(paquete_mem, &pid, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, &dir, sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem, &tam, sizeof(uint32_t));
+        
         agregar_a_paquete(paquete_mem, buffer_usuario, tam);
         
         enviar_paquete(paquete_mem, socket_memoria);
@@ -806,6 +810,7 @@ init_proc(int socket_cliente){
 
 
 //EXIT
+
 exit_proceso(int socket_cpu){
 
     t_paquete* paquete = recibir_paquete(socket_cpu);
@@ -823,6 +828,18 @@ exit_proceso(int socket_cpu){
 
     enviar_op_code(OK, socket_cpu);
     
+}
+
+void enviar_proceso_finalizar_KM(int pid){
+    t_paquete* paquete = crear_paquete(ks_EXIT);
+    
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
+    
+    enviar_paquete(paquete, conexion.km);
+    
+    eliminar_paquete(paquete);
+    
+    log_info(logger, " Enviado a KM, PID: %u", pid);
 }
 
 void enviar_proceso_KM(uint32_t pid, op_code opCode) {

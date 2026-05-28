@@ -38,15 +38,17 @@ typedef enum
 
 
 
+t_contexto* contexto_actual; 
+t_instruccion* instruccion_decodificada; 
+
+t_cpu_sockets* sockets;
+
 typedef struct {
-    int pid;
-    uint32_t pc;
-    // Registros de 8 bits (uint8_t)
-    uint8_t ax, bx, cx, dx;
-    // Registros de 32 bits (uint32_t)
-    uint32_t eax, ebx, ecx, edx;
-    uint32_t si, di;
-} t_contexto;
+    int conexion_kernel_memory;
+    int conexion_kernel_scheduler;
+    int conexion_memory_stick;
+} t_cpu_sockets;
+
 
 typedef enum {
     NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT,

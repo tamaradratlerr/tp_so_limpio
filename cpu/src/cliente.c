@@ -68,6 +68,7 @@ int main(void)
 
     //Recibir PID
     int PID = recibir_pid(sockets->conexion_kernel_scheduler);
+    recibir_contexto(sockets -> conexion_kernel_memory)
 
     int control_loop = 1;
     while (control_loop == 1){
@@ -184,7 +185,57 @@ int recibir_pid (int socket_cliente){
     }
 }
 
+void recibir_contexto(socket_km){
+     //enviar_op_code(identificador, sockets->conexion_kernel_memory); "Idea para mejorar la comu"
 
+    // recibir el paquete (recibo un buffer del socket)
+    int buffer_size;
+    void* buffer = recibir_buffer(&buffer_size, socket_km);
+
+    // crear una estructura para almacenar lo recibido
+    t_contexto* nuevo_contexto = malloc(sizeof(t_contexto));
+
+    // Desempaquetar en el MISMO ORDEN
+    int offset = 0;
+
+    memcpy(&nuevo_contexto->pid, buffer + offset, sizeof(int));
+    offset += sizeof(int);
+
+    memcpy(&nuevo_contexto->pc, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Registros 8 bits
+    memcpy(&nuevo_contexto->ax, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->bx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->cx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->dx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+
+    // Registros 32 bits
+    memcpy(&nuevo_contexto->eax, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->ebx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->ecx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->edx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->si, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->di, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    //Tabla de Segmentos
+    memcpy(&nuevo_contexto->tabla_segmentos, buffer + offset, sizeof(t_list*));
+    offset += sizeof(uint32_t);
+
+    
+    free(buffer);
+
+}
 
 
 char* fetch() {
@@ -214,7 +265,7 @@ char* fetch() {
     
     return instruccion_raw;
 
-}
+}//CPU A K: su parte esta en manejar_pedido_instruccion_cpu
 
 
 
@@ -752,6 +803,9 @@ void enviar_contexto_a_kernel_memory() {
     agregar_a_paquete(paquete, &contexto_actual->edx, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
+
+    //tabla de segmentos
+    agregar_a_paquete(paquete, &contexto_actual->tabla_segmentos, sizeof(t_list*));
 
     enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);

@@ -17,12 +17,7 @@ typedef enum {
     ks_INIT_PROC,
     ks_EXIT
 } op_code;
-typedef struct {
-    uint8_t ax, bx, cx, dx;         // 8 bits
-    uint32_t eax, ebx, ecx, edx;    // 32 bits
-    uint32_t si, di;                // 32 bits
-    uint32_t pc;                    // 32 bits
-} t_registros;
+
 
 typedef struct {
     int id;
@@ -30,11 +25,6 @@ typedef struct {
     int limite;
 } t_segmento;
 
-typedef struct {
-    int pid;
-    t_registros registros;    
-    t_list* tabla_segmentos;  
-} t_contexto;
 
 typedef struct {
     int pid;

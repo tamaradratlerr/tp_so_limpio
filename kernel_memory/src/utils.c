@@ -40,9 +40,9 @@ t_contexto* crear_contexto(int pid) {
     ctx->pid = pid;
 
     //inicializar todos los registros asociados con el valor 0
-    memset(&(ctx->registros), 0, sizeof(ctx->registros));
+    memset(ctx, 0, sizeof(t_contexto));
     ctx->tabla_segmentos = list_create();
-
+    
     return ctx;
 }
 //MULTIHILO
@@ -171,7 +171,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
         list_destroy_and_destroy_elements(paquete, free); //recibir paquete usa memoria dinamica, libero el paquete pq no me sirve
         //evito memory leak
-
+        //se deberia hacer la parte de borrar del memory stick
         return;
     }
 
@@ -213,6 +213,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
     //libero el paquete recibido por socket
     list_destroy_and_destroy_elements(paquete, free);
 }
+
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
 
@@ -255,9 +256,12 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+
+//Se conecta con ks: stdout
 void manejar_lectura_memoria(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
-    int tamanio = *(int*)list_get(paquete, 1);
+    uint32_t dir_fisica = *(uint32_t)list_get(paquete, 1);
+    uint32_t tamanio = *(uint32_t*)list_get(paquete, 2);
 
     // MOCK: Devolvemos espacio simulado vacío
     void* datos_falsos = calloc(1, tamanio); 
@@ -269,8 +273,12 @@ void manejar_lectura_memoria(int socket_cliente) {
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+//Se conecta con ks: stdin
+//yo (tami) puse tambien el pid (te mando el pid)
 void manejar_escritura_memoria(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
+    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio = *(uint32_t*)list_get(paquete, 2);
 
     // MOCK: Respondemos con confirmación fija (OK = 1)
     int confirmacion = 1; 
@@ -281,6 +289,11 @@ void manejar_escritura_memoria(int socket_cliente) {
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+//falta poner que me envies lo que tengo que mostrar
+
+
+
+//VER NOTION PONER ENVIAR CONTEXTTO Y GUARDAR CONTEXTO
 void manejar_guardar_contexto(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
     
@@ -293,23 +306,23 @@ void manejar_guardar_contexto(int socket_cliente) {
         t_contexto* ctx = list_get(lista_contextos, indice);
         
         // Desempaquetamos absolutamente TODOS los registros en orden
-        ctx->registros.pc  = *(uint32_t*)list_get(paquete, 1);
+        ctx->pc  = *(uint32_t*)list_get(paquete, 1);
         
         
-        ctx->registros.ax  = *(uint8_t*)list_get(paquete, 2);
-        ctx->registros.bx  = *(uint8_t*)list_get(paquete, 3);
-        ctx->registros.cx  = *(uint8_t*)list_get(paquete, 4);
-        ctx->registros.dx  = *(uint8_t*)list_get(paquete, 5);
+        ctx->ax  = *(uint8_t*)list_get(paquete, 2);
+        ctx->bx  = *(uint8_t*)list_get(paquete, 3);
+        ctx->cx  = *(uint8_t*)list_get(paquete, 4);
+        ctx->dx  = *(uint8_t*)list_get(paquete, 5);
         
     
-        ctx->registros.eax = *(uint32_t*)list_get(paquete, 6);
-        ctx->registros.ebx = *(uint32_t*)list_get(paquete, 7);
-        ctx->registros.ecx = *(uint32_t*)list_get(paquete, 8);
-        ctx->registros.edx = *(uint32_t*)list_get(paquete, 9);
+        ctx->eax = *(uint32_t*)list_get(paquete, 6);
+        ctx->ebx = *(uint32_t*)list_get(paquete, 7);
+        ctx->ecx = *(uint32_t*)list_get(paquete, 8);
+        ctx->edx = *(uint32_t*)list_get(paquete, 9);
         
        
-        ctx->registros.si  = *(uint32_t*)list_get(paquete, 10);
-        ctx->registros.di  = *(uint32_t*)list_get(paquete, 11);
+        ctx->si  = *(uint32_t*)list_get(paquete, 10);
+        ctx->di  = *(uint32_t*)list_get(paquete, 11);
         
         pthread_mutex_unlock(&mutex_contextos);
         log_info(logger, "## Contexto Resguardado Completo - PID: %d - PC: %u", pid, ctx->registros.pc);
@@ -319,3 +332,43 @@ void manejar_guardar_contexto(int socket_cliente) {
 
     // Liberamos toda la memoria de la lista y sus elementos (incluyendo los registros que ya copiamos)
     list_destroy_and_destroy_elements(paquete, free);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//desalojo: identificar que hqay que hacer compactación y envair opcode a ks
+void enviar_desalojo_ks(int socket_ks){
+    //identificar compactacion --> ustedes la detectan y en el CP3 con facu la hacemos
+        /*
+            1. hacer memory stick
+            2. guardar procesos
+            3. identificar compactcion
+        
+        */
+
+    enviar_op_code(DESALOJO, socket_ks)
+}
+
+void enviar_contexto_cpu(coket_cpu){
+
+}
+
+
+void recibir_contexto_cpu(coket_cpu){
+    
+}

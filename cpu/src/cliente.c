@@ -1,14 +1,8 @@
 #include "cliente.h"
-#include <commons/log.h>
-#include <commons/config.h>
-#include <readline/readline.h>
-#include <string.h>
-#include <stdlib.h>
-
 
 int main(void)
 {
-    /* Iniciamos el Logger y Config*/
+    /* ---------------- Iniciamos el Logger y Config ----------------*/
     logger = iniciar_logger();
     t_config* config = iniciar_config();
 
@@ -21,22 +15,26 @@ int main(void)
 
     /* ---------------- CONEXIONES ---------------- */
 
-    sockets->conexion_kernel_memory    = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+       sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
     op_code handshake_km = recibir_operacion(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
     
     if(handshake_km != 1){
         log_error(logger, "Error en HandShake con Kernel Memory.");
+
+        return EXIT_FAILURE;
     }
 
     
 
-    sockets->conexion_memory_stick     = conexion_memory_stick(config, logger, MEMORY_STICK);
+    sockets->conexion_memory_stick = conexion_memory_stick(config, logger, MEMORY_STICK);
     enviar_op_code (NUEVA_CPU, sockets->conexion_memory_stick);
     op_code handshake_ms = recibir_operacion(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
     
      if(handshake_ms != 1){
         log_error(logger, "Error en HandShake con Memory Stick.");
+
+        return EXIT_FAILURE;
     }
     
     
@@ -47,6 +45,8 @@ int main(void)
     
      if(handshake_ks != 1){
         log_error(logger, "Error en HandShake con Kernel Scheduler.");
+
+        return EXIT_FAILURE;
     }
 
 
@@ -63,45 +63,41 @@ int main(void)
     log_info(logger, "Todas las conexiones establecidas con éxito");
 
 
-    //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
-    enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
-
-    //Recibir PID
-    int PID = recibir_pid(sockets->conexion_kernel_scheduler);
-    recibir_contexto(sockets -> conexion_kernel_memory)
-
-    int control_loop = 1;
-    while (control_loop == 1){
-    
-        char* instruccion_raw = fetch(sockets); 
-
-        if (instruccion_raw != NULL) {
-        decode(instruccion_raw); 
-        contexto_actual->pc++; // lo pongo aca y no despues de execute porque gemini me dice esto:
-        /*
-                Si la instrucción es un JMP o una instrucción de salto, el execute()
-                mismo puede sobreescribir el PC con una nueva dirección. Si hubieras incrementado
-                el PC después del execute, el valor del salto podría quedar mal calculado o ser sobrescrito incorrectamente.
-        */
-
-        //enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); "idea para mejorar la comu"
-        int cod_op = recibir_operacion(sockets->conexion_kernel_scheduler);
-        if (cod_op == DESALOJO) {
-            interrupciones();
-            continue; // Saltamos el ciclo de ejecución actual
-        }
+    /*----- SOLICITAMOS UN PROCESO -----*/
+    control_loop00 = 1;
+    while(control_loop00 == 1)
+    {
         
-        execute();
+        enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler); //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
+        proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
+
+        control_loop = 1;
+        while (control_loop == 1){
+        
+            char* instruccion_raw = fetch(sockets); /* Fase Fetch */
+            if (instruccion_raw == NULL) return EXIT_FAILURE;
+            
+            decode(instruccion_raw); /* Fase Decode */
+            
+            contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
+
+            execute(); /* Fase Execute */
+
+            enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
+            int cod_op = recibir_op_code (sockets->conexion_kernel_scheduler);
+            if (cod_op == DESALOJO) {
+                interrupciones();
+                continue; // Saltamos el ciclo de ejecución actual
+            }
         }
 
-        
-        
+            liberar_instruccion(instruccion_decodificada);
+            instruccion_decodificada = NULL;
+            proceso_en_ejecucion->pid = NULL;
+            control_loop00 = apagar(); //apagar sea una funcion que segun el valor de una variable global corta la cpu o no
     }
-
-        liberar_instruccion(instruccion_decodificada);
-        instruccion_decodificada = NULL;
-    
 }
+
 
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
@@ -174,89 +170,24 @@ int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {
 
 /* ---------------- IMPLEMENTACION DE CLICO DE INTRUCCION ---------------- */
 
-int recibir_pid (int socket_cliente){
-
-    int PID;
-    if (recv(socket_cliente, &PID, sizeof(int), MSG_WAITALL) > 0) {
-        return PID;
-    } else {
-        close(socket_cliente);
-        return -1; 
-    }
-}
-
-void recibir_contexto(socket_km){
-     //enviar_op_code(identificador, sockets->conexion_kernel_memory); "Idea para mejorar la comu"
-
-    // recibir el paquete (recibo un buffer del socket)
-    int buffer_size;
-    void* buffer = recibir_buffer(&buffer_size, socket_km);
-
-    // crear una estructura para almacenar lo recibido
-    t_contexto* nuevo_contexto = malloc(sizeof(t_contexto));
-
-    // Desempaquetar en el MISMO ORDEN
-    int offset = 0;
-
-    memcpy(&nuevo_contexto->pid, buffer + offset, sizeof(int));
-    offset += sizeof(int);
-
-    memcpy(&nuevo_contexto->pc, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-
-    // Registros 8 bits
-    memcpy(&nuevo_contexto->ax, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->bx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->cx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->dx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-
-    // Registros 32 bits
-    memcpy(&nuevo_contexto->eax, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->ebx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->ecx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->edx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->si, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->di, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-
-    //Tabla de Segmentos
-    memcpy(&nuevo_contexto->tabla_segmentos, buffer + offset, sizeof(t_list*));
-    offset += sizeof(uint32_t);
-
-    
-    free(buffer);
-
-}
-
-
 char* fetch() {
+
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 
              contexto_actual->pc);
 
     
-    //enviar_op_code(FETCH, sockets->kernel_memory); "Como sugerencia para que sea mejor la comu"
+    enviar_op_code(FETCH, sockets->kernel_memory); //Le informamos al KM que vamos a solicitarle una instruccion
 
-             // solicitud para la km
-    // FIJANOS QUE EL PPROTOCOLO CONCIDA CON KM (PID y PC)
-    t_paquete* paquete = crear_paquete(SOLICITUD_INSTRUCCION);
+    t_paquete* paquete = crear_paquete(FETCH);
     agregar_a_paquete(paquete, &(contexto_actual->pid), sizeof(int));
     agregar_a_paquete(paquete, &(contexto_actual->pc), sizeof(uint32_t));
 
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_kernel_memory); // Enviamos a KM los datos que necesita para identificar la intruccion
     eliminar_paquete(paquete);
 
-    // recibimos el string de la instrucción
-    char* instruccion_raw = recibir_string(sockets->conexion_kernel_memory); //Hacer recibir string
+    
+    char* instruccion_raw = recibir_mensaje(sockets->conexion_kernel_memory); // recibimos el string de la instrucción
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");
@@ -265,10 +196,7 @@ char* fetch() {
     
     return instruccion_raw;
 
-}//CPU A K: su parte esta en manejar_pedido_instruccion_cpu
-
-
-
+}
 
 void decode(char* instruccion_raw) {
     char** tokens = string_split(instruccion_raw, " ");
@@ -293,61 +221,6 @@ void decode(char* instruccion_raw) {
     string_iterate_lines(tokens, free);
     free(tokens);
     free(instruccion_raw);
-}
-
-
-
-// función para traducir el string al enum de instru
-
-t_instruccion_code identificar_codigo(char* token) {
-    if (strcmp(token, "NOOP") == 0)          return NOOP;
-    if (strcmp(token, "SET") == 0)           return SET;
-    if (strcmp(token, "SUM") == 0)           return SUM;
-    if (strcmp(token, "SUB") == 0)           return SUB;
-    if (strcmp(token, "JNZ") == 0)           return JNZ;
-    if (strcmp(token, "COPY_MEM") == 0)      return COPY_MEM;
-    if (strcmp(token, "MOV_IN") == 0)        return MOV_IN;
-    if (strcmp(token, "MOV_OUT") == 0)       return MOV_OUT;
-    if (strcmp(token, "MUTEX_CREATE") == 0)  return MUTEX_CREATE;
-    if (strcmp(token, "MUTEX_LOCK") == 0)    return MUTEX_LOCK;
-    if (strcmp(token, "MUTEX_UNLOCK") == 0)  return MUTEX_UNLOCK;
-    if (strcmp(token, "MEM_ALLOC") == 0)     return MEM_ALLOC;
-    if (strcmp(token, "MEM_FREE") == 0)      return MEM_FREE;
-    if (strcmp(token, "SLEEP") == 0)         return SLEEP;
-    if (strcmp(token, "STDOUT") == 0)        return STDOUT;
-    if (strcmp(token, "STDIN") == 0)         return STDIN;
-    if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
-    if (strcmp(token, "EXIT") == 0)          return EXIT;
-
-    // caso por defecto si no reconoce el comando
-    if (token == NULL) return EXIT;
-}
-
-
-
-void* obtener_registro(char* nombre) {
-    // registros de 8 bits
-    if (strcmp(nombre, "AX") == 0) return &(contexto_actual->ax);
-    if (strcmp(nombre, "BX") == 0) return &(contexto_actual->bx);
-    if (strcmp(nombre, "CX") == 0) return &(contexto_actual->cx);
-    if (strcmp(nombre, "DX") == 0) return &(contexto_actual->dx);
-
-    // registros de 32 bits
-    if (strcmp(nombre, "EAX") == 0) return &(contexto_actual->eax);
-    if (strcmp(nombre, "EBX") == 0) return &(contexto_actual->ebx);
-    if (strcmp(nombre, "ECX") == 0) return &(contexto_actual->ecx);
-    if (strcmp(nombre, "EDX") == 0) return &(contexto_actual->edx);
-    if (strcmp(nombre, "SI") == 0)  return &(contexto_actual->si);
-    if (strcmp(nombre, "DI") == 0)  return &(contexto_actual->di);
-    if (strcmp(nombre, "PC") == 0)  return &(contexto_actual->pc);
-
-    log_error(logger, "Registro inexistente: %s", nombre);
-    return NULL;
-}
-
-bool es_registro_32bits(char* nombre) {
-    // si empieza con E o es SI o DI o PC  es de 32 bits
-    return (nombre[0] == 'E' || strcmp(nombre, "SI") == 0 || strcmp(nombre, "DI") == 0 || strcmp(nombre, "PC") == 0);
 }
 
 void execute() {
@@ -432,6 +305,67 @@ void execute() {
     }
     
 }
+
+void interrupciones(){
+    //  sería la interrupción de COMPACTACIÖN por parte de la ks asi que habría que sacar el proceso
+    //  corriendo actualmente en esta cpu (y se lo enviamos a todas las cpus)
+
+    gestionar_desalojo_por_syscall(-1, DESALOJO);
+
+}
+
+/* ---------------- FUNCIONES COMPLEMENTARIAS PARA CICLO DE INTRUCCION ---------------- */
+
+t_instruccion_code identificar_codigo(char* token) { // función para traducir el string al enum de instru
+    if (strcmp(token, "NOOP") == 0)          return NOOP;
+    if (strcmp(token, "SET") == 0)           return SET;
+    if (strcmp(token, "SUM") == 0)           return SUM;
+    if (strcmp(token, "SUB") == 0)           return SUB;
+    if (strcmp(token, "JNZ") == 0)           return JNZ;
+    if (strcmp(token, "COPY_MEM") == 0)      return COPY_MEM;
+    if (strcmp(token, "MOV_IN") == 0)        return MOV_IN;
+    if (strcmp(token, "MOV_OUT") == 0)       return MOV_OUT;
+    if (strcmp(token, "MUTEX_CREATE") == 0)  return MUTEX_CREATE;
+    if (strcmp(token, "MUTEX_LOCK") == 0)    return MUTEX_LOCK;
+    if (strcmp(token, "MUTEX_UNLOCK") == 0)  return MUTEX_UNLOCK;
+    if (strcmp(token, "MEM_ALLOC") == 0)     return MEM_ALLOC;
+    if (strcmp(token, "MEM_FREE") == 0)      return MEM_FREE;
+    if (strcmp(token, "SLEEP") == 0)         return SLEEP;
+    if (strcmp(token, "STDOUT") == 0)        return STDOUT;
+    if (strcmp(token, "STDIN") == 0)         return STDIN;
+    if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
+    if (strcmp(token, "EXIT") == 0)          return EXIT;
+
+    // caso por defecto si no reconoce el comando
+    if (token == NULL) return EXIT;
+}
+
+void* obtener_registro(char* nombre) {
+    // registros de 8 bits
+    if (strcmp(nombre, "AX") == 0) return &(contexto_actual->ax);
+    if (strcmp(nombre, "BX") == 0) return &(contexto_actual->bx);
+    if (strcmp(nombre, "CX") == 0) return &(contexto_actual->cx);
+    if (strcmp(nombre, "DX") == 0) return &(contexto_actual->dx);
+
+    // registros de 32 bits
+    if (strcmp(nombre, "EAX") == 0) return &(contexto_actual->eax);
+    if (strcmp(nombre, "EBX") == 0) return &(contexto_actual->ebx);
+    if (strcmp(nombre, "ECX") == 0) return &(contexto_actual->ecx);
+    if (strcmp(nombre, "EDX") == 0) return &(contexto_actual->edx);
+    if (strcmp(nombre, "SI") == 0)  return &(contexto_actual->si);
+    if (strcmp(nombre, "DI") == 0)  return &(contexto_actual->di);
+    if (strcmp(nombre, "PC") == 0)  return &(contexto_actual->pc);
+
+    log_error(logger, "Registro inexistente: %s", nombre);
+    return NULL;
+}
+
+bool es_registro_32bits(char* nombre) {
+    // si empieza con E o es SI o DI o PC  es de 32 bits
+    return (nombre[0] == 'E' || strcmp(nombre, "SI") == 0 || strcmp(nombre, "DI") == 0 || strcmp(nombre, "PC") == 0);
+}
+
+/* ---------------- FUNCIONES DE EXECUTE POR INTRUCCION ---------------- */
 
 void ejecutar_noop (t_instruccion* instr){
 
@@ -607,13 +541,13 @@ void ejecutar_mutex_create(t_instruccion* instr){
 
     enviar_op_code (MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
     
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return //MARCAR EL ERROR.
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return EXIT_FAILURE;//MARCAR EL ERROR.
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
     
     log_info(logger, ""); //Completar LOG
 }
@@ -625,13 +559,13 @@ void ejecutar_mutex_lock (t_instruccion* instr){
 
     enviar_op_code (MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
 
     log_info (logger, ""); //Completar LOG
 }
@@ -643,13 +577,13 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
 
     enviar_op_code (MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
 
     log_info (logger, ""); //Completar LOG
 }
@@ -661,17 +595,17 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     op_code err;
 
     enviar_op_code (MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return EXIT_FAILURE; //MARCAR ERROR
 
     enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
 
 
     enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
     log_info (logger, ""); //Completar LOG
             
 }
@@ -682,53 +616,13 @@ void ejecutar_mem_free (t_instruccion* instr){
     op_code err;
 
     enviar_op_code (MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if(err != OK) return EXIT_FAILURE;
 
     enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
-    err = recibir_operacion (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return; //MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) return EXIT_FAILURE;
 
-}
-
-void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
-
-    //enviar_op_code(LEER_MEMORIA, sockets->conexion_kernel_memory); "idea pera mejorar la comu"
-   
-    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
-    t_paquete* paquete = crear_paquete(LEER_MEMORIA);
-    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(int));
-    
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
-    eliminar_paquete(paquete);
-
-    // recibir la respuesta (el buffer con los datos)
-    // asumiendo que el protocolo de las chicas devuelve un buffer de bytes
-    void* buffer = malloc(tamanio);
-    recibir_paquete(sockets->conexion_kernel_memory, buffer, tamanio); //deberiamos ver si no sirve un recibir paquete
-    
-    return buffer;
-}
-
-void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
-    
-    //enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_kernel_memory); "idea pera mejorar la comu"
-    
-    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
-    t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
-    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(int));
-    agregar_a_paquete(paquete, buffer, tamanio);
-    
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
-    eliminar_paquete(paquete);
-    
-    // esperar confirmación de la memoria
-    int resultado = recibir_operacion(sockets->conexion_kernel_memory);
-    if (resultado != OK) {
-        log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
-    }
 }
 
 void ejecutar_sleep(t_instruccion* instr) {
@@ -740,76 +634,6 @@ void ejecutar_sleep(t_instruccion* instr) {
     if (recibir_operacion(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
     }
-}
-
-void limpiar_contexto_actual() {
-    log_info(logger, "Limpiando contexto del proceso actual...");
-
-    if (contexto_actual != NULL) {
-        free(contexto_actual);
-        contexto_actual = NULL;
-    }
-
-    log_info(logger, "Contexto limpio. CPU lista para recibir nuevo PID.");
-}
-
-void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
-
-    enviar_contexto_a_kernel_memory(); 
-    t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
-
-    
-    if(strcmp(valor) == -1){
-        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    }
-    else{
-        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-        agregar_a_paquete(paquete, valor, strlen(valor) + 1);
-    }
-     
-    
-    //enviar_op_code (identificador, sockets->conexion_kernel_scheduler); "idea para que el KS sepa que va a recibir"
-
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
-
-    op_code status = recibir_operacion(sockets->conexion_kernel_scheduler);
-    
-    if(status == OK) {
-        log_info(logger, "Desalojo confirmado. Limpiando CPU.");
-        limpiar_contexto_actual();
-    }
-}
-
-void enviar_contexto_a_kernel_memory() {
-
-    //enviar_op_code(identificador, sockets->conexion_kernel_memory); "Idea para mejorar la comu"
-
-    t_paquete* paquete = crear_paquete(km_GUARDAR_CONTEXTO);
-
-    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));
-    
-    // Registros 8 bits
-    agregar_a_paquete(paquete, &contexto_actual->ax, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->bx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->cx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->dx, sizeof(uint8_t));
-    
-    // Registros 32 bits
-    agregar_a_paquete(paquete, &contexto_actual->eax, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->ebx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->ecx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->edx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
-
-    //tabla de segmentos
-    agregar_a_paquete(paquete, &contexto_actual->tabla_segmentos, sizeof(t_list*));
-
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
-    eliminar_paquete(paquete);
-
 }
 
 void ejecutar_stdout(t_instruccion* instr) {
@@ -883,8 +707,8 @@ void ejecutar_stdin(t_instruccion* instr) {
     gestionar_desalojo_por_syscall(-1, ks_IO_STDIN);
 }
 
-
 void ejecutar_init_proc(t_instruccion* instr) {
+   
     char* path = instr->params[0];
     int prioridad = atoi(instr->params[1]);
 
@@ -904,11 +728,12 @@ void ejecutar_init_proc(t_instruccion* instr) {
 }
 
 void ejecutar_exit() {
+    
     log_info(logger, "PID: %d - Ejecutando EXIT", contexto_actual->pid);
 
-    enviar_op_code(ks_EXIT, sockets->conexion_kernel_scheduler);
+    enviar_op_code(gl_EXIT, sockets->conexion_kernel_scheduler);
 
-    t_paquete* paquete = crear_paquete(ks_EXIT);
+    t_paquete* paquete = crear_paquete(gl_EXIT);
     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
@@ -916,18 +741,127 @@ void ejecutar_exit() {
     if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
+        control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
     }
 }
 
-/*  Cuando hagamos MMU tenemos que hacer:
-   1) pedir_direccion_a_mmu  
+/* ------------------ Funciones Auxiliares ------------------*/
 
-*/
+void limpiar_contexto_actual() {
+    log_info(logger, "Limpiando contexto del proceso actual...");
 
-void interrupciones(){
-    //  sería la interrupción de COMPACTACIÖN por parte de la ks asi que habría que sacar el proceso
-    //  corriendo actualmente en esta cpu (y se lo enviamos a todas las cpus)
+    if (contexto_actual != NULL) {
+        free(contexto_actual);
+        contexto_actual = NULL;
+    }
 
-    gestionar_desalojo_por_syscall(-1, DESALOJO);
+    log_info(logger, "Contexto limpio. CPU lista para recibir nuevo PID.");
+}
+
+void enviar_contexto_a_kernel_memory() {
+
+    int err;
+    
+    enviar_op_code (CONTEXTO, sockets->conexion_kernel_memory);
+
+    t_paquete* paquete = crear_paquete(CONTEXTO);
+
+    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));
+    
+    // Registros 8 bits
+    agregar_a_paquete(paquete, &contexto_actual->ax, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->bx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->cx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto_actual->dx, sizeof(uint8_t));
+    
+    // Registros 32 bits
+    agregar_a_paquete(paquete, &contexto_actual->eax, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->ebx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->ecx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->edx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
+
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    eliminar_paquete(paquete);
+
+    err = recibir_op_code (sockets->conexion_kernel_memory);
+    if (err != OK) return EXIT_FAILURE;
 
 }
+
+void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
+
+    enviar_op_code(LEER_MEMORIA, sockets->conexion_kernel_memory); 
+   
+    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
+    t_paquete* paquete = crear_paquete(LEER_MEMORIA);
+    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(int));
+    
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    eliminar_paquete(paquete);
+
+    // recibir la respuesta (el buffer con los datos)
+    // asumiendo que el protocolo del KM devuelve un buffer de bytes
+    void* buffer = malloc(tamanio);
+    buffer = recibir_paquete(sockets->conexion_kernel_memory);
+    
+    return buffer;
+}
+
+void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
+    
+    enviar_op_code(ESCRIBIR_MEM, sockets->conexion_kernel_memory);
+
+    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
+    t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
+    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(int));
+    agregar_a_paquete(paquete, buffer, tamanio);
+    
+    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    eliminar_paquete(paquete);
+    
+    // esperar confirmación de la memoria
+    int resultado = recibir_operacion(sockets->conexion_kernel_memory);
+    if (resultado != OK) {
+        log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
+        
+        return EXIT_FAILURE;
+    }
+}
+
+void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
+
+    enviar_contexto_a_kernel_memory(); 
+    t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
+
+    
+    if(strcmp(valor) == -1){
+        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    }
+    else{
+        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+        agregar_a_paquete(paquete, valor, strlen(valor) + 1);
+    }
+     
+    
+    //enviar_op_code (identificador, sockets->conexion_kernel_scheduler); "idea para que el KS sepa que va a recibir"
+
+    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
+    eliminar_paquete(paquete);
+
+    op_code status = recibir_operacion(sockets->conexion_kernel_scheduler);
+    
+    if(status == OK) {
+        log_info(logger, "Desalojo confirmado. Limpiando CPU.");
+        limpiar_contexto_actual();
+    }
+}
+
+int pedir_direccion_mmu (int32_t dir_logica){ //Hacer
+
+}
+

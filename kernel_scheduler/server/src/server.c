@@ -1,6 +1,6 @@
 #include "server.h"
 
-
+t_conexion conexion;
 
 int main(void) {
     pthread_mutex_init(&mutex_cpus, NULL);
@@ -8,7 +8,7 @@ int main(void) {
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
-    logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG);
+    logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG); 
     
     int server_fd = iniciar_servidor(); 
     log_info(logger, "Servidor listo para recibir clientes");
@@ -47,7 +47,7 @@ int main(void) {
     return EXIT_SUCCESS;
 }
 
-t_conexion conexion;
+
 
 
 /*----------------------------------FUNCIONES------------------------------------------*/
@@ -98,12 +98,12 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
             case ks_IO_STDIN: 
                 // viene de la cpu 
-                IO* io = queue_pop(list_suplementarias -> io_ready)
+                IO* io = queue_pop(list_suplementarias -> io_ready);
                 io_stdin(cliente_fd, io.fd); 
                 break;
 
             case ks_IO_STDOUT: 
-                IO* io = queue_pop(list_suplementarias -> io_ready)
+                IO* io = queue_pop(list_suplementarias -> io_ready);
                 atender_io_stdout(cliente_fd, io.d); 
                 break;
 
@@ -193,8 +193,6 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
 
 
 void agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista correspondiente segun PCB->ESTADO_ACTUAL.*/
-
-	sacar_proceso_lista();//Funcion pensada para tomar estado anterior y sacarlo de esa lista.
 	
     switch (pcb->estado_pcb){
 	case NEW: //NEW
@@ -336,28 +334,61 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     pcb ->estado_pcb = nuevoEstado;
 }
 
-int enviar_pid(int PCB_ID, int socket_cliente){ /* Funcion que manda PCB a un cliente */
-	
-    t_paquete* paquete = malloc(sizeof(t_paquete));
+PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
+    t_list* listas_a_revisar[] = { 
+        listaProcesos-> new, listaProcesos->rdy, 
+        listaProcesos-> rnn, listaProcesos->bck, 
+        listaProcesos-> ext 
+    };
 
-	paquete->codigo_operacion = PCB_DATA;
-	paquete->buffer = malloc(sizeof(t_buffer));
-	paquete->buffer->size = sizeof(int);
-	paquete->buffer->stream = malloc(paquete->buffer->size);
-	memcpy(paquete->buffer->stream, PCB_ID, paquete->buffer->size);
+    for (int i = 0; i < 5; i++) {
+        t_list* lista_actual = listas_a_revisar[i];
+        
+        t_list_iterator* it = list_iterator_create(lista_actual);
+        while (list_iterator_has_next(it)) {
+            PCB* pcb = (PCB*) list_iterator_next(it);
+            if (pcb->pid == pid_recibido) {
+                list_iterator_destroy(it);
+                return pcb; 
+            }
+        }
+        list_iterator_destroy(it);
+    }
 
-	int bytes = paquete->buffer->size + 2*sizeof(int);
+    return NULL; 
 
-	void* a_enviar = serializar_paquete(paquete, bytes);
-
-	send(socket_cliente, a_enviar, bytes, 0);
-
-	free(a_enviar);
-	eliminar_paquete(paquete);
-
-    return 1;
 }
 
+PCB* encontrar_pcb_rnn_por_pid(int pid) {
+    pthread_mutex_lock(&sem_procesos_exit); 
+
+    PCB* pcb_buscado = NULL;
+    
+    for (int i = 0; i < list_size(listasProcesos -> rnn); i++) {
+        PCB* pcb_actual = list_get(listasProcesos -> rnn, i);
+        if (pcb_actual->data.PID == pid) {
+            pcb_buscado = pcb_actual;
+            break;
+        }
+    }
+    
+    pthread_mutex_unlock(&sem_procesos_exit);
+    return pcb_buscado;
+}
+
+PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) {
+    
+    for (int i = 0; i < list_size(listasProcesos->rnn); i++) {
+        
+        PCB* pcb_en_cpu = (PCB*) list_get(listasProcesos->rnn, i);
+
+        if (pcb_en_cpu != NULL && pcb_en_cpu->pid == pid_a_finalizar) {
+            return pcb_en_cpu;
+        }
+    }
+    
+    return NULL;
+}
 
 /*-----                     GESTION DE CPUs                     -----*/
 
@@ -415,8 +446,6 @@ bool es_la_cpu_buscada(void* elemento, void* contexto) {
     return (cpu->fd == socket_buscado) && (cpu->enUso == false);
 }
 
-
-
 void enviar_desalojo(int socket_cliente){/* HACER  */
    
     
@@ -433,15 +462,9 @@ void enviar_desalojo(int socket_cliente){/* HACER  */
 
 /*-----                     GESTION DE OP_CODEs                     -----*/
 
-    //OK, 
-    //NOTOK,
-    
-    //MENSAJE,
-	//PAQUETE, 
-
-	//con la CPU
+/*-----Con la CPU-----*/
 	
-    //NUEVA_CPU,
+//NUEVA_CPU,
 void nueva_cpu (int cliente_fd) {
 
         CPU* info_cpu = malloc(sizeof(CPU));
@@ -471,8 +494,9 @@ void fin_proceso (int cliente_fd){ /*HACER*/
 
 
 }
-    //DESALOJO,
+//DESALOJO,
 void deslojarTodasCpus() {
+    
     int cantidad = list_size(list_suplementarias->cpu);
     
     for(int i = 0; i < cantidad; i++) {
@@ -481,11 +505,10 @@ void deslojarTodasCpus() {
     }
 }
 
-    //PCB,
 
-    //syscalls de la CPU --- Descripcion de cada una esta en el TP.
+/*----syscalls de la CPU --- Descripcion de cada una esta en el TP-----*/
     
-    //MUTEX_CREATE,
+//MUTEX_CREATE,
 void mutex_create (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
@@ -502,7 +525,7 @@ void mutex_create (int socket_cliente){
         enviar_op_code(OK, socket_cliente);
         
     }
-    //MUTEX_LOCK,
+//MUTEX_LOCK,
 void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
@@ -524,7 +547,7 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
     }
-    //MUTEX_UNLOK,
+//MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
@@ -537,11 +560,55 @@ void mutex_unlock (int socket_cliente){
         mutex->valor = 1;
         pthread_mutex_unlock (&mutex_simulados);
     }
-    //MEM_ALLOC,
-    //MEM_FREE,
-   
+//MEM_ALLOC,
+void mem_alloc (); //Hacer
+//MEM_FREE,
+void mem_free (); // Hacer
+//INIT PROC
+void init_proc(int socket_cliente){
+    t_paquete* paquete = recibir_paquete(socket_cliente);
+    char* path = (char*)paquete->buffer->stream;
+    int prioridad = *(int*)(paquete->buffer->stream + strlen(path) + 1);
 
-    //SLEEP
+    log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
+
+    crearNuevoProceso(logger, path, sockets.conexion_memoria)
+
+    if (recibir_operacion(sockets.conexion_memoria) == OK) {
+    log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->pid);
+                    
+    pthread_mutex_lock(&mutex_ready);
+    cambiar_estado_pcb(nuevo_pcb, RDY);
+    agregar_lista_ready(nuevo_pcb);
+    pthread_mutex_unlock(&mutex_ready);
+                    
+    }
+                
+    eliminar_paquete(paquete);
+}
+//EXIT
+void exit_proceso(int socket_cpu){
+
+    t_paquete* paquete = recibir_paquete(socket_cpu);
+    int pid_a_finalizar = *(int*)paquete->buffer->stream;
+    eliminar_paquete(paquete);
+
+    log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
+
+    enviar_proceso_finalizar_KM(pid_a_finalizar);
+    
+    PCB* pcb = encontrar_pcb_en_running(pid_a_finalizar);
+    if (pcb != NULL) {
+        eliminar_proceso_Lista(pcb);
+    }
+
+    enviar_op_code(OK, socket_cpu);
+    
+}
+
+/*-----Con la IO-----*/
+
+//SLEEP
 void sleep(int socket_cpu, int socket_io) {
 
     t_paquete* paquete_cpu = recibir_paquete(socket_cpu);
@@ -593,31 +660,7 @@ void sleep(int socket_cpu, int socket_io) {
         enviar_op_code(ERROR, socket_cpu);
     }
 }
-
-
-PCB* encontrar_pcb_rnn_por_pid(int pid) {
-    pthread_mutex_lock(&sem_procesos_exit); 
-
-    PCB* pcb_buscado = NULL;
-    
-    for (int i = 0; i < list_size(istasProcesos -> rnn); i++) {
-        PCB* pcb_actual = list_get(istasProcesos -> rnn, i);
-        if (pcb_actual->pid == pid) {
-            pcb_buscado = pcb_actual;
-            break;
-        }
-    }
-    
-    pthread_mutex_unlock(&sem_procesos_exit);
-    return pcb_buscado;
-}
-
-    
-    //MEM_CORRUPT, /*cortar todo con esta*/
-
-	//con la IO
-
-
+//NUEVA_IO
 void nueva_io (void* arg){
 
     int cliente_fd = (intptr_t)arg;
@@ -640,8 +683,6 @@ void nueva_io (void* arg){
                 
     log_info(logger, "IO '%s' registrada en el socket %d", info_io->nombre, cliente_fd);
 }
-
-
 // STDIN
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     //recibimos de CPU
@@ -700,10 +741,8 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     eliminar_paquete(paquete_io);
 
 }
-
-
 // STDOUT
-void atender_io_stdout(t_list* lista, int io_socket) {
+void io_stdout(t_list* lista, int io_socket) {
 
     // deserializar lo que viene de la CPU
     uint32_t pid = *(uint32_t*)list_get(lista, 0);
@@ -756,79 +795,13 @@ void atender_io_stdout(t_list* lista, int io_socket) {
 }
 
 
-PCB* buscar_pcb_por_pid(uint32_t pid_recibido) {
-    t_list* listas_a_revisar[] = { 
-        ListaProcesos-> new, ListaProcesos->rdy, 
-        ListaProcesos-> rnn, ListaProcesos->bck, 
-        ListaProcesos-> ext 
-    };
+/*-----Con el Kernel Memory-----*/
 
-    for (int i = 0; i < 5; i++) {
-        t_list* lista_actual = listas_a_revisar[i];
-        
-        t_list_iterator* it = list_iterator_create(lista_actual);
-        while (list_iterator_has_next(it)) {
-            PCB* pcb = (PCB*) list_iterator_next(it);
-            if (pcb->pid == pid_recibido) {
-                list_iterator_destroy(it);
-                return pcb; 
-            }
-        }
-        list_iterator_destroy(it);
-    }
-
-    return NULL; 
-
-}
-
-//INIT PROC
-init_proc(int socket_cliente){
-    t_paquete* paquete = recibir_paquete(socket_cliente);
-    char* path = (char*)paquete->buffer->stream;
-    int prioridad = *(int*)(paquete->buffer->stream + strlen(path) + 1);
-
-    log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
-
-    crearNuevoProceso(logger, path, sockets.conexion_memoria)
-
-    if (recibir_operacion(sockets.conexion_memoria) == OK) {
-    log_info(logger, "Proceso %d cargado en memoria.", nuevo_pcb->pid);
-                    
-    pthread_mutex_lock(&mutex_ready);
-    cambiar_estado_pcb(nuevo_pcb, RDY);
-    agregar_lista_ready(nuevo_pcb);
-    pthread_mutex_unlock(&mutex_ready);
-                    
-    }
-                
-    eliminar_paquete(paquete);
-}
+//MEM_CORRUPT
+void mem_corrupt (); // Hacer
 
 
-
-
-
-
-//EXIT
-
-exit_proceso(int socket_cpu){
-
-    t_paquete* paquete = recibir_paquete(socket_cpu);
-    int pid_a_finalizar = *(int*)paquete->buffer->stream;
-    eliminar_paquete(paquete);
-
-    log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
-
-    enviar_proceso_finalizar_KM(pid_a_finalizar);
-    
-    PCB* pcb = encontrar_pcb_en_running(pid_a_finalizar);
-    if (pcb != NULL) {
-        eliminar_proceso_Lista(pcb);
-    }
-
-    enviar_op_code(OK, socket_cpu);
-    
-}
+/*-----                     AUXILIARES                     -----*/
 
 void enviar_proceso_finalizar_KM(int pid){
     t_paquete* paquete = crear_paquete(ks_EXIT);
@@ -853,20 +826,6 @@ void enviar_proceso_KM(uint32_t pid, op_code opCode) {
     eliminar_paquete(paquete);
     
     log_info(logger, " Enviado a KM, PID: %u", pid);
-}
-
-PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) {
-    
-    for (int i = 0; i < list_size(listasProcesos->rnn); i++) {
-        
-        PCB* pcb_en_cpu = (PCB*) list_get(listasProcesos->rnn, i);
-
-        if (pcb_en_cpu != NULL && pcb_en_cpu->pid == pid_a_finalizar) {
-            return pcb_en_cpu;
-        }
-    }
-    
-    return NULL;
 }
 
 bool es_el_mutex_buscado(void* elemento, void* contexto) {

@@ -17,8 +17,6 @@
 #include <semaphore.h> 
 #include <pthread.h>  
 
-extern t_log* logger;
-int PUERTO;
 
 typedef enum {
     
@@ -31,61 +29,62 @@ typedef enum {
 
 } module_name;
 
-typedef enum //Todos los Posibles intercambios de informacion con la CPU, IO y KM.
+typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y KM.
 {
-	
-    OK, /* "Funciona para el HandShake" */
-    NOTOK, /* "Funciona para el HandShake" */
+    // Handshake
+    OK, //El Handsaheke funciono correctamente
+    NOTOK, //El Handshake no funciono correctamente 
+
+    // Generales
+    MENSAJE, //Pasaje de STRING
+    PAQUETE, //Pasaje de datos Varios
+
+    // CPU
+    NUEVA_CPU, //Se informa que hay una nueva CPU
+    CPU_LIBRE, //Se informa que una CPU no tiene ningun PCB asociado
+
+    // Extras para CPU
+    FIN_PROCESO, //Se informa que el proceso que estaba en la CPU finalizo
+    DESALOJO, //Se informa que se debe desalojar al proceso que esta en la CPU
+    PCB_DATA, //Se envia informacion como un PCB (PID)
+
+    // Syscalls de la CPU (Kernel Scheduler)
+    gl_MUTEX_CREATE,
+    gl_MUTEX_LOCK,
+    gl_MUTEX_UNLOK, 
+    gl_MEM_ALLOC,
+    gl_MEM_FREE,
+    gl_IO_SLEEP,
+    gl_IO_STDOUT,
+    gl_IO_STDIN,
+    gl_INIT_PROC,
+    gl_EXIT,
     
-    MENSAJE, 
-	PAQUETE, 
+    // CPU con la Memory Stick
+    FETCH_INSTRUCCION,
+    LLEGO_INSTRUCCION,
 
-	//con la CPU
-	NUEVA_CPU,
-    CPU_LIBRE,
-    FIN_PROCESO,
-    DESALOJO,
-    PCB_DATA,
+    //Ciclos CPU (para CPU -> KM)
+    FETCH,
+    LEER_MEM,
+    ESCRIBIR_MEM,
+    CONTEXTO,
 
-    //syscalls de la CPU --- Descripcion de cada una esta en el TP.
-    MUTEX_CREATE,
-    MUTEX_LOCK,
-    MUTEX_UNLOK,
-    MEM_ALLOC,
-    MEM_FREE,
-    ks_INIT_PROC,
-    ks_EXIT,
-
-
-    //con el KM
-    MEM_CORRUPT, //cortar todo con esta
-
-    NUEVA_IO,
-    DESALOJO_IO_SLEEP,
-    ATENDER_INSTRUCCION_IO,
-    DESALOJO_IO_STDOUT,
-    ks_BLOQUEAR_PROCESO,
-    IO_LIBRE,
-    km_IO_STDOUT,
-    km_IO_STDIN,
-
-    //cpu con km
-    ks_SLEEP,
-    ks_IO_STDOUT,
-	ks_IO_STDIN,
-    ERROR,
+    //KM
+    MEM_CORRUPT, //ERROR que al recirbirlo por parte del KS (viene del KM) debe terminar todos los procesos y apagarse
     
+    km_IO_STDOUT, //Devolucion del IO STDOUT por parte de la KM
+    km_IO_STDIN, //Devolucion del IO STDIN por parte de la KM
+
+    // IO
+    NUEVA_IO, //Se informa que hay una nueva IO
+    IO_LIBRE, //Se informa que una cpu no tiene ningun PCB asociado
+
+    io_STDOUT, //Devolucion del IO STDOUT por parte de la IO
+    io_STDIN, //Devolucion del IO STDIN por parte de la IO
 
 
-    //de la io al ks
-    IO_STDIN_RETORNO,
-    IO_STDOUT_RETORNO,
-
-    /* Codigos de operacion de IO */
-    STDIN,
-	STDOUT,
-	SLEEP
-}op_code;
+} op_code;
 
 typedef struct {
     uint32_t size; // Tamaño del payload
@@ -177,7 +176,6 @@ typedef struct {
 /*-----     FUNCIONES     -----*/
 
 /*-----     COMUNICACION CLIENTE - SERVIDOR     -----*/
-
 int crear_conexion(char *ip, char* puerto, t_log*, module_name module);
 
 const char* getModuleName(module_name module);
@@ -200,7 +198,7 @@ void liberar_conexion(int socket_cliente);
 
 void* recibir_buffer(int* size, int socket_cliente);
 
-op_code recibir_operacion(int socket_cliente);
+op_code recibir_op_code (int socket_cliente);
 
 t_list* recibir_paquete(int);
 
@@ -211,5 +209,9 @@ char* recibir_mensaje(int);
 int esperar_cliente(int);
 
 int iniciar_servidor(void);
+
+int recibir_pid (int socket_cliente);
+
+int enviar_pid(int PCB_ID, int socket_cliente);
 
 #endif /* GLOBAL_UTILS_H_ */

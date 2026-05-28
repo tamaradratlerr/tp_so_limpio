@@ -1,5 +1,15 @@
 #include "utilsKS.h"
 
+void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+    
+    
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
+	
+    enviarProcesoKM(nuevoPcb, path, fd_km);
+
+	contador_pid++;
+}
+
 /*------     PCB     -----*/
 
 PCB* iniciar_pcb (int PID, int PPID, int UID){
@@ -46,17 +56,6 @@ IO* buscar_io_por_nombre(char* nombre_buscado) {
 
     return io_encontrada;
 }
-
-void crearNuevoProceso(t_log* logger, char* path, int fd_km) {
-    
-    
-    PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
-	
-    enviarProcesoKM(nuevoPcb, path, fd_km);
-
-	contador_pid++;
-}
-
 
 // Auxiliar para buscar la IO por su FILE DESCRIPTOR (Socket)
 IO* buscar_io_por_fd(int fd_buscado) {

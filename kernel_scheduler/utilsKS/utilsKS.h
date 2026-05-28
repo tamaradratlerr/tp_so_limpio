@@ -3,9 +3,6 @@
 
 #include "../../utils/src/global_utils.h"
 
-t_config* config = NULL;
-
-
 typedef struct{
     int km, cpu, io;
 } t_conexion;

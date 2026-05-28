@@ -249,3 +249,25 @@ char* recibir_mensaje (int socket_cliente)
 void iterator(char* value) {
 	log_info(logger,"%s", value);
 }
+
+int enviar_pid(int PCB_ID, int socket_cliente){ /* Funcion que manda PCB a un cliente */
+	
+    t_paquete* paquete = malloc(sizeof(t_paquete));
+
+	paquete->codigo_operacion = PCB_DATA;
+	paquete->buffer = malloc(sizeof(t_buffer));
+	paquete->buffer->size = sizeof(int);
+	paquete->buffer->stream = malloc(paquete->buffer->size);
+	memcpy(paquete->buffer->stream, PCB_ID, paquete->buffer->size);
+
+	int bytes = paquete->buffer->size + 2*sizeof(int);
+
+	void* a_enviar = serializar_paquete(paquete, bytes);
+
+	send(socket_cliente, a_enviar, bytes, 0);
+
+	free(a_enviar);
+	eliminar_paquete(paquete);
+
+    return 1;
+}

@@ -1,4 +1,5 @@
 #include "client.h"
+t_log* logger;
 
 int main(int argc, char** argv)
 {
@@ -13,7 +14,6 @@ int main(int argc, char** argv)
 	char* log_process_name;
 	char* log_is_active_console;
 	char* io = argv[2];
-	t_log* logger;
 
 	/* Inicio configuración */
 	t_config* io_config = iniciar_config(argv[1]);
@@ -40,18 +40,16 @@ int main(int argc, char** argv)
 	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
 	log_info(logger, "Esperando peticiones IO desde %s", getModuleName(KERNEL_SCHEDULER));
 	
-	int status = 0;
-
-	while (status != -1)
+	while (1)
     {
 		/* Bucle principal de la IO */
-        status = atender_peticiones_del_KS(fd_conexion, logger);
-		op_code cod_op = recibir_operacion(fd_conexion);
+		op_code cod_op = recibir_op_code(fd_conexion);
 		
 
 		switch (cod_op) {
-		case SLEEP:{
-			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+		case IO_SLEEP:{
+			t_list* lista = recibir_paquete(fd_conexion);
+			t_paquete* paquete_io = list_get(lista, 0);
 			
 			t_io_sleep* datos = (t_io_sleep*)paquete_io->buffer->stream;
 			
@@ -66,11 +64,14 @@ int main(int argc, char** argv)
 			enviar_mensaje("Finalizo OK", fd_conexion);
 			enviar_opcode(fd_conexion, IO_LIBRE);
 			eliminar_paquete(paquete_io);
+			list_destroy(lista);
 			break;}
 
-		case STDIN: {
+		case IO_STDIN: {
 			// recibir del ks la instrucción
-			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			t_list* lista = recibir_paquete(fd_conexion);
+			t_paquete* paquete_io = list_get(lista, 0);
+			
 			t_io_stdin_recv* datos_stdin = (t_io_stdin_recv*)paquete_io->buffer->stream;
 			
 			uint32_t pid = datos_stdin->pid;
@@ -95,12 +96,14 @@ int main(int argc, char** argv)
 			enviar_opcode(fd_conexion, IO_LIBRE);
 			free(buffer_usuario);
 			eliminar_paquete(paquete_io);
+			list_destroy(lista);
 			eliminar_paquete(paquete_retorno);
 			break;}
 
-		case STDOUT: {
+		case IO_STDOUT: {
 			// recibir del ks
-			t_paquete* paquete_io = recibir_paquete(fd_conexion);
+			t_list* lista = recibir_paquete(fd_conexion);
+			t_paquete* paquete_io = list_get(lista, 0);
 			
 			// Deserializar [pid, tam, datos]
 			uint32_t pid, tam;
@@ -123,6 +126,7 @@ int main(int argc, char** argv)
 			enviar_opcode(fd_conexion, IO_LIBRE);
 			free(datos_a_imprimir);
 			eliminar_paquete(paquete_io);
+			list_destroy(lista);
 			eliminar_paquete(paquete_fin);
 			break;
 		}
@@ -171,11 +175,10 @@ t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_
 {
 	t_log* nuevo_logger;
 
-	char *file = file;
-	char *process_name = process_name;
-	bool is_active_console = is_active_console;
 	t_log_level level;
-
+	
+	bool active = (strcmp(is_active_console, "true") == 0);
+	
 	//Condicional que me permite modificar el nivel del log a partir de lo recibido en el .config//
 	if (strcmp(log_level, "INFO") == 0)
 	{
@@ -186,7 +189,7 @@ t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_
 		level = LOG_LEVEL_DEBUG;
 	}
 	
-	nuevo_logger = log_create(file, process_name, is_active_console, level);
+	nuevo_logger = log_create(file, process_name, active, level);
 	
 	return nuevo_logger;
 }

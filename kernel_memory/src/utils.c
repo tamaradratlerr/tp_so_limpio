@@ -86,7 +86,7 @@ void manejar_crear_proceso(int socket_cliente) {
     while (fgets(linea, sizeof(linea), archivo) != NULL) { 
       
         char* instruccion_duplicada = strdup(linea); 
-        string_trim(instruccion_duplicada); 
+        string_trim(&instruccion_duplicada); 
         list_add(instrucciones, instruccion_duplicada);
 
     fclose(archivo);

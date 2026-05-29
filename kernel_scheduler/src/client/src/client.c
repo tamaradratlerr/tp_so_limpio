@@ -11,10 +11,10 @@ int main(void)
 
 	info_km.ip_km = config_get_string_value(config, "IP_KM");
 	info_km.puerto_km = config_get_string_value(config, "PUERTO_KM");
-	planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
-	listas_algortimo = config_get_string_value(config, "QUEUES_ALGORITHMS");
-	intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
-	tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
+	info_config.planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
+	info_config.listas_algortimo = config_get_string_value(config, "QUEUES_ALGORITHMS");
+	info_config.intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
+	info_config.tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
 
 	/*---------------------------------------------------CONEXION CON KM-------------------------------------------------------------*/
 

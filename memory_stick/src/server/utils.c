@@ -77,7 +77,7 @@ int esperar_cliente(int socket_servidor)
 	return socket_cliente;
 }
 
-int recibir_operacion(int socket_cliente)
+int recibir_op_code(int socket_cliente)
 {
 	int cod_op;
 	if(recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
@@ -157,7 +157,7 @@ void* atender_cliente(void* arg) {
     t_list* lista;
 
     while (1) {
-        int cod_op = recibir_operacion(cliente_fd);
+        int cod_op = recibir_op_code(cliente_fd);
 
         switch (cod_op) {
         case MENSAJE:

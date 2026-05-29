@@ -1,16 +1,18 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-#include <utilsKS/utilsKS.h>
-typedef struct {
-    int pid;
-    uint32_t pc;
-    // Registros de 8 bits (uint8_t)
-    uint8_t ax, bx, cx, dx;
-    // Registros de 32 bits (uint32_t)
-    uint32_t eax, ebx, ecx, edx;
-    uint32_t si, di;
-} t_contexto;
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<signal.h>
+#include<unistd.h>
+#include<sys/socket.h>
+#include<netdb.h>
+#include<string.h>
+#include<commons/log.h>
+
+#include<commons/collections/list.h>
+#include <global_utils.h>
 
 typedef enum {
     NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT,

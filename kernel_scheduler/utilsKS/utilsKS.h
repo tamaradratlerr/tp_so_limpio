@@ -8,19 +8,24 @@ int contador_pid = 0;
 
 char* ip;
 char* puerto;
-char* valor, *planificacion_algoritmo, *listas_algortimo;	int intervalo_tarea, tiempo_suspencion;	int intervalo_tarea, tiempo_suspencion;
+char* valor;
 //t_log* logger; ME PARAECE QUE EL LOGGER TIENE QUE SER UNO PARA CLIENTE Y OTRO PARA SERVIDOR
 
 t_listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
 t_listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
 t_list* lista_mutex;
 t_info_km info_km;
+t_info_config info_config;
 
 typedef struct{
     char *ip_km, *puerto_km;
     int conexion_km;
 }t_info_km;
 
+typedef struct{
+    char* *planificacion_algoritmo, *listas_algortimo;
+    int intervalo_tarea, tiempo_suspencion;
+}t_info_config;
 
 //Estructura de dato que identifica todas las listas de los procesos
 typedef struct

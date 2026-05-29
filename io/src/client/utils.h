@@ -12,42 +12,7 @@
 #include<commons/log.h>
 
 #include<commons/collections/list.h>
-
-
-typedef enum
-{
-	GENERIC,
-    MENSAJE,
-	PAQUETE,
-
-    STDIN,
-	STDOUT,
-	SLEEP,
-} op_code;
-
-/* Este ya no va mas */
-typedef struct
-{
-	int size;
-	void* stream;
-} t_buffer;
-
-
-typedef struct {
-    uint32_t size; // Tamaño del payload
-    uint32_t offset; // Desplazamiento dentro del payload
-    void* stream; // Payload
-} t_buffer;
-
-typedef struct
-{
-	op_code codigo_operacion;
-	t_buffer* buffer;
-} t_paquete;
-
-
-//void enviar_mensaje(char* mensaje, int socket_cliente);
-
+#include <global_utils.h>
 /* Creación de paquete segun tipo de io */
 t_paquete* crear_paquete_io(op_code);
 

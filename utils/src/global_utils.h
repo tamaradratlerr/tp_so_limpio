@@ -76,11 +76,18 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     ENVIAR_PROCESO,
     km_IO_STDOUT, //Devolucion del IO STDOUT por parte de la KM
     km_IO_STDIN, //Devolucion del IO STDIN por parte de la KM
+    SOLICITUD_INSTRUCCION,
+    km_GUARDAR_CONTEXTO,
+    ks_INIT_PROC,
+    ks_EXIT,
+    NUEVO_KERNEL,
 
     // IO
     NUEVA_IO, //Se informa que hay una nueva IO
     IO_LIBRE, //Se informa que una cpu no tiene ningun PCB asociado
-
+    IO_STDIN,
+    IO_STDOUT,
+    IO_SLEEP,
     IO_STDOUT_RETORNO, //Devolucion del IO STDOUT por parte de la IO
     IO_STDIN_RETORNO, //Devolucion del IO STDIN por parte de la IO
 
@@ -139,7 +146,7 @@ typedef struct
 typedef struct{
     int fd; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
-}CPU;
+}t_CPU;
 
 
 
@@ -210,7 +217,7 @@ char* recibir_mensaje(int);
 
 int esperar_cliente(int);
 
-int iniciar_servidor(void);
+int iniciar_servidor(char* puerto);
 
 int recibir_pid (int socket_cliente);
 

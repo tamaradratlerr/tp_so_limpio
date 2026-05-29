@@ -1,7 +1,20 @@
 #include "cliente.h"
 
+t_config* config;
+t_log* logger;
+t_contexto* contexto_actual;
+t_instruccion* instruccion_decodificada;
+t_cpu_sockets* sockets;
+t_proceso_ejec* proceso_en_ejecucion;
+
+int control_loop00;
+int control_loop;
+
 int main(void)
 {
+    sockets = malloc(sizeof(t_cpu_sockets));
+    proceso_en_ejecucion = malloc(sizeof(t_proceso_ejec));
+
     /* ---------------- Iniciamos el Logger y Config ----------------*/
 
     t_log* logger = iniciar_logger();
@@ -19,7 +32,7 @@ int main(void)
 
     sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
-    op_code handshake_km = recibir_operacion(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
+    op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
     
     if(handshake_km != 1){
         log_error(logger, "Error en HandShake con Kernel Memory.");
@@ -31,7 +44,7 @@ int main(void)
 
     sockets->conexion_memory_stick = conexion_memory_stick(config, logger, MEMORY_STICK);
     enviar_op_code (NUEVA_CPU, sockets->conexion_memory_stick);
-    op_code handshake_ms = recibir_operacion(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
+    op_code handshake_ms = recibir_op_code(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
     
      if(handshake_ms != 1){
         log_error(logger, "Error en HandShake con Memory Stick.");
@@ -43,7 +56,7 @@ int main(void)
     
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_scheduler);
-    op_code handshake_ks = recibir_operacion(sockets->conexion_kernel_scheduler); //Se espera que se devueva el op_code OK (1)
+    op_code handshake_ks = recibir_op_code(sockets->conexion_kernel_scheduler); //Se espera que se devueva el op_code OK (1)
     
      if(handshake_ks != 1){
         log_error(logger, "Error en HandShake con Kernel Scheduler.");
@@ -124,15 +137,15 @@ t_config* iniciar_config(void)
     return nuevo_config;
 }
 
-void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets sockets)
+void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets)
 {
     if(logger) log_destroy(logger);
     if(config) config_destroy(config);
     
     // Cerramos todos los sockets abiertos
-    liberar_conexion(sockets.conexion_kernel_memory);
-    liberar_conexion(sockets.conexion_kernel_scheduler);
-    liberar_conexion(sockets.conexion_memory_stick);
+    liberar_conexion(sockets -> conexion_kernel_memory);
+    liberar_conexion(sockets -> conexion_kernel_scheduler);
+    liberar_conexion(sockets -> conexion_memory_stick);
 }
 
 
@@ -179,7 +192,7 @@ char* fetch() {
              contexto_actual->pc);
 
     
-    enviar_op_code(FETCH, sockets->kernel_memory); //Le informamos al KM que vamos a solicitarle una instruccion
+    enviar_op_code(FETCH, sockets-> conexion_kernel_memory ); //Le informamos al KM que vamos a solicitarle una instruccion
 
     t_paquete* paquete = crear_paquete(FETCH);
     agregar_a_paquete(paquete, &(contexto_actual->pid), sizeof(int));
@@ -655,7 +668,7 @@ void ejecutar_sleep(t_instruccion* instr) {
     
     gestionar_desalojo_por_syscall(tiempo, gl_IO_SLEEP);    
 
-    if (recibir_operacion(sockets->conexion_kernel_scheduler) != OK) {
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
     }
 }
@@ -747,7 +760,7 @@ void ejecutar_init_proc(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "Proceso creado exitosamente por el Kernel.");
     }
 }
@@ -763,7 +776,7 @@ void ejecutar_exit() {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    if (recibir_operacion(sockets->conexion_kernel_scheduler) == OK) {
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
         control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
@@ -851,7 +864,7 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     eliminar_paquete(paquete);
     
     // esperar confirmación de la memoria
-    int resultado = recibir_operacion(sockets->conexion_kernel_memory);
+    int resultado = recibir_op_code(sockets->conexion_kernel_memory);
     if (resultado != OK) {
         log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
         
@@ -865,7 +878,7 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
 
     
-    if(valor == -1){
+    if(valor == NULL){
         agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     }
     else{
@@ -879,12 +892,14 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    op_code status = recibir_operacion(sockets->conexion_kernel_scheduler);
+    op_code status = recibir_op_code(sockets->conexion_kernel_scheduler);
     
     if(status == OK) {
         log_info(logger, "Desalojo confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
     }
+
+    return NULL;
 }
 
 int pedir_direccion_mmu (int32_t dir_logica){ //Hacer

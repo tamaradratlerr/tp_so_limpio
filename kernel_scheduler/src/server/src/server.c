@@ -2,6 +2,7 @@
 #include <utilsKS/utilsKS.h>
 #include "../../utils/src/global_utils.h"
 
+pthread_t hilo_quantum;
 t_listas_procesos* listasProcesos = NULL;
 t_listas_suplementarias* list_suplementarias = NULL;
 
@@ -70,7 +71,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     int control_loop = 1;
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
         
-        int op_code = recibir_operacion(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
+        int op_code = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
         if(op_code == -1){
             log_info(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
             control_loop = 0;
@@ -405,7 +406,7 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
     pthread_mutex_lock(&mutex_cpus);
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
-    CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
     if (cpu_libre != NULL) {
         cpu_libre->enUso = true;
@@ -442,9 +443,49 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
 }
 }
 
+void* hilo_quantum(void* arg) {
+    PCB* pcb = (PCB*)arg;
+    
+    // Dormimos el tiempo del quantum (usleep espera microsegundos)
+    usleep(info_config.intervalo_tarea * 1000); 
+    
+    // Cuando despierta, el tiempo se terminó. 
+    // Aquí notificas al Kernel que debe pedir el desalojo.
+    log_info(logger, "Quantum expirado para PID: %d. Solicitando desalojo...", pcb->data.PID);
+    
+    // Acceso concurrente: Si tienes múltiples CPUs, el hilo debe saber a qué 
+    // CPU enviarle la interrupción.
+    enviar_desalojo(pcb->fd_cpu); 
+    
+    return NULL;
+}
+
+void* ejecutar_quantum(void* arg) {
+    int tiempo_quantum = *(int*)arg;
+    
+    // Dormimos por el tiempo del quantum
+    usleep(tiempo_quantum * 1000); // usleep usa microsegundos
+    
+    // notificar que el quantum terminó
+    log_info(logger, "terminó quantum");
+    enviar_senal_desalojo(); 
+    
+    return NULL;
+}
+
+void iniciar_timer_quantum(int quantum) {
+    
+    int* tiempo = malloc(sizeof(int));
+    *tiempo = quantum;
+    
+    if (pthread_create(&hilo_quantum, NULL, ejecutar_quantum, tiempo) != 0) {
+        log_error(logger, "Error al crear el hilo del quantum");
+    }
+}
+
 bool es_la_cpu_buscada(void* elemento, void* contexto) {
     
-        CPU* cpu = (CPU*) elemento;
+        t_CPU* cpu = (t_CPU*) elemento;
     
         // Casteamos el contexto de vuelta a un puntero de int para sacar el socket
      int socket_buscado = *(int*) contexto; 
@@ -473,7 +514,7 @@ void enviar_desalojo(int socket_cliente){/* HACER  */
 //NUEVA_CPU,
 void nueva_cpu (int cliente_fd) {
 
-        CPU* info_cpu = malloc(sizeof(CPU));
+        t_CPU* info_cpu = malloc(sizeof(t_CPU));
 
         info_cpu->fd = cliente_fd;         
         info_cpu->enUso = false;    
@@ -585,7 +626,7 @@ void init_proc(int socket_cliente){
 
     PCB* nuevo_pcb = crearNuevoProceso(logger, path, info_km.conexion_km);
 
-    if (recibir_operacion(info_km.conexion_km) == OK) {
+    if (recibir_op_code(info_km.conexion_km) == OK) {
                     
     pthread_mutex_lock(&mutex_ready);
     cambiar_estado_pcb(nuevo_pcb, RDY);
@@ -651,7 +692,7 @@ void io_sleep(int socket_cpu, int socket_io) {
         enviar_paquete(paquete_para_io, socket_io);
         
         // recibir el IO_LIBRE
-        op_code op_libre = recibir_operacion(socket_io);
+        op_code op_libre = recibir_op_code(socket_io);
         if (op_libre == IO_LIBRE) {
             log_info(logger, "IO liberada tras SLEEP");
             IO* interfaz = buscar_io_por_fd(socket_io);
@@ -707,7 +748,7 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     enviar_paquete(paquete_io, socket_io);
     eliminar_paquete(paquete_io); // Limpiamos tras enviar
 
-    op_code cod_op = recibir_operacion(socket_io);
+    op_code cod_op = recibir_op_code(socket_io);
     if (cod_op == IO_STDIN_RETORNO) {
         t_paquete* paquete_datos = recibir_paquete(socket_io);
         
@@ -731,7 +772,7 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
         eliminar_paquete(paquete_mem);
     }
 
-    op_code op_libre = recibir_operacion(socket_io);
+    op_code op_libre = recibir_op_code(socket_io);
     if (op_libre == IO_LIBRE) {
         IO* interfaz = buscar_io_por_fd(socket_io);
         if(interfaz != NULL) {
@@ -777,7 +818,7 @@ void io_stdout(t_list* lista, int io_socket) {
     eliminar_paquete(paquete_io);
 
     // El KS se queda esperando que la IO termine de imprimir
-    op_code cod_op = recibir_operacion(io_socket);
+    op_code cod_op = recibir_op_code(io_socket);
     
     if (cod_op == IO_STDOUT_RETORNO) {
         t_paquete* paquete_fin = recibir_paquete(io_socket);
@@ -785,7 +826,7 @@ void io_stdout(t_list* lista, int io_socket) {
     }
 
     // recibir el IO_LIBRE
-    op_code op_libre = recibir_operacion(io_socket);
+    op_code op_libre = recibir_op_code(io_socket);
     if (op_libre == IO_LIBRE) {
         log_info(logger, "IO liberada tras STDOUT");
         IO* interfaz = buscar_io_por_fd(io_socket);
@@ -809,7 +850,7 @@ void enviar_proceso_finalizar_KM(int pid){
     
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
     
-    enviar_paquete(paquete, conexion.km);
+    enviar_paquete(paquete, info_km.conexion_km);
     
     eliminar_paquete(paquete);
     
@@ -822,7 +863,7 @@ void enviar_proceso_KM(uint32_t pid, op_code opCode) {
     
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
     
-    enviar_paquete(paquete, conexion.km);
+    enviar_paquete(paquete, info_km.conexion_km);
     
     eliminar_paquete(paquete);
     

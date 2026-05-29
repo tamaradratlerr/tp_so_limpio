@@ -35,7 +35,7 @@ extern t_memory_stick_globals ms_globals;
 int iniciar_servidor(char*);
 int esperar_cliente(int);
 
-int recibir_operacion(int);
+int recibir_op_code(int);
 void* recibir_buffer(int*, int);
 void recibir_mensaje(int);
 t_list* recibir_paquete(int);

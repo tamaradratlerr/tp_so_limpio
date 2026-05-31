@@ -368,7 +368,45 @@ void enviar_contexto_cpu(coket_cpu){
 
 }
 
+//lo recibo en el mismo orden en el que la cpu lo envia
 
-void recibir_contexto_cpu(coket_cpu){
-    
+void recibir_contexto_cpu(int socket_cpu) {
+
+    t_list* paquete = recibir_paquete(socket_cpu);
+
+    int pid = *(int*)list_get(paquete, 0);
+
+    t_contexto* contexto = buscar_contexto(pid);
+
+    if(contexto == NULL) {
+
+        log_error(logger, "No existe contexto para PID %d", pid);
+
+        enviar_op_code(NOTOK, socket_cpu);
+
+        list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    contexto->pc = *(uint32_t*)list_get(paquete, 1);
+
+    // registros 8 bits
+    contexto->ax = *(uint8_t*)list_get(paquete, 2);
+    contexto->bx = *(uint8_t*)list_get(paquete, 3);
+    contexto->cx = *(uint8_t*)list_get(paquete, 4);
+    contexto->dx = *(uint8_t*)list_get(paquete, 5);
+
+    // registros 32 bits
+    contexto->eax = *(uint32_t*)list_get(paquete, 6);
+    contexto->ebx = *(uint32_t*)list_get(paquete, 7);
+    contexto->ecx = *(uint32_t*)list_get(paquete, 8);
+    contexto->edx = *(uint32_t*)list_get(paquete, 9);
+    contexto->si  = *(uint32_t*)list_get(paquete, 10);
+    contexto->di  = *(uint32_t*)list_get(paquete, 11);
+
+    log_info(logger, "Contexto actualizado PID %d", pid);
+
+    enviar_op_code(OK, socket_cpu);
+
+    list_destroy_and_destroy_elements(paquete, free);
 }

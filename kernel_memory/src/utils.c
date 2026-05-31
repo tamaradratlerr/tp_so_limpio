@@ -364,8 +364,57 @@ void enviar_desalojo_ks(int socket_ks){
     enviar_op_code(DESALOJO, socket_ks);
 }
 
-void enviar_contexto_cpu(coket_cpu){
+//en base a un pid voy a buscar el contexto que necesito ya sea para enviarlo o almacenarlo/guardarlo
 
+t_contexto* buscar_contexto(int pid) {
+
+    for(int i = 0; i < list_size(lista_contextos); i++) {
+
+        t_contexto* contexto = list_get(lista_contextos, i);
+
+        if(contexto->pid == pid) {
+            return contexto;
+        }
+    }
+
+    return NULL;
+}
+
+void enviar_contexto_cpu(int socket_cpu, int pid) {
+
+    t_contexto* contexto = buscar_contexto(pid);
+
+    if(contexto == NULL) {
+
+        log_error(logger, "No existe contexto para PID %d", pid);
+
+        enviar_op_code(NOTOK, socket_cpu);
+        return;
+    }
+
+    enviar_op_code(CONTEXTO, socket_cpu);
+
+    t_paquete* paquete = crear_paquete(CONTEXTO);
+
+    agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
+    agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
+
+    agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
+
+    agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->edx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->si, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->di, sizeof(uint32_t));
+
+    enviar_paquete(paquete, socket_cpu);
+    eliminar_paquete(paquete);
+
+    log_info(logger, "Contexto enviado PID %d", pid);
 }
 
 //lo recibo en el mismo orden en el que la cpu lo envia

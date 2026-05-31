@@ -35,13 +35,10 @@ int main(void)
 	}
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_mensaje("me conecte KS con KM", info_km.conexion_km);
-
-	// Armamos y enviamos el paquete
-	paquete(info_km.conexion_km);
+	enviar_op_code(OK, info_km.conexion_km);
 
 
-	terminar_programa(info_km.conexion_km, logger, config);
+	//terminar_programa(info_km.conexion_km, logger, config);
 
 }
 
@@ -80,31 +77,6 @@ void terminar_programa(int conexion, t_log* logger, t_config* config)
 }
 
 
-/* ---------------- FUNCIONES GENERALES ---------------- */
-PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
-    
-    
-    PCB* nuevoPcb = iniciar_pcb(contador_pid, 0, 0);
-	
-    enviarProcesoKM(nuevoPcb, path, fd_km);
 
-	contador_pid++;
-	
-	return nuevoPcb;
-}
-
-void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
-	
-	t_paquete* paquete = crear_paquete(ENVIAR_PROCESO);
-	
-	agregar_a_paquete(paquete, pcb->data.PID, sizeof(int));
-
-	agregar_a_paquete(paquete, &path, sizeof(char*));
-	
-
-	enviar_paquete(paquete, fd_km);
-    eliminar_paquete(paquete);
-
-}
 
 

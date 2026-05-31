@@ -1,5 +1,5 @@
 #include "server.h"
-#include <utilsKS/utilsKS.h>
+#include <utilsKS.h>
 #include "../../utils/src/global_utils.h"
 
 pthread_t hilo_quantum;
@@ -13,10 +13,11 @@ int main(void) {
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
-    logger = log_create("log.log", "Servidor", 1, LOG_LEVEL_DEBUG); 
 
+    //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
 
-    int server_fd = iniciar_servidor(); 
+    int server_fd = iniciar_servidor(info_km.puerto_km); 
+
     log_info(logger, "Servidor listo para recibir clientes");
 
     while (1) {
@@ -67,7 +68,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     
     pthread_detach(pthread_self()); //Esto hace que el SO limpie la memoria de este hilo cuando termine la funcion
 
-    t_list* lista = NULL; 
     int control_loop = 1;
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
         
@@ -145,7 +145,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     }
 
     close(cliente_fd);
-    list_destroy_and_destroy_elements(lista, free);
     return NULL;
 }
 
@@ -304,8 +303,8 @@ void agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de RE
     else if (strcmp(planificacion_algoritmo, "RR") == 0) {
         ready_FIFO(pcb); // ready_RR(pcb);
     } 
-    else if (strcmp(planificacion_algoritmo, "CNM") == 0) {
-        // ready_CNM(pcb)
+    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
+        // ready_CMN(pcb)
 
     }
     else {
@@ -315,8 +314,6 @@ void agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de RE
 }
 
 void ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
-
-    cambiar_estado_pcb(pcb_nuevo, RDY);  
  
     pthread_mutex_lock(&mutex_ready);
     
@@ -383,20 +380,6 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
     return pcb_buscado;
 }
 
-PCB* encontrar_pcb_en_running(uint32_t pid_a_finalizar) { //REVISAR POR REPETIDO
-    
-    for (int i = 0; i < list_size(listasProcesos->rnn); i++) {
-        
-        PCB* pcb_en_cpu = (PCB*) list_get(listasProcesos->rnn, i);
-
-        if (pcb_en_cpu != NULL && pcb_en_cpu->data.PID == pid_a_finalizar) {
-            return pcb_en_cpu;
-        }
-    }
-    
-    return NULL;
-}
-
 /*-----                     GESTION DE CPUs                     -----*/
 
 
@@ -436,7 +419,11 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
             // ceamos un hilo que espere el Quatum y mande la interrupción --> CHEQUEAR
             pthread_create(&hilo_timer, NULL, hilo_quantum, (void*)pcb_a_ejecutar);
             pthread_detach(hilo_timer);
-            enviar_desalojo(socket_cliente); //Hacer Funcion
+
+            if(pcb_a_ejecutar->estado_pcb == RNN){
+                enviar_desalojo(socket_cliente); //Hacer Funcion
+            }
+            
     
         }
     }
@@ -453,35 +440,9 @@ void* hilo_quantum(void* arg) {
     // Aquí notificas al Kernel que debe pedir el desalojo.
     log_info(logger, "Quantum expirado para PID: %d. Solicitando desalojo...", pcb->data.PID);
     
-    // Acceso concurrente: Si tienes múltiples CPUs, el hilo debe saber a qué 
-    // CPU enviarle la interrupción.
-    enviar_desalojo(pcb->fd_cpu); 
-    
     return NULL;
 }
 
-void* ejecutar_quantum(void* arg) {
-    int tiempo_quantum = *(int*)arg;
-    
-    // Dormimos por el tiempo del quantum
-    usleep(tiempo_quantum * 1000); // usleep usa microsegundos
-    
-    // notificar que el quantum terminó
-    log_info(logger, "terminó quantum");
-    enviar_senal_desalojo(); 
-    
-    return NULL;
-}
-
-void iniciar_timer_quantum(int quantum) {
-    
-    int* tiempo = malloc(sizeof(int));
-    *tiempo = quantum;
-    
-    if (pthread_create(&hilo_quantum, NULL, ejecutar_quantum, tiempo) != 0) {
-        log_error(logger, "Error al crear el hilo del quantum");
-    }
-}
 
 bool es_la_cpu_buscada(void* elemento, void* contexto) {
     
@@ -529,6 +490,7 @@ void nueva_cpu (int cliente_fd) {
 
         //NO PONGO mandar_proceso_cpu() porque para mi la CPU deberia comunicarse devuelta USANDO el OP_CODE CPU_LIBRE
         }
+
     //CPU_LIBRE,
 void cpu_libre (int cliente_fd){
 
@@ -571,7 +533,8 @@ void mutex_create (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
         
-    }
+}
+
 //MUTEX_LOCK,
 void mutex_lock (int socket_cliente){
 
@@ -594,6 +557,7 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
     }
+
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
@@ -607,6 +571,8 @@ void mutex_unlock (int socket_cliente){
         mutex->valor = 1;
         pthread_mutex_unlock (&mutex_simulados);
     }
+
+//tami
 //MEM_ALLOC,
 void mem_alloc (){//Hacer
 
@@ -637,6 +603,7 @@ void init_proc(int socket_cliente){
                 
     eliminar_paquete(paquete);
 }
+
 //EXIT
 void exit_proceso(int socket_cpu){
 
@@ -857,7 +824,7 @@ void enviar_proceso_finalizar_KM(int pid){
     log_info(logger, " Enviado a KM, PID: %u", pid);
 }
 
-void enviar_proceso_KM(uint32_t pid, op_code opCode) {
+void enviar_proceso_KM(uint32_t pid, op_code opCode) { //ver para que la hice
   
     t_paquete* paquete = crear_paquete(opCode);
     
@@ -878,5 +845,3 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
     return strcmp(un_mutex->mutex_id, id_buscado) == 0;
 }
 
-
-//

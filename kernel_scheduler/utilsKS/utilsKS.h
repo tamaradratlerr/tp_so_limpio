@@ -6,10 +6,7 @@
 int contador_pid = 0;
 
 
-char* ip;
-char* puerto;
-char* valor;
-//t_log* logger; ME PARAECE QUE EL LOGGER TIENE QUE SER UNO PARA CLIENTE Y OTRO PARA SERVIDOR
+t_log* logger; 
 
 t_listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
 t_listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
@@ -49,7 +46,7 @@ typedef struct {
 
 } IO;
 
-typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
+typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas  --> CAMBIAR ESTO Y APLICAR CAMBIOS
     
     t_list* cpu;
     t_list* cpu_libre;
@@ -63,22 +60,10 @@ typedef enum
 {
 	FIFO,
     RR,
-    NM
+    CMN
     //No lo estamos Usado ahora, deberiamos cambiar cuando leemos el config y darle valor de esta estructura de datos
 }algortimoEnUso;
 
-typedef struct {
-    PCB* pcb;
-    int tiempo_ms;
-} t_timer_args;
-
-typedef enum
-{
-    IO_STDIN,
-    IO_STDOUT,
-    IO_SLEEP
-
-}IO_OPCODE;
 
 typedef struct{
 

@@ -2,7 +2,7 @@ include settings.mk
 
 ################################################################################
 
-outname = bin/$(1)
+outname = ../../bin/$(1)
 
 define compile_out
 	$(CC) $(CFLAGS) -o "$@" $^ $(IDIRS:%=-I%) $(LIBDIRS:%=-L%) $(RUNDIRS:%=-Wl,-rpath,%) $(LIBS:%=-l%)

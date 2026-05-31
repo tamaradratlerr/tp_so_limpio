@@ -108,7 +108,7 @@ int main(void)
 
             liberar_instruccion(instruccion_decodificada);
             instruccion_decodificada = NULL;
-            proceso_en_ejecucion->pid = NULL;
+            proceso_en_ejecucion->pid = -1;
             control_loop00 = apagar(); //apagar sea una funcion que segun el valor de una variable global corta la cpu o no //HACER
     }
 }
@@ -185,7 +185,7 @@ int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {
 
 /* ---------------- IMPLEMENTACION DE CLICO DE INTRUCCION ---------------- */
 
-char* fetch() {
+char* fetch(t_cpu_sockets* sockets) {
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 
@@ -213,7 +213,7 @@ char* fetch() {
 
 }
 
-void decode(char* instruccion_raw) {
+int decode(char* instruccion_raw) {
     
     char** tokens = string_split(instruccion_raw, " ");
     
@@ -237,6 +237,7 @@ void decode(char* instruccion_raw) {
     string_iterate_lines(tokens, free);
     free(tokens);
     free(instruccion_raw);
+    return EXIT_SUCCESS;
 }
 
 void execute() {
@@ -327,7 +328,7 @@ void interrupciones(){
     //  sería la interrupción de COMPACTACIÖN por parte de la ks asi que habría que sacar el proceso
     //  corriendo actualmente en esta cpu (y se lo enviamos a todas las cpus)
 
-    gestionar_desalojo_por_syscall(-1, DESALOJO);
+    gestionar_desalojo_por_syscall(NULL, DESALOJO);
 
 }
 
@@ -356,6 +357,7 @@ t_instruccion_code identificar_codigo(char* token) { // función para traducir e
 
     // caso por defecto si no reconoce el comando
     if (token == NULL) return EXIT_FAILURE;
+    return NOOP;
 }
 
 void* obtener_registro(char* nombre) {
@@ -425,7 +427,7 @@ void ejecutar_mov_in (t_instruccion* instr){
     if (es_registro_32bits(reg_dest_nombre)){
         
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
+        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->si);
     
         // Comunicación con Memory Stick
         void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
@@ -437,7 +439,7 @@ void ejecutar_mov_in (t_instruccion* instr){
     else {
         
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->si);
+        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->si);
     
         // Comunicación con Memory Stick
         void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
@@ -457,7 +459,7 @@ void ejecutar_mov_out (t_instruccion* instr){
     if (es_registro_32bits(reg_dest_nombre)){
         
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
+        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->di);
     
         // Comunicación con Memory Stick
         void* buffer = (void*)dest;
@@ -469,7 +471,7 @@ void ejecutar_mov_out (t_instruccion* instr){
     else {
         
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_a_mmu(contexto_actual->di);
+        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->di);
     
         // Comunicación con Memory Stick
         void* buffer = (void*)dest;
@@ -558,8 +560,8 @@ void ejecutar_copy_mem(t_instruccion* instr) {
     uint32_t* dir_logica_destino = (uint32_t*)obtener_registro("DI");
 
     // COMUNICACIÓN COM MMU (CP 3?) para obtener direcciones físicas
-    uint32_t dir_fisica_origen = pedir_direccion_a_mmu(*dir_logica_origen);
-    uint32_t dir_fisica_destino = pedir_direccion_a_mmu(*dir_logica_destino);
+    uint32_t dir_fisica_origen = pedir_direccion_mmu(*dir_logica_origen);
+    uint32_t dir_fisica_destino = pedir_direccion_mmu(*dir_logica_destino);
     
     // Comunicación con Memory Stick
     void* buffer = leer_de_memoria(dir_fisica_origen, tamanio);
@@ -579,14 +581,14 @@ void ejecutar_mutex_create(t_instruccion* instr){
     enviar_op_code (gl_MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
     
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return EXIT_FAILURE;//MARCAR EL ERROR.
+    if(err != OK) log_error(logger, "Error en operacion: %d", (int)err);
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
+    if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
     
-    log_info(logger, ""); //Completar LOG
+    log_info(logger, "ok"); //Completar LOG
 }
 
 void ejecutar_mutex_lock (t_instruccion* instr){
@@ -597,14 +599,14 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     enviar_op_code (gl_MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
+    if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);//MARCAR ERROR
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
+    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
-    log_info (logger, ""); //Completar LOG
+    log_info (logger, "ok"); //Completar LOG
 }
 
 void ejecutar_mutex_unlock (t_instruccion* instr){
@@ -615,14 +617,14 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
     enviar_op_code (gl_MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return EXIT_FAILURE;//MARCAR ERROR
+    if(err != OK) log_error(logger, "Error en operacion: %d", (int)err);//MARCAR ERROR
 
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
+    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
-    log_info (logger, ""); //Completar LOG
+    log_info (logger, "ok"); //Completar LOG
 }
 
 void ejecutar_mem_alloc (t_instruccion* instr){
@@ -633,17 +635,17 @@ void ejecutar_mem_alloc (t_instruccion* instr){
 
     enviar_op_code (gl_MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return EXIT_FAILURE; //MARCAR ERROR
+    if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
     enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
+    if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
 
     enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE; //MARCAR ERROR
-    log_info (logger, ""); //Completar LOG
+    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
+    log_info (logger, "ok"); //Completar LOG
             
 }
 
@@ -654,11 +656,11 @@ void ejecutar_mem_free (t_instruccion* instr){
 
     enviar_op_code (gl_MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK) return EXIT_FAILURE;
+    if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
     enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if (err != OK) return EXIT_FAILURE;
+    if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
 }
 
@@ -688,7 +690,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     void* ptr_tam = obtener_registro(reg_tam);
     tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
-    log_info(logger, "PID: %u : %s", pid_actual);
+    log_info(logger, "PID: %u", pid_actual);
 
     t_paquete* paquete = crear_paquete(gl_IO_STDOUT);
 
@@ -700,7 +702,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    gestionar_desalojo_por_syscall(-1, gl_IO_STDOUT);
+    gestionar_desalojo_por_syscall(NULL, gl_IO_STDOUT);
 }
 
 void ejecutar_stdin(t_instruccion* instr) {
@@ -728,8 +730,8 @@ void ejecutar_stdin(t_instruccion* instr) {
     }
 
     
-    uint32_t tamanio = obtener_tamanio_del_registro(instr->params[1]); 
-    uint32_t direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
+    tamanio = obtener_tamanio_del_registro(instr->params[1]); 
+    direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
     t_paquete* paquete = crear_paquete(gl_IO_STDIN);
@@ -742,7 +744,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
-    gestionar_desalojo_por_syscall(-1, gl_IO_STDIN);
+    gestionar_desalojo_por_syscall(NULL, gl_IO_STDIN);
 }
 
 void ejecutar_init_proc(t_instruccion* instr) {
@@ -826,7 +828,7 @@ void enviar_contexto_a_kernel_memory() {
     eliminar_paquete(paquete);
 
     err = recibir_op_code (sockets->conexion_kernel_memory);
-    if (err != OK) return EXIT_FAILURE;
+    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err);
 
 }
 
@@ -868,16 +870,15 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     if (resultado != OK) {
         log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
         
-        return EXIT_FAILURE;
+        log_error(logger, "Error en operacion: %d", (int)resultado);
     }
 }
 
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
 
     enviar_contexto_a_kernel_memory(); 
-    t_paquete* paquete = crear_paquete(tipo_operacion); // <-- El OP_CODE es dinámico
+    t_paquete* paquete = crear_paquete(tipo_operacion);
 
-    
     if(valor == NULL){
         agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     }
@@ -886,9 +887,6 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
         agregar_a_paquete(paquete, valor, strlen(valor) + 1);
     }
      
-    
-    //enviar_op_code (identificador, sockets->conexion_kernel_scheduler); "idea para que el KS sepa que va a recibir"
-
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
@@ -898,11 +896,36 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
         log_info(logger, "Desalojo confirmado. Limpiando CPU.");
         limpiar_contexto_actual();
     }
-
-    return NULL;
+    
+    return; // Simplemente salimos de la función void sin retornar un valor
 }
 
-int pedir_direccion_mmu (int32_t dir_logica){ //Hacer
 
+
+// --- Funciones que faltan por implementar ---
+
+void liberar_instruccion(t_instruccion* instruccion) {
+    if (instruccion == NULL) return;
+    for (int i = 0; i < instruccion->cant_params; i++) {
+        free(instruccion->params[i]);
+    }
+    free(instruccion);
 }
 
+int apagar() {
+    return 0; // O el valor que desees para salir del loop
+}
+
+uint32_t pedir_direccion_mmu(int32_t dir_logica) {
+    // Aquí iría tu lógica de comunicación con MMU
+    return (uint32_t)dir_logica; 
+}
+
+uint32_t obtener_tamanio_del_registro(char* reg) {
+    return es_registro_32bits(reg) ? 4 : 1;
+}
+
+uint32_t obtener_direccion_del_registro(char* reg) {
+    uint32_t* ptr = (uint32_t*)obtener_registro(reg);
+    return (ptr != NULL) ? *ptr : 0;
+}

@@ -1,5 +1,6 @@
 # Libraries
-LIBS=commons pthread readline m
+# Edita esta línea en settings.mk
+LIBS=commons pthread readline m utils
 
 # Custom libraries' paths
 SHARED_LIBPATHS=

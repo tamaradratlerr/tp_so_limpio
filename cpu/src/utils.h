@@ -1,7 +1,7 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-
+#include <commons/string.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<signal.h>
@@ -10,6 +10,7 @@
 #include<netdb.h>
 #include<string.h>
 #include<commons/log.h>
+#include <ctype.h>
 
 #include<commons/collections/list.h>
 #include <global_utils.h>

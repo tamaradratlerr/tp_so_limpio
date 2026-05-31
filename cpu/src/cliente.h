@@ -4,7 +4,6 @@
 #include "utils.h"
 
 
-// 1. PRIMERO DEFINIMOS LAS ESTRUCTURAS
 typedef struct {
     int pid;
 } t_proceso_ejec;
@@ -15,8 +14,6 @@ typedef struct {
     int conexion_memory_stick;
 } t_cpu_sockets;
 
-// 2. LUEGO DECLARAMOS LAS VARIABLES COMO EXTERNAS
-// Esto dice: "esta variable existe en otro lado (cliente.c), no la crees aquí"
 extern t_config* config; 
 extern t_log* logger;
 extern t_contexto* contexto_actual;
@@ -41,7 +38,7 @@ int conexion_memory_stick(t_config* config, t_log* logger, module_name module);
 // Ciclo de Instrucción
 // Corregir en cliente.h
 char* fetch(t_cpu_sockets* sockets);
-void decode(char* instruccion_raw);
+int decode(char* instruccion_raw);
 void execute(void);
 void interrupciones(void);
 
@@ -76,6 +73,10 @@ void enviar_contexto_a_kernel_memory(void);
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio);
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio);
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion);
-int pedir_direccion_mmu(int32_t dir_logica);
+uint32_t pedir_direccion_mmu(int32_t dir_logica);
+void liberar_instruccion(t_instruccion* instruccion);
+uint32_t obtener_tamanio_del_registro(char* reg);
+uint32_t obtener_direccion_del_registro(char* reg);
+int apagar(void);
 
 #endif

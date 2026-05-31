@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <commons/log.h>
+#include <stdint.h>
 
 #include "./global_utils.h"
 // Al principio de global_utils.c, debajo de los #include
@@ -189,6 +191,13 @@ op_code recibir_op_code (int socket_cliente) {
         close(socket_cliente);
         return -1; 
     }
+}
+
+
+int recibir_pid(int socket_cliente) {
+    int pid;
+    recv(socket_cliente, &pid, sizeof(int), MSG_WAITALL);
+    return pid;
 }
 
 t_list* recibir_paquete(int socket_cliente){

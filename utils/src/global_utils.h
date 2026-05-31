@@ -219,7 +219,7 @@ int esperar_cliente(int);
 
 int iniciar_servidor(char* puerto);
 
-int recibir_pid (int socket_cliente);
+int recibir_pid(int socket_cliente);
 
 int enviar_pid(int PCB_ID, int socket_cliente);
 

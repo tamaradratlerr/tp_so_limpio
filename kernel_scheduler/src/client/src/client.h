@@ -2,7 +2,6 @@
 #define CLIENT_H_
 #include "utils.h"
 
-t_log* logger;
 t_config* config;
 
 

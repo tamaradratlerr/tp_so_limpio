@@ -4,9 +4,6 @@
 #include "utils.h"
  
 
-t_log* logger;
-
-
 /*----------------------------------FUNCIONES------------------------------------------*/
 
 /*-----                     GESTION DE NUEVOS CLIENTES                     -----*/

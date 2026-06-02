@@ -6,8 +6,6 @@
 int contador_pid = 0;
 
 
-t_log* logger; 
-
 t_listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
 t_listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
 t_list* lista_mutex;
@@ -46,12 +44,10 @@ typedef struct {
 
 } IO;
 
-typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas  --> CAMBIAR ESTO Y APLICAR CAMBIOS
+typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     
     t_list* cpu;
-    t_list* cpu_libre;
     t_list* io;
-    t_list* io_ready;
 
 }t_listas_suplementarias;
 

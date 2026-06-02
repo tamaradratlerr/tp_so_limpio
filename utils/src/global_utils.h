@@ -18,6 +18,7 @@
 #include <semaphore.h> 
 #include <pthread.h>  
 
+t_log* logger;
 
 typedef enum {
     

@@ -49,7 +49,7 @@ t_log* iniciar_logger(void)
 {
 	t_log* nuevo_logger;
 
-	nuevo_logger = log_create("KS.log", "CLIENTE", true, "INFO");
+	nuevo_logger = log_create("KS.log", "Kernel Scheduler", true, "INFO");
 	
 	return nuevo_logger;
 }

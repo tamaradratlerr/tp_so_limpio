@@ -1,9 +1,12 @@
+#include "../../client/src/client.h"
 #include "server.h"
 #include <utilsKS.h>
 #include "../../utils/src/global_utils.h"
 
 pthread_t hilo_quantum;
 int main(void) {
+
+    inicializar_kernel();
     
     pthread_mutex_init(&mutex_cpus, NULL);
 

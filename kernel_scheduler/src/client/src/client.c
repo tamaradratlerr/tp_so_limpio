@@ -1,6 +1,6 @@
 #include "client.h"
 
-int main(void)
+int inicializar_kernel(void)
 {
 	
 	/* ---------------- ARCHIVOS DE CONFIGURACION Y LOGGER ---------------- */	

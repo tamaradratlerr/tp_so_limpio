@@ -4,6 +4,7 @@
 #include "../../utils/src/global_utils.h"
 
 pthread_t hilo_quantum;
+
 int main(void) {
 
     inicializar_kernel();
@@ -351,6 +352,8 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     
     pcb -> estado_anterior = (pcb ->estado_pcb);
     pcb ->estado_pcb = nuevoEstado;
+    
+    log_info (logger, "## PID:[%d] pasa del estado [%d] al estado [%d]",pcb->data.PID,pcb->estado_anterior,pcb->estado_pcb);
 }
 
 PCB* buscar_pcb_por_pid(uint32_t pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
@@ -440,7 +443,8 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
             pthread_detach(hilo_timer);
 
             if(pcb_a_ejecutar->estado_pcb == RNN){
-                enviar_desalojo(socket_cliente); //Hacer Funcion
+                enviar_desalojo(socket_cliente); /*HACER*/
+                log_info (logger, "## PID:[%d] - Desalojado por Fin de Quamtum",pcb_a_ejecutar->data.PID);/*Logger Obligatorio*/
             }}
     }
     else {
@@ -508,7 +512,7 @@ void nueva_cpu (int cliente_fd) {
         
         enviar_op_code (OK, cliente_fd);
 
-        log_info(logger, "CPU registrada en el socket %d", cliente_fd);
+        log_info(logger, "## CPU ID: [%d] Conectada", cliente_fd); /*Logger Obligatorio*/
         }
 
     //CPU_LIBRE,
@@ -529,8 +533,8 @@ void deslojarTodasCpus() {
     int cantidad = list_size(list_suplementarias->cpu);
     
     for(int i = 0; i < cantidad; i++) {
-        int socket_cpu = *(int*)list_get(list_suplementarias->cpu, i); // (Facu) : Capaz que habria que hacer que se tiene que mandar el desalojo a las que tienen el enUso en True
-        enviar_op_code(DESALOJO, socket_cpu); 
+        t_CPU cpu = *(t_CPU*)list_get(list_suplementarias->cpu, i); 
+        if (cpu.enUso) { enviar_op_code(DESALOJO, cpu.fd);} 
     }
 }
 
@@ -540,18 +544,23 @@ void deslojarTodasCpus() {
 //MUTEX_CREATE,
 void mutex_create (int socket_cliente){
 
-        enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
+    
 
-        char* mutex_id = recibir_mensaje (socket_cliente, logger);
+    enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
 
-        mutex_cpu* mutex = malloc(sizeof(mutex_cpu));
+    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Create]", pid); /*Logger Obligatorio*/
 
-        mutex->mutex_id = mutex_id;
-        mutex->valor = 1;
-        
-        list_add(lista_mutex, mutex);
 
-        enviar_op_code(OK, socket_cliente);
+    char* mutex_id = recibir_mensaje (socket_cliente, logger);
+    mutex_cpu* mutex = malloc(sizeof(mutex_cpu));
+
+    mutex->mutex_id = mutex_id;
+    mutex->valor = 1;
+    
+    list_add(lista_mutex, mutex);
+
+    enviar_op_code(OK, socket_cliente);
         
 }
 
@@ -560,7 +569,9 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
+        int pid = recibir_pid (socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
+
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
         free(mutex_id);
@@ -575,9 +586,11 @@ void mutex_lock (int socket_cliente){
             if (mutex->valor == 1) {
                 mutex->valor = 0; 
                 pthread_mutex_unlock(&mutex_simulados);
+                log_info("## PID:[%d] Toma el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
                 break;
             }
             pthread_mutex_unlock(&mutex_simulados);
+            log_info("## PID:[%d] No pudo tomar el mutex:[%d]. Vuelve a intentarlo...",pid,mutex_id);
             usleep(1000); // Pequeña pausa para no saturar el CPU
         }
 
@@ -591,6 +604,7 @@ void mutex_unlock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
+        int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
@@ -598,6 +612,8 @@ void mutex_unlock (int socket_cliente){
         pthread_mutex_lock (&mutex_simulados);
         mutex->valor = 1;
         pthread_mutex_unlock (&mutex_simulados);
+
+        log_info("## PID:[%d] Libera el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
     }
 
 //tami
@@ -624,7 +640,6 @@ void init_proc(int socket_cliente){
     if (recibir_op_code(info_km.conexion_km) == OK) {
                     
     cambiar_estado_pcb(nuevo_pcb, RDY);
-
     agregar_proceso_lista (nuevo_pcb);
                     
     }
@@ -645,9 +660,12 @@ void exit_proceso(int socket_cpu){
     
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
+        cambiar_estado_pcb(pcb, EXT);
+        agregar_proceso_lista (pcb);
         eliminar_proceso_Lista(pcb);
     }
 
+    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]");/*Logger Obligatorio*/
     enviar_op_code(OK, socket_cpu);
     
 }
@@ -656,6 +674,7 @@ void exit_proceso(int socket_cpu){
 
 //SLEEP
 void io_sleep(int socket_cpu, int socket_io) {
+    
     t_list* lista = recibir_paquete(socket_cpu);
     int pid_a_bloquear = *(int*)list_get(lista, 0);
     char* tiempo_str = (char*)list_get(lista, 1);
@@ -731,6 +750,7 @@ void nueva_io (int cliente_fd){
 }
 // STDIN
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
+    
     t_list* lista = recibir_paquete(socket_cpu);
     uint32_t tam = *(uint32_t*)list_get(lista, 0);
     uint32_t dir = *(uint32_t*)list_get(lista, 1);
@@ -829,7 +849,9 @@ void mem_corrupt (); // Hacer
 
 /*-----                     AUXILIARES                     -----*/
 
-void enviar_proceso_finalizar_KM(int pid){ // (Facu) Agregeria antes que todo un enviar_op_code para que la KM sepa que va a recibir un PAQUETE y prepare el formato
+void enviar_proceso_finalizar_KM(int pid){ 
+    
+    enviar_op_code (gl_EXIT, info_km.conexion_km);
     
     t_paquete* paquete = crear_paquete(gl_EXIT);
     

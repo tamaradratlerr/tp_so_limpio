@@ -50,13 +50,12 @@ PCB* iniciar_pcb (int PID){
 
 PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
     
-    
     PCB* nuevoPcb = iniciar_pcb(contador_pid);
-	
-    enviarProcesoKM(nuevoPcb, path, fd_km);
+    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW", contador_pid);
 
+    enviarProcesoKM(nuevoPcb, path, fd_km);
 	contador_pid++;
-	
+
 	return nuevoPcb;
 }
 void* list_find_with_context(

@@ -1,18 +1,7 @@
-#define _POSIX_C_SOURCE 200809L
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <commons/log.h>
-#include <stdint.h>
 
 #include "./global_utils.h"
-// Al principio de global_utils.c, debajo de los #include
-extern t_log* logger;
-extern char* PUERTO; // O como sea que definas el puerto en tu config
+
+
 
 /*-----     MANEJO DE PAQUETES     -----*/
 
@@ -195,6 +184,7 @@ op_code recibir_op_code (int socket_cliente) {
 
 
 int recibir_pid(int socket_cliente) {
+    
     int pid;
     recv(socket_cliente, &pid, sizeof(int), MSG_WAITALL);
     return pid;
@@ -263,13 +253,8 @@ void iterator(char* value) {
 }
 
 int enviar_pid(int PCB_ID, int socket_cliente){ 
-    t_paquete* paquete = crear_paquete(PCB_DATA);
     
-    // Usamos agregar_a_paquete que ya maneja los malloc y memcpy correctamente
-    agregar_a_paquete(paquete, &PCB_ID, sizeof(int));
-    
-    enviar_paquete(paquete, socket_cliente);
-    eliminar_paquete(paquete);
+    send(socket_cliente, &PCB_ID, sizeof(int), 0);
 
     return 1;
 }

@@ -1,16 +1,8 @@
 #ifndef UTILSKS_H_
 #define UTILSKS_H_
-
 #include "../../utils/src/global_utils.h"
 
-int contador_pid = 0;
 
-
-t_listas_procesos* listasProcesos; //Lista de PCBs segun estado (GLOBAL)
-t_listas_suplementarias* list_suplementarias; //Lista de CPUs y IOs (GLOBAL)
-t_list* lista_mutex;
-t_info_km info_km;
-t_info_config info_config;
 
 typedef struct{
     char *ip_km, *puerto_km;
@@ -18,7 +10,8 @@ typedef struct{
 }t_info_km;
 
 typedef struct{
-    char* *planificacion_algoritmo, *listas_algortimo;
+    char *planificacion_algoritmo;
+    char *listas_algortimo;
     int intervalo_tarea, tiempo_suspencion;
 }t_info_config;
 
@@ -39,10 +32,10 @@ typedef struct
 typedef struct {
 
     int fd; 
-    bool enUso;                 
+    bool enUso;        //false es que no y true es que si         
     char* nombre;             
 
-} IO;
+} t_IO;
 
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     
@@ -69,34 +62,28 @@ typedef struct{
 }mutex_cpu;
 
 
-/* Semaforos tipo Mutex*/
-pthread_mutex_t sem_procesos_new; //Semaforo para lista de NEWS
-pthread_mutex_t sem_procesos_ready; //Semaforo para lista de READYS
-pthread_mutex_t sem_procesos_running; //Semaforo para lista de RUNNINGS
-pthread_mutex_t sem_procesos_block; //Semaforo para lista de BLOCKS
-pthread_mutex_t sem_procesos_exit; //Semaforo para lista de READYS EXITS
-
-
-pthread_mutex_t mutex_cpus;
-pthread_mutex_t mutex_ios;
-pthread_t hilo_timer;
-pthread_mutex_t mutex_ready;
-pthread_mutex_t mutex_simulados; 
-pthread_mutex_t mutex_cola_exec;
-//FALTA PONER LAS DEMAS MUTEX?
 
 /*-----     FUNCIONES      -----*/
-
-PCB* iniciar_pcb (int PID, int PPID, int UID);
+void enviarProcesoKM(
+        PCB* pcb,
+        char* path,
+        int fd_km);
+        
+PCB* iniciar_pcb (int PID);
 void terminar_pcb (PCB* pcb);
-
-IO* buscar_io_por_nombre(char* nombre_buscado);
-IO* buscar_io_por_fd(int fd_buscado);
-
-
-/* --- DECLARACIONES EXTERNAS (Aquí van los extern) --- */
+PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km);
+void enviarProcesoKM(PCB* pcb, char* path, int fd_km);
+t_IO* buscar_io_por_nombre(char* nombre_buscado);
+t_IO* buscar_io_por_fd(int fd_buscado);
+void* list_find_with_context(
+        t_list* lista,
+        bool (*condicion)(void*, void*),
+        void* contexto);
 
 extern int contador_pid;
+extern t_log* logger;
+
+
 extern char* ip;
 extern char* puerto;
 extern char* valor;
@@ -105,10 +92,12 @@ extern char* listas_algortimo;
 extern int intervalo_tarea;
 extern int tiempo_suspencion;
 
-extern t_listas_procesos* listasProcesos; 
-extern t_listas_suplementarias* list_suplementarias; 
+
+extern t_listas_suplementarias* list_suplementarias;
+extern t_listas_procesos* listasProcesos;
 extern t_list* lista_mutex;
 extern t_info_km info_km;
+extern t_info_config info_config;
 
 /* --- SEMÁFOROS (También son variables globales) --- */
 
@@ -124,5 +113,6 @@ extern pthread_t hilo_timer;
 extern pthread_mutex_t mutex_ready;
 extern pthread_mutex_t mutex_simulados; 
 extern pthread_mutex_t mutex_cola_exec;
+
 
 #endif

@@ -4,87 +4,59 @@
 #include "utils.h"
  
 
-/*----------------------------------FUNCIONES------------------------------------------*/
+/*----- GESTION DE NUEVOS CLIENTES -----*/
+void* atender_nuevo_cliente(void* fd);
 
-/*-----                     GESTION DE NUEVOS CLIENTES                     -----*/
+/*----- CREACION Y DESTRUCCION DE LISTAS -----*/
+t_listas_procesos* Iniciar_listas_procesos(void);
+void terminar_listas_procesos(void);
+void iniciar_listas_suple(void);
+void eliminar_listas_suple(void);
 
-void* atender_nuevo_cliente(void* argumento);
+/*----- GESTION DE LISTAS -----*/
+int agregar_proceso_lista(PCB* pcb);
+op_code eliminar_proceso_Lista(PCB* pcb);
+int agregar_lista_ready(PCB* pcb);
+int ready_FIFO(PCB* pcb_nuevo);
 
-/*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
+/*----- GESTION DE PCBs -----*/
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
+PCB* buscar_pcb_por_pid(uint32_t pid_recibido);
+PCB* encontrar_pcb_rnn_por_pid(int pid);
 
-t_listas_procesos* Iniciar_listas_procesos (); //Funcion que inicializa listasProcesos (Variable Global) (HEAP)
-
-void terminar_listas_procesos (); //Funcion que libera la memoria de listasProcesos (HEAP)
-
-void iniciar_listas_suple (); //Funcion que inicializa las listas de CPUs y IOs (Suplementarias)
-
-void eliminar_listas_suple(); //Funcion que destruye las listas de CPUs y IOs (Suplmentarias)
-
-/*-----                     GESTION DE LISTAS                     -----*/
-
-void agregar_proceso_lista (PCB* pcb); //Funcion que agrega un PCB (estructura) a su lista correspondiente segun su ESTADO ACTUAL.
-
-void eliminar_proceso_Lista (PCB* pcb ); //Funcion que elimina un PCB (estructura) de su lista correspondiente segun su ESTADO ANTERIOR.
-
-void agregar_lista_ready (PCB* pcb); //Funcion que agrega un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
-
-void ready_FIFO(PCB* pcb_nuevo); //Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
-
-/*-----                     GESTION DE PCBs                     -----*/
-
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado); //Funcion que cambia el estado actual y estado anterior de un PCB
-
-int enviar_pcb(int PCB_ID, int socket_cliente); //Funcion que manda PID a un cliente 
-
-/*-----                     GESTION DE CPUs                     -----*/
-
+/*----- GESTION DE CPUs -----*/
 void mandar_proceso_cpu(int socket_cliente);
-
+void* control_hilo_quantum(void* arg);
+bool es_la_cpu_buscada(void* elemento, void* contexto);
 void enviar_desalojo(int socket_cliente);
 
-/*-----                     GESTION DE IOs                     -----*/
-/*-----                     GESTION DE OP_CODEs                     -----*/
+/*----- GESTION DE OP_CODEs -----*/
+void nueva_cpu(int cliente_fd);
+void cpu_libre(int cliente_fd);
+void fin_proceso(int cliente_fd);
+void deslojarTodasCpus(void);
+void mutex_create(int socket_cliente);
+void mutex_lock(int socket_cliente);
+void mutex_unlock(int socket_cliente);
+void mem_alloc(void);
+void mem_free(void);
+void init_proc(int socket_cliente);
+void exit_proceso(int socket_cpu);
 
-    //OK, 
-    //NOTOK,
-    
-    //MENSAJE,
-	//PAQUETE, 
+/*----- GESTION DE IO -----*/
+void io_sleep(int socket_cpu, int socket_io);
+void nueva_io(int cliente_fd);
+void io_stdin(int socket_cpu, int socket_io, int socket_memoria);
+void io_stdout(t_list* lista, int io_socket);
+void io_libre(int fd);
 
-	//con la CPU
-	
-    //NUEVA_CPU,
-    void nueva_cpu (int ciente_fd);
-    //CPU_LIBRE,
-    void cpu_libre (int cliente_fd);
-     //FIN_PROCESO,
-    void fin_proceso (int cliente_fd);
-    //DESALOJO,
-    //PCB,
+/*----- CON EL KERNEL MEMORY -----*/
+void mem_corrupt(void);
 
-    //syscalls de la CPU --- Descripcion de cada una esta en el TP.
-    
-    //MUTEX_CREATE,
-    //MUTEX_LOCK,
-    //MUTEX_UNLOK,
-    //MEM_ALLOC,
-    //MEM_FREE,
-    //INIT_PROC,
-    //EXIT,
-
-
-    //con el KM
-    
-    //MEM_CORRUPT, /*cortar todo con esta*/
-
-	//con la IO
-
-    //IO_LIBRE,
-    void io_libre (int cliente_fd);
-	//SLEEP, 
-	//STDIN,
-	//STDOUT
-
+/*----- AUXILIARES -----*/
+void enviar_proceso_finalizar_KM(int pid);
+void enviar_proceso_KM(uint32_t pid, op_code opCode);
+bool es_el_mutex_buscado(void* elemento, void* contexto);
 
 
 #endif /* SERVER_H_ */

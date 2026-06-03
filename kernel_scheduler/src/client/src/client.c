@@ -1,7 +1,5 @@
 #include "client.h"
 
-int contador_pid = 0;
-
 int main(void)
 {
 	
@@ -49,7 +47,7 @@ t_log* iniciar_logger(void)
 {
 	t_log* nuevo_logger;
 
-	nuevo_logger = log_create("KS.log", "Kernel Scheduler", true, "INFO");
+	nuevo_logger = log_create("KS.log", "Kernel Scheduler", true, LOG_LEVEL_INFO);
 	
 	return nuevo_logger;
 }

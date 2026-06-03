@@ -3,9 +3,6 @@
 #include "../../utils/src/global_utils.h"
 
 pthread_t hilo_quantum;
-t_listas_procesos* listasProcesos = NULL;
-t_listas_suplementarias* list_suplementarias = NULL;
-
 int main(void) {
     
     pthread_mutex_init(&mutex_cpus, NULL);
@@ -16,13 +13,13 @@ int main(void) {
 
     //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
 
-    int server_fd = iniciar_servidor(info_km.puerto_km); 
+    int server_fd = iniciar_servidor(info_km.puerto_km, logger); 
 
     log_info(logger, "Servidor listo para recibir clientes");
 
     while (1) {
         
-        int cliente_fd = esperar_cliente(server_fd);
+        int cliente_fd = esperar_cliente(server_fd, logger);
         
         if (cliente_fd == -1) {
             log_error(logger, "Error al aceptar un cliente");
@@ -75,7 +72,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
         if(op_code == -1){
             log_info(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
             control_loop = 0;
-            return -1;
+            return NULL ;
         }
 
         
@@ -97,23 +94,26 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 //por parte de la km
                 deslojarTodasCpus();
                 break;
-            case gl_IO_SLEEP: 
+            case gl_IO_SLEEP: {
                //agarrar io de la lista de ios y mandar
-                IO* io = queue_pop(list_suplementarias -> io_ready);
+                t_IO* io = list_remove(list_suplementarias -> io, 0);;
+                io->enUso = true;
                 io_sleep(cliente_fd, io -> fd); 
-                break;
+                break;}
 
-            case gl_IO_STDIN: 
+            case gl_IO_STDIN: {
                 // viene de la cpu 
-                IO* io = queue_pop(list_suplementarias -> io_ready);
+                t_IO* io = list_remove(list_suplementarias -> io, 0);;
+                io->enUso = true;
                 io_stdin(cliente_fd, io -> fd, info_km.conexion_km); 
-                break;
+                break;}
 
-            case gl_IO_STDOUT: 
-                IO* io = queue_pop(list_suplementarias -> io_ready);
+            case gl_IO_STDOUT: {
+                t_IO* io = list_remove(list_suplementarias -> io, 0);;
+                io->enUso = true;
                 io_stdout(cliente_fd, io -> fd); 
                 break;
-
+            }
             case IO_LIBRE: 
                 // viene de la io
                 // La interfaz de IO nos manda este opcode cuando termina de operar
@@ -173,7 +173,7 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
 	list_destroy(listasProcesos->ext);
 	list_destroy(listasProcesos->rdy);
 
-	return 0;
+
 }
 
 void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs (Suplementarias)*/
@@ -181,7 +181,7 @@ void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs 
     list_suplementarias->cpu = list_create();
     list_suplementarias->io = list_create();
 
-    return 0;
+    
 }
 
 void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/
@@ -189,7 +189,7 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     list_destroy(list_suplementarias->cpu);
     list_destroy(list_suplementarias->io);
     
-    return 0;
+    
 }
 
 
@@ -208,6 +208,8 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_new);
 		posicion = list_add(listasProcesos->new, pcb);
         pthread_mutex_unlock(&sem_procesos_new);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
         break;
 
 	case RNN: //RUNNING
@@ -215,6 +217,8 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_running);    
 		posicion = list_add(listasProcesos->rnn, pcb);
         pthread_mutex_unlock(&sem_procesos_running);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
         break;
 
 	case BCK: //BLOCK
@@ -222,6 +226,8 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_block);
 		posicion = list_add(listasProcesos->bck, pcb);
         pthread_mutex_unlock(&sem_procesos_block);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
         break;
 
 	case EXT: //EXIT
@@ -229,97 +235,74 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_exit);    
 		posicion = list_add(listasProcesos->ext, pcb);
         pthread_mutex_unlock(&sem_procesos_exit);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
         break;
 
 	case RDY: //RDY
 
 		posicion = agregar_lista_ready(pcb);
-	
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
         break;
 	
 	default:
         log_error(logger, "Erro al identificar estado de un pcb (funcion agregar proceso a lista)");
-        return EXIT_FAILURE;
+        return -1;
 		break;
 
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
 	}
 
 }
 
 //Esta Funcion debe ser llamada dsp de agregar_proceso_lista (PCB* pcb) 
-void eliminar_proceso_Lista (PCB* pcb ){/*Funcion que ELIMINA un PCB de una lista correspondiente segun PCB->ESTADO_ANTERIOR*/
+op_code eliminar_proceso_Lista(PCB* pcb) {
+    bool removed = false; // Inicializamos
 
-    bool removed;
-    switch (pcb->estado_anterior)
-	{
-	
-        case NEW: //NEW
+    switch (pcb->estado_anterior) {
+        case NEW:
+            pthread_mutex_lock(&sem_procesos_new);
+            removed = list_remove_element(listasProcesos->new, pcb);
+            pthread_mutex_unlock(&sem_procesos_new);
+            break;
+            
+        case RNN:
+            pthread_mutex_lock(&sem_procesos_running);
+            removed = list_remove_element(listasProcesos->rnn, pcb);
+            pthread_mutex_unlock(&sem_procesos_running);
+            break;
 
-        pthread_mutex_lock(&sem_procesos_new);
-		removed = list_remove_element(listasProcesos->new, pcb);
-        pthread_mutex_unlock(&sem_procesos_new);
+        case BCK:
+            pthread_mutex_lock(&sem_procesos_block);
+            removed = list_remove_element(listasProcesos->bck, pcb); // Asegura que el nombre coincida con tu struct
+            pthread_mutex_unlock(&sem_procesos_block);
+            break;
 
-        if (!removed) {
-            log_error(logger, "Error al remover PCB de lista");
-            return EXIT_FAILURE;}
-
-        break;
-        	
-        case RNN: //RUNNING
-
-        pthread_mutex_lock(&sem_procesos_running);
-		removed = list_remove_element(listasProcesos->rnn, pcb);
-        pthread_mutex_unlock(&sem_procesos_running);
-
-        if (!removed) {
-            log_error(logger, "Error al remover PCB de lista");
-            return EXIT_FAILURE;}
-
-        break;
-
-        case BCK: //BLOCK
-
-        pthread_mutex_lock(&sem_procesos_block);
-		removed = list_remove_element(listasProcesos->bck, pcb);
-        pthread_mutex_unlock(&sem_procesos_block);
-
-        if (!removed) {
-            log_error(logger, "Error al remover PCB de lista");
-            return EXIT_FAILURE;}
-
-        break;
-
-        case EXT: //EXIT
-
-        pthread_mutex_lock(&sem_procesos_exit);
-		removed = list_remove_element(listasProcesos->ext, pcb);
-        pthread_mutex_unlock(&sem_procesos_exit);
-
-        if (!removed) {
-            log_error(logger, "Error al remover PCB de lista");
-            return EXIT_FAILURE;}
-
-        break;
+        case EXT:
+            pthread_mutex_lock(&sem_procesos_exit);
+            removed = list_remove_element(listasProcesos->ext, pcb);
+            pthread_mutex_unlock(&sem_procesos_exit);
+            break;
         
-        case RDY: //RDY
+        case RDY:
+            pthread_mutex_lock(&sem_procesos_ready);
+            removed = list_remove_element(listasProcesos->rdy, pcb);
+            pthread_mutex_unlock(&sem_procesos_ready);
+            break;
+    
+        default:
+            log_error(logger, "Error: Estado anterior desconocido.");
+            return NOTOK; 
+    }
 
-        pthread_mutex_lock(&sem_procesos_ready);
-		removed = list_remove_element(listasProcesos->rdy, pcb);
-        pthread_mutex_unlock(&sem_procesos_ready);
+    if (!removed) {
+        log_error(logger, "Error al remover PCB de lista");
+        return NOTOK;
+    }
 
-        if (!removed) {
-            log_error(logger, "Error al remover PCB de lista");
-            return EXIT_FAILURE;}
+    return OK; 
+}
 
-		break;
-	
-	default:
-        log_error (logger, "Error en identificar estado anterior de un PCB (funcion eliminar de lista)");
-		break;
-	}
-
-}   
 
 int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
 
@@ -333,7 +316,7 @@ int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de REA
     }
     else {
         log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
-    return EXIT_FAILURE;
+    return -1;
     }
     return posicion;
 }
@@ -390,7 +373,7 @@ PCB* buscar_pcb_por_pid(uint32_t pid_recibido) { // (Facu): Yo remplazaria esto 
     }
 
     log_error(logger, "Error al identificar PCB en listas de estados (funcion buscar_pcb_por_pid)");
-    return EXIT_FAILURE; 
+    return NULL;
 
 }
 
@@ -427,7 +410,7 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
         cpu_libre->enUso = true;}
     else {
         log_error (logger, "No se encontro a la CPU buscada (funcion: mandar_proceso_cpu)");
-        return EXIT_FAILURE;
+        return;
     }
     pthread_mutex_unlock(&mutex_cpus);
 
@@ -439,12 +422,12 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
 
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
-        eliminar_proceso_lista(pcb_a_ejecutar);//ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        eliminar_proceso_Lista(pcb_a_ejecutar);//ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
 
-        int err = enviar_pcb (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
+        int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
         if (err != 1) {
             log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error        
-            return EXIT_FAILURE;}
+            return;}
 
         log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->data.PID, cpu_libre->fd);
 
@@ -459,7 +442,7 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
     }
     else {
         log_error (logger, "Error en verificacion de CPU IO y Procesos en READY (funcion: mandar_proceso_cpu)");
-        return EXIT_FAILURE;
+        return;
     }
 }
 
@@ -492,8 +475,9 @@ bool es_la_cpu_buscada (void* elemento, void* contexto) {
 void enviar_desalojo(int socket_cliente){/* HACER  */
    
     
-   log_info(logger, "Enviado Desalojo a socket %d por fin de Quantum");
-
+log_info(logger,
+         "Enviado Desalojo a socket %d por fin de Quantum",
+         socket_cliente);
 }
 
 
@@ -555,7 +539,7 @@ void mutex_create (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
 
-        char* mutex_id = recibir_mensaje (socket_cliente);
+        char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         mutex_cpu* mutex = malloc(sizeof(mutex_cpu));
 
@@ -573,22 +557,30 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
-        char* mutex_id = recibir_mensaje (socket_cliente);
+        char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
+        free(mutex_id);
 
-        while (mutex->valor =! 1){
-
-            sleep(1000); //para que la espera activa sea menos grave
-
-            log_info (logger, "El mutex %d esta bloqueado", mutex->mutex_id);
+        if (mutex == NULL) {
+        log_error(logger, "Mutex no encontrado");
+        return;
         }
-        
-        pthread_mutex_lock (&mutex_simulados);
-        mutex->valor = 0;    
-        pthread_mutex_unlock (&mutex_simulados);
+
+        while (1) {
+            pthread_mutex_lock(&mutex_simulados);
+            if (mutex->valor == 1) {
+                mutex->valor = 0; 
+                pthread_mutex_unlock(&mutex_simulados);
+                break;
+            }
+            pthread_mutex_unlock(&mutex_simulados);
+            usleep(1000); // Pequeña pausa para no saturar el CPU
+        }
 
         enviar_op_code(OK, socket_cliente);
+
+
     }
 
 //MUTEX_UNLOK,
@@ -596,7 +588,7 @@ void mutex_unlock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
-        char* mutex_id = recibir_mensaje (socket_cliente);
+        char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
@@ -617,10 +609,11 @@ void mem_free (){// Hacer
 //INIT PROC
 void init_proc(int socket_cliente){
     
-    t_paquete* paquete = recibir_paquete(socket_cliente);
-    char* path = (char*)paquete->buffer->stream;
-    int prioridad = *(int*)(paquete->buffer->stream + strlen(path) + 1);
+    t_list* lista = recibir_paquete(socket_cliente);
+    char* path = (char*)list_get(lista, 0);
+    int prioridad = *(int*)list_get(lista, 1);
 
+    
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
     PCB* nuevo_pcb = crearNuevoProceso(logger, path, info_km.conexion_km);
@@ -632,22 +625,22 @@ void init_proc(int socket_cliente){
     agregar_proceso_lista (nuevo_pcb);
                     
     }
+    list_destroy(lista);
                 
-    eliminar_paquete(paquete);
 }
 
 //EXIT
 void exit_proceso(int socket_cpu){
 
-    t_paquete* paquete = recibir_paquete(socket_cpu);
-    int pid_a_finalizar = *(int*)paquete->buffer->stream;
-    eliminar_paquete(paquete);
+    t_list* lista = recibir_paquete(socket_cpu);
+    int pid_a_finalizar = *(int*)list_get(lista, 0);
+    list_destroy(lista);
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
     enviar_proceso_finalizar_KM(pid_a_finalizar);
     
-    PCB* pcb = encontrar_pcb_en_running(pid_a_finalizar);
+    PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
         eliminar_proceso_Lista(pcb);
     }
@@ -660,16 +653,14 @@ void exit_proceso(int socket_cpu){
 
 //SLEEP
 void io_sleep(int socket_cpu, int socket_io) {
+    t_list* lista = recibir_paquete(socket_cpu);
+    int pid_a_bloquear = *(int*)list_get(lista, 0);
+    char* tiempo_str = (char*)list_get(lista, 1);
+    int tiempo_ms = atoi(tiempo_str); // Si viene como string, convertimos
+    list_destroy(lista);
 
-    t_paquete* paquete_cpu = recibir_paquete(socket_cpu);
-    int pid_a_bloquear;
-    memcpy(&pid_a_bloquear, paquete_cpu->buffer->stream, sizeof(int));
-    
-    char* tiempo_str = (char*)(paquete_cpu->buffer->stream + sizeof(int));
-    int tiempo_ms = atoi(tiempo_str); 
-    
+
     log_info(logger, "Recibida syscall SLEEP (PID: %d, Tiempo: %d ms)", pid_a_bloquear, tiempo_ms);
-    eliminar_paquete(paquete_cpu);
 
     PCB* pcb = encontrar_pcb_rnn_por_pid(pid_a_bloquear);
     
@@ -686,17 +677,22 @@ void io_sleep(int socket_cpu, int socket_io) {
         datos_io->time = (uint32_t)tiempo_ms;
 
         t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
-        buffer_add(paquete_para_io->buffer, datos_io, sizeof(t_io_sleep));
-        
+        agregar_a_paquete(paquete_para_io,
+                        &datos_io->pid,
+                        sizeof(uint32_t));
+
+        agregar_a_paquete(paquete_para_io,
+                        &datos_io->time,
+                        sizeof(uint32_t));        
         enviar_paquete(paquete_para_io, socket_io);
         
         // recibir el IO_LIBRE
         op_code op_libre = recibir_op_code(socket_io);
         if (op_libre == IO_LIBRE) { //Cambiar para que busque cual es esa IO libre que la ponga en ocupada
             log_info(logger, "IO liberada tras SLEEP");
-            IO* interfaz = buscar_io_por_fd(socket_io);
+            t_IO* interfaz = buscar_io_por_fd(socket_io);
             interfaz->enUso = false;
-            queue_push(list_suplementarias->io_ready, interfaz);
+            list_add(list_suplementarias->io, interfaz);
         }
 
         free(datos_io);
@@ -714,12 +710,12 @@ void io_sleep(int socket_cpu, int socket_io) {
 void nueva_io (int cliente_fd){
 
     
-    IO* info_io = malloc(sizeof(IO));
+    t_IO* info_io = malloc(sizeof(IO));
     info_io->fd = cliente_fd;         
     info_io->enUso = false;    
     
    
-    info_io->nombre = recibir_string(cliente_fd); // (Facu) No le daria nombre, sino que la identificaria por el socket del cliente.
+    info_io->nombre = recibir_mensaje(cliente_fd,logger); // (Facu) No le daria nombre, sino que la identificaria por el socket del cliente.
     
                 
     pthread_mutex_lock(&mutex_ios);
@@ -732,13 +728,11 @@ void nueva_io (int cliente_fd){
 }
 // STDIN
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
-    t_paquete* paquete = recibir_paquete(socket_cpu);
-    
-    uint32_t tam, dir, pid;
-
-    memcpy(&tam, paquete->buffer->stream, sizeof(uint32_t));
-    memcpy(&dir, paquete->buffer->stream + sizeof(uint32_t), sizeof(uint32_t));
-    memcpy(&pid, paquete->buffer->stream + (2 * sizeof(uint32_t)), sizeof(uint32_t));
+    t_list* lista = recibir_paquete(socket_cpu);
+    uint32_t tam = *(uint32_t*)list_get(lista, 0);
+    uint32_t dir = *(uint32_t*)list_get(lista, 1);
+    uint32_t pid = *(uint32_t*)list_get(lista, 2);
+    list_destroy(lista);
 
     t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
@@ -750,16 +744,13 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
 
     op_code cod_op = recibir_op_code(socket_io);
     if (cod_op == IO_STDIN_RETORNO) {
-        t_paquete* paquete_datos = recibir_paquete(socket_io);
-        
-        uint32_t direccion_logica, tam_datos;
-        memcpy(&direccion_logica, paquete_datos->buffer->stream, sizeof(uint32_t));
-        memcpy(&tam_datos, paquete_datos->buffer->stream + sizeof(uint32_t), sizeof(uint32_t));
-
-        // Aquí debes extraer los datos reales leídos por el IO
+        t_list* lista = recibir_paquete(socket_io);  
+        uint32_t direccion_logica = *(uint32_t*)list_get(lista, 0);
+        uint32_t tam_datos = *(uint32_t*)list_get(lista, 1);    
+        void* datos_recibidos = list_get(lista, 2);
         void* buffer_usuario = malloc(tam_datos);
-        memcpy(buffer_usuario, paquete_datos->buffer->stream + (2 * sizeof(uint32_t)), tam_datos);
-
+        memcpy(buffer_usuario, datos_recibidos, tam_datos);
+        
         t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
         agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
         agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
@@ -768,19 +759,11 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
         enviar_paquete(paquete_mem, socket_memoria);
 
         free(buffer_usuario); // Liberamos el malloc temporal
-        eliminar_paquete(paquete_datos);
+        list_destroy(lista);
         eliminar_paquete(paquete_mem);
     }
 
-    op_code op_libre = recibir_op_code(socket_io);
-    if (op_libre == IO_LIBRE) {
-        IO* interfaz = buscar_io_por_fd(socket_io);
-        if(interfaz != NULL) {
-            interfaz->enUso = false;
-            queue_push(list_suplementarias->io_ready, interfaz);
-        }
-    }
-    eliminar_paquete(paquete);
+    
 }
 
 // STDOUT
@@ -804,8 +787,8 @@ void io_stdout(t_list* lista, int io_socket) {
     eliminar_paquete(req_mem);
 
     // recibir de km
-    t_paquete* resp_mem = recibir_paquete(info_km.conexion_km);
-    void* datos_leidos = resp_mem->buffer->stream; // Los bytes traídos de memoria
+    t_list* lista_mem = recibir_paquete(info_km.conexion_km);
+    void* datos_leidos = list_get(lista_mem, 0);
 
     // enviar a io
     t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
@@ -821,21 +804,19 @@ void io_stdout(t_list* lista, int io_socket) {
     op_code cod_op = recibir_op_code(io_socket);
     
     if (cod_op == IO_STDOUT_RETORNO) {
-        t_paquete* paquete_fin = recibir_paquete(io_socket);
-        eliminar_paquete(paquete_fin);
+        t_list* lista_fin = recibir_paquete(io_socket); 
+        list_destroy(lista_fin);
     }
 
-    // recibir el IO_LIBRE
-    op_code op_libre = recibir_op_code(io_socket);
-    if (op_libre == IO_LIBRE) {
-        log_info(logger, "IO liberada tras STDOUT");
-        IO* interfaz = buscar_io_por_fd(io_socket);
-        interfaz->enUso = false;
-        queue_push(list_suplementarias->io_ready, interfaz);
-    }
-    eliminar_paquete(resp_mem);
+    list_destroy(lista_mem);
 }
 
+void io_libre(int fd){
+    log_info(logger, "IO liberada tras STDOUT");
+    t_IO* interfaz = buscar_io_por_fd(fd);
+    interfaz->enUso = false;
+    list_add(list_suplementarias->io, interfaz);
+}
 
 /*-----Con el Kernel Memory-----*/
 

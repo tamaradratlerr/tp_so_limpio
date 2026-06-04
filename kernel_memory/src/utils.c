@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200112L 
+#define _POSIX_C_SOURCE 200809L
 #include "utils.h"              
 #include <sys/socket.h>
 #include <commons/string.h>

@@ -40,11 +40,11 @@ int main(int argc, char** argv) {
     inicializar_utils();
 
     char* puerto = config_get_string_value(config, "PUERTO_ESCUCHA");
-    int server_fd = iniciar_servidor(puerto);
+    int server_fd = iniciar_servidor(puerto, logger);
     log_info(logger, "Kernel Memory escuchando en puerto %s...", puerto);
 
     while (1) {
-        int cliente_fd = esperar_cliente(server_fd);
+            int cliente_fd = esperar_cliente(server_fd, logger);
         
         if (cliente_fd != -1) {
             log_info(logger, "Conexión entrante detectada en socket %d. Creando hilo de identificación...", cliente_fd);

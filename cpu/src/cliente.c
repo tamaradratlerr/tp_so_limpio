@@ -188,6 +188,16 @@ int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {
 char* fetch(t_cpu_sockets* sockets) {
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
+             contexto_actual->pid, contexto_actual->pc);
+
+    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc);
+    
+    if (dir_fisica == ERROR_MMU) {
+        log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
+        return NULL;
+    }
+
+    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 
              contexto_actual->pc);
 
@@ -202,7 +212,7 @@ char* fetch(t_cpu_sockets* sockets) {
     eliminar_paquete(paquete);
 
     
-    char* instruccion_raw = recibir_mensaje(sockets->conexion_kernel_memory); // recibimos el string de la instrucción
+    char* instruccion_raw = recibir_mensaje(sockets->conexion_kernel_memory, logger); // recibimos el string de la instrucción
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");
@@ -916,10 +926,24 @@ int apagar() {
     return 0; // O el valor que desees para salir del loop
 }
 
-uint32_t pedir_direccion_mmu(int32_t dir_logica) {
-    // Aquí iría tu lógica de comunicación con MMU
-    return (uint32_t)dir_logica; 
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
+    int tam_max_segmento = obtener_tam_max_segmento(); 
+    int tam_segmento_actual = obtener_tam_segmento_del_pid(proceso_en_ejecucion->pid, num_segmento);
+
+    int num_segmento = dir_logica / tam_max_segmento;
+    int desplazamiento = dir_logica % tam_max_segmento;
+
+    if ((desplazamiento + tamanio_solicitado) > tam_segmento_actual) {
+        log_error(logger, "SEG_FAULT: Acceso fuera de limites en PID %d", proceso_en_ejecucion->pid);
+        gestionar_desalojo_por_syscall(NULL, DESALOJO); // Avisas al Kernel
+        return ERROR_SEGMENTATION_FAULT;
+    }
+
+    uint32_t dir_fisica = consultar_base_segmento_al_kernel(num_segmento) + desplazamiento;
+    
+    return dir_fisica;
 }
+
 
 uint32_t obtener_tamanio_del_registro(char* reg) {
     return es_registro_32bits(reg) ? 4 : 1;

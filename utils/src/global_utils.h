@@ -1,7 +1,11 @@
 #ifndef GLOBAL_UTILS_H_
 #define GLOBAL_UTILS_H_
 
+<<<<<<< Updated upstream
 #define _POSIX_C_SOURCE 200809L
+=======
+#include <commons/collections/queue.h>
+>>>>>>> Stashed changes
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -19,9 +23,12 @@
 #include <semaphore.h> 
 #include <pthread.h>  
 
+<<<<<<< Updated upstream
 extern t_log* logger;
 extern char* PUERTO; // O como sea que definas el puerto en tu config
 
+=======
+>>>>>>> Stashed changes
 typedef enum {
     
     KERNEL_SCHEDULER,
@@ -51,6 +58,9 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     FIN_PROCESO, //Se informa que el proceso que estaba en la CPU finalizo
     DESALOJO, //Se informa que se debe desalojar al proceso que esta en la CPU
     PCB_DATA, //Se envia informacion como un PCB (PID)
+    TRADUCIR_DIRECCION,
+    ERROR_MMU,
+    ERROR_SEGMENTATION_FAULT,
 
     // Syscalls de la CPU (Kernel Scheduler)
     gl_MUTEX_CREATE,
@@ -131,7 +141,8 @@ typedef enum
     RNN,
     RDY,
     BCK,
-    EXT
+    EXT,
+    NO_ESTADO
     
     //Faltan agregar los estados del CheckPoint 3
 }estado;
@@ -214,13 +225,11 @@ op_code recibir_op_code (int socket_cliente);
 
 t_list* recibir_paquete(int);
 
-void iterator(char* value);
+void iterator(char* value, t_log* logger);
 
-char* recibir_mensaje(int);
-
-int esperar_cliente(int);
-
-int iniciar_servidor(char* puerto);
+char* recibir_mensaje(int socket_cliente, t_log* logger);
+int esperar_cliente(int socket_servidor, t_log* logger);
+int iniciar_servidor(char* puerto, t_log* logger);
 
 int recibir_pid(int socket_cliente);
 

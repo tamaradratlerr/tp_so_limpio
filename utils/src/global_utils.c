@@ -1,7 +1,12 @@
 
 #include "./global_utils.h"
+<<<<<<< Updated upstream
 
 
+=======
+// Al principio de global_utils.c, debajo de los #include
+extern char* PUERTO; // O como sea que definas el puerto en tu config
+>>>>>>> Stashed changes
 
 /*-----     MANEJO DE PAQUETES     -----*/
 
@@ -118,7 +123,7 @@ void liberar_conexion(int socket_cliente) {
     close(socket_cliente);
 }
 
-int esperar_cliente(int socket_servidor){
+int esperar_cliente(int socket_servidor, t_log* logger){
 	// Aceptamos un nuevo cliente
 	int socket_cliente = accept(socket_servidor, NULL, NULL);
     
@@ -132,7 +137,7 @@ int esperar_cliente(int socket_servidor){
 	return socket_cliente;
 }
 
-int iniciar_servidor(char* puerto){
+int iniciar_servidor(char* puerto, t_log* logger){
 	int socket_servidor;
 
 	struct addrinfo hints, *servinfo, *p;
@@ -237,7 +242,7 @@ void enviar_op_code (op_code code_op, int socket_cliente) {
     send(socket_cliente, &code_op, sizeof(op_code), 0);
 }
 
-char* recibir_mensaje (int socket_cliente)
+char* recibir_mensaje (int socket_cliente, t_log* logger)
 {
 	int size;
 	char* buffer = recibir_buffer(&size, socket_cliente);
@@ -248,7 +253,7 @@ char* recibir_mensaje (int socket_cliente)
 
 /*-----     SISTEMA     -----*/
 
-void iterator(char* value) {
+void iterator(char* value, t_log* logger) {
 	log_info(logger,"%s", value);
 }
 

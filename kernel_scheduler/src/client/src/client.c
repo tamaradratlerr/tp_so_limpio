@@ -18,16 +18,14 @@ int inicializar_kernel(void)
 
 
 	// Creamos una conexión hacia el servidor
-	printf("Intentando conectar al servidor...\n");
+	printf("Intentando conectar al Kernel Memory (Servidor)\n");
 	info_km.conexion_km = crear_conexion(info_km.ip_km, info_km.puerto_km, logger, KERNEL_MEMORY);
 
 	if (info_km.conexion_km != -1) {
-		printf("Conexión establecida, socket: %d\n", info_km.conexion_km);
-	} else {
-		printf("No se pudo conectar.\n");
+		printf("## Conectado a Kernel Memory,socket: %d\n", info_km.conexion_km); /*Logger Obligatorio*/
 	}
 	if(info_km.conexion_km < 0){
-		log_error(logger, "error de la conexión");
+		log_error(logger, "error de la conexión con Kernel Memory (Servidor)");
 		terminar_programa(info_km.conexion_km, logger, config);
 		return 1; //termino el programa
 	}

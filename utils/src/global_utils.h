@@ -1,6 +1,7 @@
 #ifndef GLOBAL_UTILS_H_
 #define GLOBAL_UTILS_H_
 
+#define _POSIX_C_SOURCE 200809L
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -18,7 +19,8 @@
 #include <semaphore.h> 
 #include <pthread.h>  
 
-t_log* logger;
+extern t_log* logger;
+extern char* PUERTO; // O como sea que definas el puerto en tu config
 
 typedef enum {
     

@@ -2,7 +2,7 @@
 #define UTILSKS_H_
 #include "../../utils/src/global_utils.h"
 
-
+t_config* config;
 
 typedef struct{
     char *ip_km, *puerto_km;

@@ -2,7 +2,8 @@
 #define SERVER_H_
 
 #include "utils.h"
- 
+
+pthread_t hilo_quantum;
 
 /*----- GESTION DE NUEVOS CLIENTES -----*/
 void* atender_nuevo_cliente(void* fd);

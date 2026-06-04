@@ -121,3 +121,14 @@ t_IO* buscar_io_por_fd(int fd_buscado) {
 
     return io_encontrada;
 }
+
+/*----- Auxiliares -----*/
+
+void terminar_programa(int conexion, t_log* logger, t_config* config, t_info_km info_km)
+{
+	log_destroy(logger);
+	config_destroy(config);
+
+    liberar_conexion (info_km.conexion_km);
+	
+}

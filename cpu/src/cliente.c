@@ -1,14 +1,19 @@
 #include "cliente.h"
 
-t_config* config;
-//t_log* logger; La declaracion de la variable logger va a estar en el GLOBALS pero se va a iniciar siempre por separado en el main (no vamos a tener problemas segun gemini)
-t_contexto* contexto_actual;
-t_instruccion* instruccion_decodificada;
-t_cpu_sockets* sockets;
-t_proceso_ejec* proceso_en_ejecucion;
+/* No lo pongo por las pruebas */
 
-int control_loop00;
-int control_loop;
+// int main(int argc, char *argv[]) {
+//     
+// Validamos que se haya pasado EXACTAMENTE un argumento extra
+//     if (argc != 2) {
+//         printf("Error: Debes pasar exactamente 1 argumento.\n");
+//         return 1; 
+//     }
+
+//     // Guardamos el argumento en una variable de tipo string (char*)
+//     char *config = argv[1];
+//     char *Identificador = argv[2];
+
 
 int main(void)
 {
@@ -17,8 +22,10 @@ int main(void)
 
     /* ---------------- Iniciamos el Logger y Config ----------------*/
 
-    logger = iniciar_logger();
-    t_config* config = iniciar_config();    
+    t_config* config = iniciar_config();  
+    t_log_level log_level = t_log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
+    logger = iniciar_logger(log_level);
+      
     
 
     if (logger == NULL || config == NULL) {
@@ -112,16 +119,18 @@ int main(void)
             proceso_en_ejecucion->pid = -1;
             control_loop00 = apagar(); //apagar sea una funcion que segun el valor de una variable global corta la cpu o no //HACER
     }
+
+    terminar_programa (logger, config, sockets); /*Pensar si hay algo mas que se tenga que [cerrar / terminar]*/
 }
 
 
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
 
-t_log* iniciar_logger(void) 
+t_log* iniciar_logger(t_log_level log_level) 
 {
     // Usamos LOG_LEVEL_INFO por defecto para asegurar que se vea por consola
-    t_log* nuevo_logger = log_create("cpu.log", "CPU", true, LOG_LEVEL_INFO);
+    t_log* nuevo_logger = log_create("cpu.log", "CPU", true, log_level);
     if (nuevo_logger == NULL) {
         perror("No se pudo crear el logger");
     }
@@ -960,6 +969,7 @@ int apagar() {
 }
 
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
+    
     int tam_max_segmento = obtener_tam_max_segmento(); 
     int tam_segmento_actual = obtener_tam_segmento_del_pid(proceso_en_ejecucion->pid, num_segmento);
 
@@ -976,7 +986,6 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
     
     return dir_fisica;
 }
-
 
 uint32_t obtener_tamanio_del_registro(char* reg) {
     return es_registro_32bits(reg) ? 4 : 1;

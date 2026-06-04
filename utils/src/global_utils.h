@@ -23,12 +23,9 @@
 #include <semaphore.h> 
 #include <pthread.h>  
 
-<<<<<<< Updated upstream
 extern t_log* logger;
 extern char* PUERTO; // O como sea que definas el puerto en tu config
 
-=======
->>>>>>> Stashed changes
 typedef enum {
     
     KERNEL_SCHEDULER,

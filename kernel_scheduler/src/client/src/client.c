@@ -4,9 +4,10 @@ int inicializar_kernel(void)
 {
 	
 	/* ---------------- ARCHIVOS DE CONFIGURACION Y LOGGER ---------------- */	
-	logger = iniciar_logger();
+	
 	config = iniciar_config();
 
+	t_log_level log_level = t_log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
 	info_km.ip_km = config_get_string_value(config, "IP_KM");
 	info_km.puerto_km = config_get_string_value(config, "PUERTO_KM");
 	info_config.planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
@@ -14,6 +15,7 @@ int inicializar_kernel(void)
 	info_config.intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
 	info_config.tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
 
+	logger = iniciar_logger(log_level);
 	/*---------------------------------------------------CONEXION CON KM-------------------------------------------------------------*/
 
 
@@ -41,11 +43,11 @@ int inicializar_kernel(void)
 /*----------------------------------FUNCIONES------------------------------------------*/
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
-t_log* iniciar_logger(void)
+t_log* iniciar_logger(t_log_level log_level)
 {
 	t_log* nuevo_logger;
 
-	nuevo_logger = log_create("KS.log", "Kernel Scheduler", true, LOG_LEVEL_INFO);
+	nuevo_logger = log_create("KS.log", "Kernel Scheduler", true, log_level);
 	
 	return nuevo_logger;
 }
@@ -65,12 +67,7 @@ t_config* iniciar_config(void)
 	return nuevo_config;
 }
 
-void terminar_programa(int conexion, t_log* logger, t_config* config)
-{
-	log_destroy(logger);
-	config_destroy(config);
-	
-}
+
 
 
 

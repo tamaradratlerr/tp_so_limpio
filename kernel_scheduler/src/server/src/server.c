@@ -4,7 +4,25 @@
 #include "../../utils/src/global_utils.h"
 
 
-pthread_t hilo_quantum;
+
+
+
+/* No lo pongo por las pruebas */
+
+// int main(int argc, char *argv[]) {
+//     
+// Validamos que se haya pasado EXACTAMENTE un argumento extra
+//     if (argc != 2) {
+//         printf("Error: Debes pasar exactamente 1 argumento.\n");
+//         return 1; 
+//     }
+
+//     // Guardamos el argumento en una variable de tipo string (char*)
+//     char *config = argv[1];
+//     char *pato_proceso0 = argv[2];
+
+
+
 
 int main(void) {
 
@@ -54,10 +72,7 @@ int main(void) {
         
     }
 
-
-
-
-    return EXIT_SUCCESS;
+    terminar_programa (logger, config, info_km);
 }
 
 
@@ -312,7 +327,6 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
     return OK; 
 }
 
-
 int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
 
     int posicion;
@@ -519,12 +533,13 @@ void nueva_cpu (int cliente_fd) {
         log_info(logger, "## CPU ID: [%d] Conectada", cliente_fd); /*Logger Obligatorio*/
         }
 
-    //CPU_LIBRE,
+//CPU_LIBRE,
 void cpu_libre (int cliente_fd){
 
     mandar_proceso_cpu(cliente_fd);
 }
-    //FIN_PROCESO,
+
+//FIN_PROCESO,
 void fin_proceso (int cliente_fd){ /*HACER*/
 
     
@@ -853,6 +868,7 @@ void io_stdout(int cpu_socket, int io_socket) {
 }
 
 void io_libre(int fd){
+    
     log_info(logger, "IO liberada tras STDOUT");
     t_IO* interfaz = buscar_io_por_fd(fd);
     interfaz->enUso = false;

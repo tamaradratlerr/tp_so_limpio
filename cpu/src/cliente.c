@@ -101,6 +101,7 @@ int main(void)
             enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
             int cod_op = recibir_op_code (sockets->conexion_kernel_scheduler);
             if (cod_op == DESALOJO) {
+                log_info (logger, "## Interrupcion recibida"); /*Logger Obligatorio*/
                 interrupciones();
                 continue; // Saltamos el ciclo de ejecución actual
             }
@@ -401,6 +402,7 @@ bool es_registro_32bits(char* nombre) {
 
 void ejecutar_noop (t_instruccion* instr){
 
+    log_info (logger, "## PID:[%d] - Ejecutando [NOOP]",contexto_actual->pid);/*Logger Obligatorio*/
     //No hace nada
 
 }
@@ -416,6 +418,7 @@ void ejecutar_set (t_instruccion* instr){
         
         *dest = valor;
 
+        log_info (logger, "## PID:[%d] - Ejecutando [SET] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SET 32b: %s = %u", reg_dest_nombre, *dest);
     }
     else {
@@ -425,6 +428,7 @@ void ejecutar_set (t_instruccion* instr){
 
         *dest = valor;
 
+        log_info (logger, "## PID:[%d] - Ejecutando [SET] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
     }
 
@@ -444,6 +448,7 @@ void ejecutar_mov_in (t_instruccion* instr){
         *dest = *(uint32_t*)buffer;
         free(buffer);
 
+        log_info (logger, "## PID:[%d] - Ejecutando [MOV IN] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] MOV_IN 32b: %s = %u", reg_dest_nombre, *dest);
     }   
     else {
@@ -456,6 +461,7 @@ void ejecutar_mov_in (t_instruccion* instr){
         *dest = *(uint8_t*)buffer;
         free(buffer);
 
+        log_info (logger, "## PID:[%d] - Ejecutando [MOV IN] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] MOV_IN 32b: %s = %u", reg_dest_nombre, *dest);
 
 
@@ -476,6 +482,7 @@ void ejecutar_mov_out (t_instruccion* instr){
         escribir_en_memoria(dir_fisica, buffer, sizeof(uint32_t));
         free(buffer);
 
+        log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] MOV_OUT 32b: %s = %u", reg_dest_nombre, *dest);
     }   
     else {
@@ -488,6 +495,7 @@ void ejecutar_mov_out (t_instruccion* instr){
         escribir_en_memoria(dir_fisica, buffer, sizeof(uint8_t));
         free(buffer);
 
+        log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] MOV_OUT 8b: %s = %u", reg_dest_nombre, *dest);
 
 
@@ -506,6 +514,7 @@ void ejecutar_sum(t_instruccion* instr) {
         uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
         *dest += *orig;
         
+        log_info (logger, "## PID:[%d] - Ejecutando [SUM] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SUM 32b: %s = %u", reg_dest_nombre, *dest);
     } else {
         
@@ -513,6 +522,7 @@ void ejecutar_sum(t_instruccion* instr) {
         uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
         *dest += *orig;
         
+        log_info (logger, "## PID:[%d] - Ejecutando [SUM] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
     }
 }
@@ -528,6 +538,7 @@ void ejecutar_sub(t_instruccion* instr) {
         uint32_t* orig = (uint32_t*)obtener_registro(reg_orig_nombre);
         *dest -= *orig;
         
+        log_info (logger, "## PID:[%d] - Ejecutando [SUB] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SUB 32b: %s = %u", reg_dest_nombre, *dest);
     } else {
         
@@ -535,6 +546,7 @@ void ejecutar_sub(t_instruccion* instr) {
         uint8_t* orig = (uint8_t*)obtener_registro(reg_orig_nombre);
         *dest -= *orig;
        
+        log_info (logger, "## PID:[%d] - Ejecutando [SUB] - Destino [%d] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SUB 8b: %s = %u", reg_dest_nombre, *dest);
     }
 }
@@ -549,6 +561,8 @@ void ejecutar_jnz(t_instruccion* instr) {
         /*atoi toma una cadena de caracteres q contiene números y la traduce a su valor numérico real en meomria
         --> Si no usas atoi estarías intentando asignar una dirección de memoria (donde vive el texto "5")*/
         contexto_actual->pc = (uint32_t)atoi(instr->params[1]);
+        
+        log_info (logger, "## PID:[%d] - Ejecutando [JNZ] - Valor [%d]",contexto_actual->pid, contexto_actual->pc);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] JNZ: Salto a PC %u", contexto_actual->pc);
     }
 }
@@ -579,6 +593,7 @@ void ejecutar_copy_mem(t_instruccion* instr) {
     
     free(buffer);
     
+    log_info (logger, "## PID:[%d] - Ejecutando [COPY MEM] - Tamaño [%d] - Origen [%u] - Destino [%u]",contexto_actual->pid, *dir_logica_origen, *dir_logica_destino);/*Logger Obligatorio*/
     log_info(logger, "[EXEC] COPY_MEM: Copiados %d bytes de SI(log:%u) a DI(log:%u)", 
              tamanio, *dir_logica_origen, *dir_logica_destino);
 }
@@ -588,6 +603,8 @@ void ejecutar_mutex_create(t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
+    log_info (logger, "## PID:[%d] - Ejecutando [MUTEX CREATE] - Valor [%d]",contexto_actual->pid, mutex_id);/*Logger Obligatorio*/
+    
     enviar_op_code (gl_MUTEX_CREATE, sockets->conexion_kernel_scheduler); //Envia la señal
     
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -606,6 +623,8 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     char* mutex_id = instr->params[0];
     op_code err;
 
+    log_info (logger, "## PID:[%d] - Ejecutando [MUTEX LOCK] - Valor [%d]",contexto_actual->pid, mutex_id);/*Logger Obligatorio*/
+
     enviar_op_code (gl_MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -623,6 +642,8 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
 
     char* mutex_id = instr->params[0];
     op_code err;
+
+    log_info (logger, "## PID:[%d] - Ejecutando [MUTEX Unlock] - Valor [%d]",contexto_actual->pid, mutex_id);/*Logger Obligatorio*/
 
     enviar_op_code (gl_MUTEX_UNLOCK, sockets->conexion_kernel_scheduler); //Envia la señal
 
@@ -643,6 +664,8 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     char* tamanio = instr->params[1];
     op_code err;
 
+    log_info (logger, "## PID:[%d] - Ejecutando [MUTEX CREATE] - ID [%d] - Tamanio [%d]",contexto_actual->pid, id_segmento, tamanio);/*Logger Obligatorio*/
+    
     enviar_op_code (gl_MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
@@ -664,7 +687,10 @@ void ejecutar_mem_free (t_instruccion* instr){
     char* id_segmento = instr->params[0];
     op_code err;
 
+    log_info (logger, "## PID:[%d] - Ejecutando [MEM ALLOC] - ID [%d]",contexto_actual->pid, id_segmento);/*Logger Obligatorio*/
+
     enviar_op_code (gl_MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
+    
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
@@ -678,6 +704,8 @@ void ejecutar_sleep(t_instruccion* instr) {
     
     char* tiempo = strdup(instr->params[0]);
     
+    log_info (logger, "## PID:[%d] - Ejecutando [Sleep] - Tiempo [%d]",contexto_actual->pid, tiempo);/*Logger Obligatorio*/
+
     gestionar_desalojo_por_syscall(tiempo, gl_IO_SLEEP);    
 
     if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK) {
@@ -700,6 +728,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     void* ptr_tam = obtener_registro(reg_tam);
     tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
+    log_info (logger, "## PID:[%d] - Ejecutando [STDOUT] - Registro [%d] - Tamanio [%d]",contexto_actual->pid, ptr_dir, ptr_tam);/*Logger Obligatorio*/
     log_info(logger, "PID: %u", pid_actual);
 
     t_paquete* paquete = crear_paquete(gl_IO_STDOUT);
@@ -744,6 +773,8 @@ void ejecutar_stdin(t_instruccion* instr) {
     direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
+    log_info (logger, "## PID:[%d] - Ejecutando [STDIN] - Destino [%d] - Tamanio [%d]",contexto_actual->pid, direccion_logica, tamanio);/*Logger Obligatorio*/
+
     t_paquete* paquete = crear_paquete(gl_IO_STDIN);
 
     agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
@@ -762,6 +793,7 @@ void ejecutar_init_proc(t_instruccion* instr) {
     char* path = instr->params[0];
     int prioridad = atoi(instr->params[1]);
 
+    log_info (logger, "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%d] - Prioridad [%d]",contexto_actual->pid, path, prioridad);/*Logger Obligatorio*/
     log_info(logger, "PID %d solicitando crear nuevo proceso: %s", contexto_actual->pid, path);
 
     enviar_op_code(gl_INIT_PROC, sockets->conexion_kernel_scheduler);
@@ -780,6 +812,7 @@ void ejecutar_init_proc(t_instruccion* instr) {
 void ejecutar_exit() {
     
     log_info(logger, "PID: %d - Ejecutando EXIT", contexto_actual->pid);
+    log_info (logger, "## PID:[%d] - Ejecutando [EXIT]",contexto_actual->pid);/*Logger Obligatorio*/
 
     enviar_op_code(gl_EXIT, sockets->conexion_kernel_scheduler);
 

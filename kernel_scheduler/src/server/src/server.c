@@ -405,7 +405,6 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
     return pcb_buscado;
 }
 
-
 /*-----                     GESTION DE CPUs                     -----*/
 
 
@@ -549,8 +548,6 @@ void deslojarTodasCpus() {
 //MUTEX_CREATE,
 void mutex_create (int socket_cliente){
 
-    
-
     enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
 
     int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
@@ -577,6 +574,7 @@ void mutex_lock (int socket_cliente){
         int pid = recibir_pid (socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
+        log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
         free(mutex_id);
@@ -611,6 +609,7 @@ void mutex_unlock (int socket_cliente){
 
         int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
+        log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
@@ -623,12 +622,17 @@ void mutex_unlock (int socket_cliente){
 
 //tami
 //MEM_ALLOC,
-void mem_alloc (){//Hacer
+void mem_alloc (int socket_cliente){//Hacer
+    
+    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
 
 }; 
 //MEM_FREE,
-void mem_free (){// Hacer
+void mem_free (int socket_cliente){// Hacer
 
+    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
 } 
 //INIT PROC
 void init_proc(int socket_cliente){
@@ -636,6 +640,9 @@ void init_proc(int socket_cliente){
     t_list* lista = recibir_paquete(socket_cliente);
     char* path = (char*)list_get(lista, 0);
     int prioridad = *(int*)list_get(lista, 1);
+
+    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Init Proc]", pid); /*Logger Obligatorio*/
 
     
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
@@ -658,6 +665,8 @@ void exit_proceso(int socket_cpu){
     t_list* lista = recibir_paquete(socket_cpu);
     int pid_a_finalizar = *(int*)list_get(lista, 0);
     list_destroy(lista);
+
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit]", pid_a_finalizar); /*Logger Obligatorio*/
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
@@ -686,6 +695,7 @@ void io_sleep(int socket_cpu, int socket_io) {
     int tiempo_ms = atoi(tiempo_str); // Si viene como string, convertimos
     list_destroy(lista);
 
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Sleep]", pid_a_bloquear); /*Logger Obligatorio*/
 
     log_info(logger, "Recibida syscall SLEEP (PID: %d, Tiempo: %d ms)", pid_a_bloquear, tiempo_ms);
 
@@ -736,7 +746,6 @@ void io_sleep(int socket_cpu, int socket_io) {
 //NUEVA_IO
 void nueva_io (int cliente_fd){
 
-    
     t_IO* info_io = malloc(sizeof(IO));
     info_io->fd = cliente_fd;         
     info_io->enUso = false;    
@@ -761,6 +770,8 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     uint32_t dir = *(uint32_t*)list_get(lista, 1);
     uint32_t pid = *(uint32_t*)list_get(lista, 2);
     list_destroy(lista);
+
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Stdin]", pid); /*Logger Obligatorio*/
 
     t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
@@ -801,7 +812,9 @@ void io_stdout(int cpu_socket, int io_socket) {
     uint32_t pid = *(uint32_t*)list_get(lista, 0);
     uint32_t dir = *(uint32_t*)list_get(lista, 1);
     uint32_t tam = *(uint32_t*)list_get(lista, 2);
-    
+   
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Stdout]", pid); /*Logger Obligatorio*/
+
     // bloquear PCB
     PCB* pcb = buscar_pcb_por_pid(pid);
     cambiar_estado_pcb(pcb, BCK); // O el estado que uses

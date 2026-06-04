@@ -91,6 +91,7 @@ extern char* planificacion_algoritmo;
 extern char* listas_algortimo;
 extern int intervalo_tarea;
 extern int tiempo_suspencion;
+extern int inicio_todo;
 
 
 extern t_listas_suplementarias* list_suplementarias;

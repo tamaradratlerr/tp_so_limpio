@@ -5,6 +5,7 @@ char* listas_algortimo = NULL;
 
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
+int inicio_todo = false;
 
 pthread_t hilo_timer;
 

@@ -3,9 +3,10 @@ LIBS=commons pthread readline m utilsKS utils
 
 # Custom libraries' paths
 SHARED_LIBPATHS=
-STATIC_LIBPATHS=../../utilsKS ../../../utils
+STATIC_LIBPATHS=../../utilsKS ../../utils ../../../utils
 
-IDIRS += ../../utilsKS ../../../utils /usr/local/include
+# Include paths
+IDIRS += ../../utilsKS/src ../../utils/src ../../../utils/src /usr/local/include
 
 # Compiler flags
 CDEBUG=-g -Wall -DDEBUG -fdiagnostics-color=always

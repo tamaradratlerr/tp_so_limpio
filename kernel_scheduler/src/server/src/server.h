@@ -47,7 +47,7 @@ void exit_proceso(int socket_cpu);
 void io_sleep(int socket_cpu, int socket_io);
 void nueva_io(int cliente_fd);
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria);
-void io_stdout(t_list* lista, int io_socket);
+void io_stdout(int cpu_socket, int io_socket);
 void io_libre(int fd);
 
 /*----- CON EL KERNEL MEMORY -----*/

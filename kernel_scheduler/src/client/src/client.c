@@ -35,7 +35,7 @@ int inicializar_kernel(void)
 	// Enviamos al servidor el valor de CLAVE como mensaje
 	enviar_op_code(OK, info_km.conexion_km);
 
-
+	inicio_todo = true;
 	//terminar_programa(info_km.conexion_km, logger, config);
 
 }

@@ -1,12 +1,17 @@
 #include "../../client/src/client.h"
 #include "server.h"
-#include <utilsKS.h>
+#include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
+
 
 pthread_t hilo_quantum;
 int main(void) {
 
-    inicializar_kernel();
+    while (!inicio_todo)
+    {
+        /* nada ehago una esoera activa por que no se q hacer */
+    }
+    
     
     pthread_mutex_init(&mutex_cpus, NULL);
 
@@ -770,8 +775,8 @@ void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
 }
 
 // STDOUT
-void io_stdout(t_list* lista, int io_socket) {
-
+void io_stdout(int cpu_socket, int io_socket) {
+    t_list* lista = recibir_paquete(cpu_socket);
     // deserializar lo que viene de la CPU
     uint32_t pid = *(uint32_t*)list_get(lista, 0);
     uint32_t dir = *(uint32_t*)list_get(lista, 1);

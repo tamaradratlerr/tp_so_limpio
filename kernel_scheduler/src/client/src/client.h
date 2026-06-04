@@ -6,9 +6,9 @@
 
 
 
-t_log* iniciar_logger(void);
+t_log* iniciar_logger(t_log_level log_level);
 t_config* iniciar_config(void);
-int inicializar_kernel(void);
+
 
 
 #endif /* CLIENT_H_ */

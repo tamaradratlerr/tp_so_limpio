@@ -1,13 +1,13 @@
 #include "client.h"
 
-int inicializar_kernel(void)
+int main(void)
 {
 	
 	/* ---------------- ARCHIVOS DE CONFIGURACION Y LOGGER ---------------- */	
 	
 	config = iniciar_config();
 
-	t_log_level log_level = t_log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
+	t_log_level log_level = log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
 	info_km.ip_km = config_get_string_value(config, "IP_KM");
 	info_km.puerto_km = config_get_string_value(config, "PUERTO_KM");
 	info_config.planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");

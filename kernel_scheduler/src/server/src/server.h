@@ -39,8 +39,8 @@ void deslojarTodasCpus(void);
 void mutex_create(int socket_cliente);
 void mutex_lock(int socket_cliente);
 void mutex_unlock(int socket_cliente);
-void mem_alloc(void);
-void mem_free(void);
+void mem_alloc(int socket_cliente);
+void mem_free(int socket_cliente);
 void init_proc(int socket_cliente);
 void exit_proceso(int socket_cpu);
 

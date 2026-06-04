@@ -2,6 +2,7 @@
 
 char* planificacion_algoritmo = NULL;
 char* listas_algortimo = NULL;
+t_config* config;
 
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;

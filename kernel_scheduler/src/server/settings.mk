@@ -6,7 +6,7 @@ SHARED_LIBPATHS=
 STATIC_LIBPATHS=../../utilsKS ../../utils ../../../utils
 
 # Include paths
-IDIRS += ../../utilsKS/src ../../utils/src ../../../utils/src /usr/local/include
+IDIRS += ../../utilsKS ../../utils/src ../../../utils/src /usr/local/include
 
 # Compiler flags
 CDEBUG=-g -Wall -DDEBUG -fdiagnostics-color=always

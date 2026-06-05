@@ -15,6 +15,7 @@ t_log* logger = NULL;
 
 t_listas_procesos* listasProcesos= NULL; //Lista de PCBs segun estado (GLOBAL)
 t_listas_suplementarias* list_suplementarias= NULL; //Lista de CPUs y IOs (GLOBAL)
+t_list* lista_bck_io = NULL;
 t_list* lista_mutex= NULL;
 t_info_km info_km;
 t_info_config info_config;

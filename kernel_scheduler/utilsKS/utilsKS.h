@@ -96,6 +96,7 @@ extern int inicio_todo;
 
 extern t_listas_suplementarias* list_suplementarias;
 extern t_listas_procesos* listasProcesos;
+extern t_list* lista_bck_io;
 extern t_list* lista_mutex;
 extern t_info_km info_km;
 extern t_info_config info_config;

@@ -204,7 +204,7 @@ void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs 
     
     list_suplementarias->cpu = list_create();
     list_suplementarias->io = list_create();
-
+    lista_bck_io = list_create();
     
 }
 
@@ -212,7 +212,7 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     
     list_destroy(list_suplementarias->cpu);
     list_destroy(list_suplementarias->io);
-    
+    list_destroy(lista_bck_io);
     
 }
 
@@ -497,6 +497,16 @@ bool es_la_cpu_buscada (void* elemento, void* contexto) {
     return (cpu->fd == socket_buscado) && (cpu->enUso == false);
 }
 
+bool es_la_io_buscada (void* elemento, void* contexto) {
+    
+        t_IO* io = (t_IO*) elemento;
+    
+        // Casteamos el contexto de vuelta a un puntero de int para sacar el socket
+     int socket_buscado = *(int*) contexto; 
+    
+    return (io->fd == socket_buscado) && (io->enUso == false);
+}
+
 void enviar_desalojo(int socket_cliente){/* HACER  */
    
     
@@ -546,6 +556,7 @@ void fin_proceso (int cliente_fd){ /*HACER*/
 
 
 }
+
 //DESALOJO,
 void deslojarTodasCpus() {
     
@@ -673,7 +684,6 @@ void init_proc(int socket_cliente){
     list_destroy(lista);
                 
 }
-
 //EXIT
 void exit_proceso(int socket_cpu){
 
@@ -704,6 +714,7 @@ void exit_proceso(int socket_cpu){
 //SLEEP
 void io_sleep(int socket_cpu, int socket_io) {
     
+    /*Recibimos la info necesaria*/
     t_list* lista = recibir_paquete(socket_cpu);
     int pid_a_bloquear = *(int*)list_get(lista, 0);
     char* tiempo_str = (char*)list_get(lista, 1);
@@ -712,45 +723,25 @@ void io_sleep(int socket_cpu, int socket_io) {
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Sleep]", pid_a_bloquear); /*Logger Obligatorio*/
 
-    log_info(logger, "Recibida syscall SLEEP (PID: %d, Tiempo: %d ms)", pid_a_bloquear, tiempo_ms);
-
-    PCB* pcb = encontrar_pcb_rnn_por_pid(pid_a_bloquear);
+    PCB* pcb = buscar_pcb_por_pid(pid_a_bloquear);
     
     if (pcb != NULL) {
-        // Mover a bloqueados
+        
+        /*Bloqueamos el Proceso*/
         cambiar_estado_pcb(pcb, BCK);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
         
-        // comunicación con la io-----
-        
-        t_io_sleep* datos_io = malloc(sizeof(t_io_sleep));
-        datos_io->pid = (uint32_t)pid_a_bloquear;
-        datos_io->time = (uint32_t)tiempo_ms;
+        /**/
+        espera_io* io_pcb = malloc(sizeof(espera_io));
 
-        t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
-        agregar_a_paquete(paquete_para_io,
-                        &datos_io->pid,
-                        sizeof(uint32_t));
+        io_pcb->pid = pcb->data.PID;
+        io_pcb->io_op_code = IO_SLEEP;
+        io_pcb->sleep.time = tiempo_ms;
 
-        agregar_a_paquete(paquete_para_io,
-                        &datos_io->time,
-                        sizeof(uint32_t));        
-        enviar_paquete(paquete_para_io, socket_io);
-        
-        // recibir el IO_LIBRE
-        op_code op_libre = recibir_op_code(socket_io);
-        if (op_libre == IO_LIBRE) { //Cambiar para que busque cual es esa IO libre que la ponga en ocupada
-            log_info(logger, "IO liberada tras SLEEP");
-            t_IO* interfaz = buscar_io_por_fd(socket_io);
-            interfaz->enUso = false;
-            list_add(list_suplementarias->io, interfaz);
-        }
-
-        free(datos_io);
-        eliminar_paquete(paquete_para_io);
-        
-        enviar_op_code(OK, socket_cpu);
+        pthread_mutex_lock(&mutex_ios);
+        list_add(lista_bck_io, io_pcb);
+        pthread_mutex_unlock(&mutex_ios);
         
         
     } else {
@@ -766,7 +757,7 @@ void nueva_io (int cliente_fd){
     info_io->enUso = false;    
     
    
-    info_io->nombre = recibir_mensaje(cliente_fd,logger); // (Facu) No le daria nombre, sino que la identificaria por el socket del cliente.
+    info_io->nombre = recibir_mensaje(cliente_fd,logger); 
     
                 
     pthread_mutex_lock(&mutex_ios);
@@ -780,49 +771,49 @@ void nueva_io (int cliente_fd){
 // STDIN
 void io_stdin(int socket_cpu, int socket_io, int socket_memoria) {
     
+    /*Recibimos la info necesaria*/
     t_list* lista = recibir_paquete(socket_cpu);
     uint32_t tam = *(uint32_t*)list_get(lista, 0);
     uint32_t dir = *(uint32_t*)list_get(lista, 1);
-    uint32_t pid = *(uint32_t*)list_get(lista, 2);
+    uint32_t pid_a_bloquear = *(uint32_t*)list_get(lista, 2);
     list_destroy(lista);
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Stdin]", pid); /*Logger Obligatorio*/
 
-    t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
-
-    agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
-    agregar_a_paquete(paquete_io, &dir, sizeof(uint32_t));
-    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
-    enviar_paquete(paquete_io, socket_io);
-    eliminar_paquete(paquete_io); // Limpiamos tras enviar
-
-    op_code cod_op = recibir_op_code(socket_io);
-    if (cod_op == IO_STDIN_RETORNO) {
-        t_list* lista = recibir_paquete(socket_io);  
-        uint32_t direccion_logica = *(uint32_t*)list_get(lista, 0);
-        uint32_t tam_datos = *(uint32_t*)list_get(lista, 1);    
-        void* datos_recibidos = list_get(lista, 2);
-        void* buffer_usuario = malloc(tam_datos);
-        memcpy(buffer_usuario, datos_recibidos, tam_datos);
-        
-        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
-        agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, buffer_usuario, tam_datos);
-        
-        enviar_paquete(paquete_mem, socket_memoria);
-
-        free(buffer_usuario); // Liberamos el malloc temporal
-        list_destroy(lista);
-        eliminar_paquete(paquete_mem);
-    }
-
+    PCB* pcb = buscar_pcb_por_pid(pid_a_bloquear);
     
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Stdin]", pid_a_bloquear); /*Logger Obligatorio*/
+
+    if (pcb != NULL) {
+        
+        /*Bloqueamos el Proceso*/
+        cambiar_estado_pcb(pcb, BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+        
+        /**/
+        espera_io* io_pcb = malloc(sizeof(espera_io));
+
+        io_pcb->pid = pcb->data.PID;
+        io_pcb->io_op_code = IO_STDIN;
+        io_pcb->iostdin.direc = dir;
+        io_pcb->iostdin.length = tam;
+
+        pthread_mutex_lock(&mutex_ios);
+        list_add(lista_bck_io, io_pcb);
+        pthread_mutex_unlock(&mutex_ios);
+        
+    } else {
+        log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
+        enviar_op_code(NOTOK, socket_cpu);
+    }
 }
+
 
 // STDOUT
 void io_stdout(int cpu_socket, int io_socket) {
+    
     t_list* lista = recibir_paquete(cpu_socket);
+    
     // deserializar lo que viene de la CPU
     uint32_t pid = *(uint32_t*)list_get(lista, 0);
     uint32_t dir = *(uint32_t*)list_get(lista, 1);
@@ -830,11 +821,17 @@ void io_stdout(int cpu_socket, int io_socket) {
    
     log_info(logger, "## PID:[%d] Solicito Syscall: [Stdout]", pid); /*Logger Obligatorio*/
 
-    // bloquear PCB
-    PCB* pcb = buscar_pcb_por_pid(pid);
-    cambiar_estado_pcb(pcb, BCK); // O el estado que uses
     
-    // pedir datos a km (Lo pide el enunciado yo mucho no entendi para qué)
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    
+    /*Bloqueamos el Proceso*/
+    cambiar_estado_pcb(pcb, BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+    
+    /*Le solicitamos los Datos de la KM*/
+    enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
+
     t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
     agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
     agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
@@ -844,36 +841,89 @@ void io_stdout(int cpu_socket, int io_socket) {
 
     // recibir de km
     t_list* lista_mem = recibir_paquete(info_km.conexion_km);
-    void* datos_leidos = list_get(lista_mem, 0);
+    char* datos_leidos = *(char*)list_get(lista_mem, 0);
 
-    // enviar a io
-    t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
-    
-    agregar_a_paquete(paquete_io, &pid, sizeof(uint32_t));
-    agregar_a_paquete(paquete_io, &tam, sizeof(uint32_t));
-    agregar_a_paquete(paquete_io, datos_leidos, tam); // Los datos que vinieron de memoria
-    
-    enviar_paquete(paquete_io, io_socket);
-    eliminar_paquete(paquete_io);
+    espera_io* io_pcb = malloc(sizeof(espera_io));
 
-    // El KS se queda esperando que la IO termine de imprimir
-    op_code cod_op = recibir_op_code(io_socket);
-    
-    if (cod_op == IO_STDOUT_RETORNO) {
-        t_list* lista_fin = recibir_paquete(io_socket); 
-        list_destroy(lista_fin);
+        io_pcb->pid = pcb->data.PID;
+        io_pcb->io_op_code = IO_STDOUT;
+        io_pcb->iostdout.length = tam;
+        io_pcb->iostdout.info = datos_leidos;
+
+        pthread_mutex_lock(&mutex_ios);
+        list_add(lista_bck_io, io_pcb);
+        pthread_mutex_unlock(&mutex_ios);
+
+   
+}
+
+void io_libre(int io_socket){ //Copia de atender CPU
+
+    pthread_mutex_lock(&mutex_ios);
+        /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
+    t_IO *io_libre = list_find_with_context(list_suplementarias->io, es_la_cpu_buscada, &io_socket);
+
+    if (io_libre != NULL) {
+        io_libre->enUso = true;}
+    else {
+        log_error (logger, "No se encontro a la IO buscada (funcion: io_libre)");
+        return EXIT_FAILURE;
     }
+    pthread_mutex_unlock(&mutex_cpus);
 
-    list_destroy(lista_mem);
-}
+    /*Mandamos el PCB a la IO*/
+    if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) { 
+        
+        espera_io* pcb_a_ejecutar = list_get(lista_bck_io, 0);
 
-void io_libre(int fd){
+        if(pcb_a_ejecutar->io_op_code = IO_SLEEP){
+            enviar_op_code(gl_IO_SLEEP, io_socket);
+            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+
+                t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
+                agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
+                agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->sleep.time,sizeof(uint32_t));        
+                
+                enviar_paquete(paquete_para_io, io_socket);
+                free(paquete_para_io);
+
+        }
+        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDIN){
+            enviar_op_code(IO_STDIN, io_socket);
+            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+
+            t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
+
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
+            
+            enviar_paquete(paquete_io, io_socket);
+            free(paquete_io);
+        }
+        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDOUT){
+            enviar_op_code(IO_STDOUT, io_socket);
+            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+
+            t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
     
-    log_info(logger, "IO liberada tras STDOUT");
-    t_IO* interfaz = buscar_io_por_fd(fd);
-    interfaz->enUso = false;
-    list_add(list_suplementarias->io, interfaz);
-}
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
+            
+            enviar_paquete(paquete_io, io_socket);
+            eliminar_paquete(paquete_io);
+
+        }
+        else {
+            log_info(logger, "Error al identificar IO de PID:[%d] (funcion: io_libre)",pcb_a_ejecutar->pid);
+        }
+
+        if(recibir_op_code(io_socket) != OK){
+            log_info (logger, "Error al enviar info sobre IO PID[%d] (funcion: io_libre)", pcb_a_ejecutar->pid);
+        }
+    
+}}
 
 /*-----Con el Kernel Memory-----*/
 

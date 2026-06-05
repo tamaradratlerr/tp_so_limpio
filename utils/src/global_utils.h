@@ -165,33 +165,30 @@ typedef struct{
 
 /***** Tipos de datos que procesara el IO *****/
 /*----- STDIN -----*/
-typedef struct
-{
-	uint32_t pid;
-    uint32_t bytes_to_read;
-    uint32_t direccion_logica;
-} t_io_stdin_recv;
-typedef struct
-{
-	uint32_t pid;
-    uint32_t input_length;
+typedef struct {
+    uint32_t direc;
+    uint32_t length;
 	char* input;
-} t_io_stdin_send;
+} t_io_stdin;
 
 /*----- STDOUT -----*/
-typedef struct
-{
-	uint32_t pid;
-    uint32_t nombre_length;
-    char* nombre;
+typedef struct {
+    uint32_t length;
+    char* info;
 } t_io_stdout;
 
 /*----- SLEEP -----*/
 typedef struct {
-    uint32_t pid;
     uint32_t time;
 } t_io_sleep;
 
+typedef struct {
+	int pid;
+	op_code io_op_code; // [STDIN,STDOUT,SLEEP]
+	t_io_sleep sleep; //Estructura con info necesaria para ejecutar un sleep
+	t_io_stdout iostdout; //Estructura con info necesaria para ejecutar un stdout
+	t_io_stdin iostdin; //Estructura con info necesaria para ejecutar un stdin
+	} espera_io;
 
 /*-----     FUNCIONES     -----*/
 

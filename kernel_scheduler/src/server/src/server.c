@@ -507,7 +507,6 @@ void* control_hilo_quantum (void* arg) {
     return NULL;
 }
 
-
 bool es_la_cpu_buscada (void* elemento, void* contexto) {
     
         t_CPU* cpu = (t_CPU*) elemento;
@@ -528,10 +527,9 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
     return (io->fd == socket_buscado) && (io->enUso == false);
 }
 
-void enviar_desalojo(int socket_cliente){/* HACER  */
-   
+void enviar_desalojo(int socket_cliente){/* HACER  */ 
     
-log_info(logger,
+    log_info(logger,
          "Enviado Desalojo a socket %d por fin de Quantum",
          socket_cliente);
 }
@@ -667,7 +665,6 @@ void mutex_unlock (int socket_cliente){
         log_info("## PID:[%d] Libera el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
     }
 
-//tami
 //MEM_ALLOC,
 void mem_alloc (int socket_cliente){//Hacer
     
@@ -794,7 +791,8 @@ void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un 
 
 
 }
-//NUEVA_IO
+
+// NUEVA_IO
 void nueva_io (int cliente_fd){
 
     t_IO* info_io = malloc(sizeof(IO));
@@ -813,6 +811,7 @@ void nueva_io (int cliente_fd){
                 
     log_info(logger, "IO '%s' registrada en el socket %d", info_io->nombre, cliente_fd);
 }
+
 // STDIN
 void io_stdin(int socket_cpu) {
     
@@ -973,6 +972,7 @@ void rta_io_stdout(int socket_io){
     log_info (logger, "PID: [%d] Finalizo IO stdout", pcb->data.PID);
 }
 
+// IO LIBRE
 void io_libre(int io_socket){ //Copia de atender CPU
 
     pthread_mutex_lock(&mutex_ios);
@@ -1005,7 +1005,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
         }
         else if (pcb_a_ejecutar->io_op_code = gl_IO_STDIN){
-            enviar_op_code(IO_STDIN, io_socket);
+            enviar_op_code(gl_IO_STDIN, io_socket);
             if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
@@ -1018,7 +1018,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
             free(paquete_io);
         }
         else if (pcb_a_ejecutar->io_op_code = gl_IO_STDOUT){
-            enviar_op_code(IO_STDOUT, io_socket);
+            enviar_op_code(gl_IO_STDOUT, io_socket);
             if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);

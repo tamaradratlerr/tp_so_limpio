@@ -1,11 +1,8 @@
 #ifndef GLOBAL_UTILS_H_
 #define GLOBAL_UTILS_H_
 
-<<<<<<< Updated upstream
 #define _POSIX_C_SOURCE 200809L
-=======
 #include <commons/collections/queue.h>
->>>>>>> Stashed changes
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>

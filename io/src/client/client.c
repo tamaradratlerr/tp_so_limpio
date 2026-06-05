@@ -43,54 +43,74 @@ int main(int argc, char** argv)
 	while (1)
     {
 		/* Bucle principal de la IO */
+		enviar_op_code(IO_LIBRE, fd_conexion);
+
 		op_code cod_op = recibir_op_code(fd_conexion);
 		
 
-		switch (cod_op) {
-		case IO_SLEEP: {
-        t_list* lista = recibir_paquete(fd_conexion);
-        
-        // Extraemos los datos directamente de la lista
-        uint32_t pid = *(uint32_t*)list_get(lista, 0);
-        uint32_t mseg = *(uint32_t*)list_get(lista, 1);
+	switch (cod_op) {
+		case gl_IO_SLEEP: {
+			t_list* lista = recibir_paquete(fd_conexion);
+			
+			// Extraemos los datos directamente de la lista
+			uint32_t pid = *(uint32_t*)list_get(lista, 0);
+			uint32_t mseg = *(uint32_t*)list_get(lista, 1);
 
-        log_info(logger, "## PID: %u - Haciendo sleep por %u milisegundos.", pid, mseg);
-        
-        usleep(mseg * 1000);
-        
-        enviar_op_code(IO_LIBRE, fd_conexion); // Asegúrate de usar la función de tu utils
-        list_destroy(lista);
-        break;
-    }
+			log_info(logger, "## PID: %u - Haciendo sleep por %u milisegundos.", pid, mseg);
+			
+			usleep(mseg * 1000);
+			
+			enviar_op_code(IO_SLEEP, fd_conexion);
+			if(recibir_op_code(fd_conexion) != OK){
+				log_info (logger, "Error al responder SLEEP");
+				return EXIT_FAILURE;
+			}
 
-    case IO_STDIN: {
-        t_list* lista = recibir_paquete(fd_conexion);
-        
-        uint32_t pid = *(uint32_t*)list_get(lista, 0);
-        uint32_t direccion_logica = *(uint32_t*)list_get(lista, 1);
-        uint32_t bytes_a_leer = *(uint32_t*)list_get(lista, 2);
+			enviar_pid(pid, fd_conexion);
+			list_destroy(lista);
+			break;
+    	}
 
-        log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
-        
-        char* buffer_usuario = malloc(bytes_a_leer);
-        read(STDIN_FILENO, buffer_usuario, bytes_a_leer);
+    	case gl_IO_STDIN: {
+			
+			enviar_op_code(OK,fd_conexion);
+			
+			t_list* lista = recibir_paquete(fd_conexion);
+			
+			uint32_t pid = *(uint32_t*)list_get(lista, 0);
+			uint32_t direccion_logica = *(uint32_t*)list_get(lista, 1);
+			uint32_t bytes_a_leer = *(uint32_t*)list_get(lista, 2);
 
-        t_paquete* paquete_retorno = crear_paquete(IO_STDIN_RETORNO);
-        agregar_a_paquete(paquete_retorno, &direccion_logica, sizeof(uint32_t));
-        agregar_a_paquete(paquete_retorno, &bytes_a_leer, sizeof(uint32_t));
-        agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
-        
-        enviar_paquete(paquete_retorno, fd_conexion); 
-        enviar_op_code(IO_LIBRE, fd_conexion);
-        
-        free(buffer_usuario);
-        list_destroy(lista);
-        eliminar_paquete(paquete_retorno);
-        break;
-    }
+			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
+			
+			char* buffer_usuario = malloc(bytes_a_leer);
+			read(STDIN_FILENO, buffer_usuario, bytes_a_leer);
 
-    case IO_STDOUT: {
-        t_list* lista = recibir_paquete(fd_conexion);
+			enviar_op_code(IO_STDIN, fd_conexion);
+			if(recibir_op_code(fd_conexion) != OK){
+				log_info (logger, "Error al responder STDIN");
+				return EXIT_FAILURE;
+			}
+
+			t_paquete* paquete_retorno = crear_paquete(IO_STDIN_RETORNO);
+			agregar_a_paquete(paquete_retorno, &direccion_logica, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, &bytes_a_leer, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
+			agregar_a_paquete(paquete_retorno, &pid, sizeof(u_int32_t));
+			
+			enviar_paquete(paquete_retorno, fd_conexion); 
+			
+			free(buffer_usuario);
+			list_destroy(lista);
+			eliminar_paquete(paquete_retorno);
+        	break;
+    	}
+
+    case gl_IO_STDOUT: {
+        
+		enviar_op_code(OK,fd_conexion);
+		
+		t_list* lista = recibir_paquete(fd_conexion);
         
         uint32_t pid = *(uint32_t*)list_get(lista, 0);
         uint32_t tam = *(uint32_t*)list_get(lista, 1);
@@ -100,12 +120,15 @@ int main(int argc, char** argv)
         write(STDOUT_FILENO, datos_imprimir, tam);
         printf("\n");
 
-        t_paquete* paquete_fin = crear_paquete(IO_STDOUT_RETORNO);
-        enviar_paquete(paquete_fin, fd_conexion);
-        enviar_op_code(IO_LIBRE, fd_conexion);
+		enviar_op_code(IO_STDIN, fd_conexion);
+		if(recibir_op_code(fd_conexion) != OK){
+			log_info (logger, "Error al responder STDIN");
+			return EXIT_FAILURE;
+		}
+		
+        enviar_pid(pid,fd_conexion);
         
         list_destroy(lista);
-        eliminar_paquete(paquete_fin);
         break;
     }
 
@@ -187,6 +210,3 @@ void validar_argumentos(int argc, char** argv) {
     }
 }
 
-void enviar_opcode(int fd, op_code codigo) {
-    send(fd, &codigo, sizeof(op_code), 0);
-}

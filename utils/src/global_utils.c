@@ -1,12 +1,25 @@
 
 #include "./global_utils.h"
-<<<<<<< Updated upstream
 
 
-=======
 // Al principio de global_utils.c, debajo de los #include
 extern char* PUERTO; // O como sea que definas el puerto en tu config
->>>>>>> Stashed changes
+
+
+
+t_config* iniciar_config(char* path_config)
+{
+    t_config* nuevo_config;
+
+    nuevo_config = config_create(path_config);
+
+    if(nuevo_config == NULL){
+        printf("No se pudo abrir el config\n");
+        abort();
+    }
+
+    return nuevo_config;
+}
 
 /*-----     MANEJO DE PAQUETES     -----*/
 

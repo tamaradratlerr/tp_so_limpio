@@ -7,21 +7,6 @@
 
 
 
-/* No lo pongo por las pruebas */
-
-// int main(int argc, char *argv[]) {
-//     
-// Validamos que se haya pasado EXACTAMENTE un argumento extra
-//     if (argc != 2) {
-//         printf("Error: Debes pasar exactamente 1 argumento.\n");
-//         return 1; 
-//     }
-
-//     // Guardamos el argumento en una variable de tipo string (char*)
-//     char *config = argv[1];
-//     char *pato_proceso0 = argv[2];
-
-
 
 
 int main(void) {

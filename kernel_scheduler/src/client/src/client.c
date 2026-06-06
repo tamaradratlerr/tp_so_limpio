@@ -1,11 +1,27 @@
 #include "client.h"
 
-int main(void)
+/*	
+	argc: cantidad de argumentos  -->  cuenta todo, incluyendo el nombre del programa:
+			argv[0] = "./bin/kernel_scheduler"
+			argv[1] = "config.config"
+			argv[2] = "procesos.txt"
+
+	*argv[]: Es un vector de strings
+
+*/
+
+int main(int argc, char *argv[])
 {
-	
-	/* ---------------- ARCHIVOS DE CONFIGURACION Y LOGGER ---------------- */	
-	
-	config = iniciar_config();
+    if(argc != 3){
+        printf("Uso: ./bin/kernel_scheduler [archivo.config] [archivoProcesos]\n");
+        return 1;
+    }
+
+    char* archivo_config = argv[1];
+    char* archivo_procesos = argv[2];
+
+    config = iniciar_config(archivo_config);
+
 
 	t_log_level log_level = log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
 	info_km.ip_km = config_get_string_value(config, "IP_KM");
@@ -34,7 +50,7 @@ int main(void)
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
 	enviar_op_code(OK, info_km.conexion_km);
-
+	crearNuevoProceso(logger, archivo_config, info_km.conexion_km);
 	inicio_todo = true;
 	//terminar_programa(info_km.conexion_km, logger, config);
 
@@ -52,20 +68,6 @@ t_log* iniciar_logger(t_log_level log_level)
 	return nuevo_logger;
 }
 
-t_config* iniciar_config(void)
-{
-	t_config* nuevo_config;
-
-	nuevo_config = config_create("cliente.config");
-
-	//Chequeamos si hubo error al crear el config
-    if (nuevo_config == NULL) {
-        printf("¡No se pudo crear el config!\n");
-        abort(); // Terminamos la ejecución como pide la consigna
-    }
-
-	return nuevo_config;
-}
 
 
 

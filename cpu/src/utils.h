@@ -13,7 +13,7 @@
 #include <ctype.h>
 
 #include<commons/collections/list.h>
-#include <global_utils.h>
+#include "../../utils/src/global_utils.h"
 
 typedef enum {
     NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT,

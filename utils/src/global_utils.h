@@ -119,6 +119,7 @@ typedef struct {
 
 typedef struct {
     int pid;
+    
     uint32_t pc;
     // Registros de 8 bits (uint8_t)
     uint8_t ax, bx, cx, dx;
@@ -152,7 +153,8 @@ typedef struct
 
 //Estructura de dato que identifica CPUs
 typedef struct{
-    int fd; 
+    int fd;
+    int identificador; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }t_CPU;
 
@@ -190,6 +192,8 @@ typedef struct {
 /*-----     FUNCIONES     -----*/
 
 /*-----     COMUNICACION CLIENTE - SERVIDOR     -----*/
+t_config* iniciar_config(char* path_config); 
+
 int crear_conexion(char *ip, char* puerto, t_log*, module_name module);
 
 const char* getModuleName(module_name module);

@@ -1,28 +1,20 @@
 #include "cliente.h"
 
-/* No lo pongo por las pruebas */
-
-// int main(int argc, char *argv[]) {
-//     
-// Validamos que se haya pasado EXACTAMENTE un argumento extra
-//     if (argc != 2) {
-//         printf("Error: Debes pasar exactamente 1 argumento.\n");
-//         return 1; 
-//     }
-
-//     // Guardamos el argumento en una variable de tipo string (char*)
-//     char *config = argv[1];
-//     char *Identificador = argv[2];
-
-
-int main(void)
+int main(int argc, char *argv[])
 {
+    if(argc != 3){
+        printf("Uso: ./bin/cpu [Archivo Config] [Identificador]\n");
+        return 1;
+    }
+
+    char* archivo_config = argv[1];
+    char* identificador = argv[2];
+
     sockets = malloc(sizeof(t_cpu_sockets));
     proceso_en_ejecucion = malloc(sizeof(t_proceso_ejec));
 
-    /* ---------------- Iniciamos el Logger y Config ----------------*/
+    t_config* config = iniciar_config(archivo_config);
 
-    t_config* config = iniciar_config();  
     t_log_level log_level = t_log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
     logger = iniciar_logger(log_level);
       
@@ -95,7 +87,7 @@ int main(void)
 
         control_loop = 1;
         while (control_loop == 1){
-        
+            contexto_actual = recibir_contexto(sockets ->conexion_kernel_memory);
             char* instruccion_raw = fetch(sockets); /* Fase Fetch */
             if (instruccion_raw == NULL) return EXIT_FAILURE;
             
@@ -125,6 +117,58 @@ int main(void)
 
 
 
+//recibir 
+t_contexto* recibir_contexto(int socket_km) {
+    // recibir el paquete (recibo un buffer del socket)
+    int buffer_size;
+    void* buffer = recibir_buffer(&buffer_size, socket_km);
+
+    // crear una estructura para almacenar lo recibido
+    t_contexto* nuevo_contexto = malloc(sizeof(t_contexto));
+
+    // Desempaquetar en el MISMO ORDEN
+    int offset = 0;
+
+    memcpy(&nuevo_contexto->pid, buffer + offset, sizeof(int));
+    offset += sizeof(int);
+
+    memcpy(&nuevo_contexto->pc, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    
+
+    // Registros 8 bits
+    memcpy(&nuevo_contexto->ax, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->bx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->cx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+    memcpy(&nuevo_contexto->dx, buffer + offset, sizeof(uint8_t));
+    offset += sizeof(uint8_t);
+
+    // Registros 32 bits
+    memcpy(&nuevo_contexto->eax, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->ebx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->ecx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->edx, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->si, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(&nuevo_contexto->di, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // Tabla de Segmentos
+    memcpy(&nuevo_contexto->tabla_segmentos, buffer + offset, sizeof(t_list*));
+    offset += sizeof(uint32_t);
+
+    free(buffer);
+    return nuevo_contexto;
+}
+
+
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
 
 t_log* iniciar_logger(t_log_level log_level) 
@@ -137,15 +181,6 @@ t_log* iniciar_logger(t_log_level log_level)
     return nuevo_logger;
 }
 
-t_config* iniciar_config(void)
-{
-    char* path = "cpu.config";
-    t_config* nuevo_config  = config_create(path);
-    if (nuevo_config == NULL) {
-        printf("¡No se pudo crear el config!\n");
-    }
-    return nuevo_config;
-}
 
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets)
 {
@@ -199,8 +234,9 @@ char* fetch(t_cpu_sockets* sockets) {
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, contexto_actual->pc);
+    int tamanio;
 
-    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc);
+    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc, tamanio);
     
     if (dir_fisica == ERROR_MMU) {
         log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
@@ -446,11 +482,12 @@ void ejecutar_set (t_instruccion* instr){
 void ejecutar_mov_in (t_instruccion* instr){
 
     char* reg_dest_nombre = instr->params[0];
+    int tamanio;
 
     if (es_registro_32bits(reg_dest_nombre)){
         
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->si);
+        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
     
         // Comunicación con Memory Stick
         void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
@@ -463,7 +500,7 @@ void ejecutar_mov_in (t_instruccion* instr){
     else {
         
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->si);
+        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
     
         // Comunicación con Memory Stick
         void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
@@ -480,11 +517,12 @@ void ejecutar_mov_in (t_instruccion* instr){
 void ejecutar_mov_out (t_instruccion* instr){
 
     char* reg_dest_nombre = instr->params[0];
+    int tamanio;
 
     if (es_registro_32bits(reg_dest_nombre)){
         
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->di);
+        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);
     
         // Comunicación con Memory Stick
         void* buffer = (void*)dest;
@@ -497,7 +535,7 @@ void ejecutar_mov_out (t_instruccion* instr){
     else {
         
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->di);
+        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);
     
         // Comunicación con Memory Stick
         void* buffer = (void*)dest;
@@ -593,8 +631,8 @@ void ejecutar_copy_mem(t_instruccion* instr) {
     uint32_t* dir_logica_destino = (uint32_t*)obtener_registro("DI");
 
     // COMUNICACIÓN COM MMU (CP 3?) para obtener direcciones físicas
-    uint32_t dir_fisica_origen = pedir_direccion_mmu(*dir_logica_origen);
-    uint32_t dir_fisica_destino = pedir_direccion_mmu(*dir_logica_destino);
+    uint32_t dir_fisica_origen = pedir_direccion_mmu(*dir_logica_origen, tamanio);
+    uint32_t dir_fisica_destino = pedir_direccion_mmu(*dir_logica_destino, tamanio);
     
     // Comunicación con Memory Stick
     void* buffer = leer_de_memoria(dir_fisica_origen, tamanio);
@@ -971,9 +1009,10 @@ int apagar() {
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
     
     int tam_max_segmento = obtener_tam_max_segmento(); 
+    int num_segmento = dir_logica / tam_max_segmento;
+
     int tam_segmento_actual = obtener_tam_segmento_del_pid(proceso_en_ejecucion->pid, num_segmento);
 
-    int num_segmento = dir_logica / tam_max_segmento;
     int desplazamiento = dir_logica % tam_max_segmento;
 
     if ((desplazamiento + tamanio_solicitado) > tam_segmento_actual) {

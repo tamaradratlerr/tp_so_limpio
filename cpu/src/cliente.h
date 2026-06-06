@@ -37,7 +37,6 @@ extern int control_loop;
 /*------ PROTOTIPOS DE FUNCIONES ------*/
 // Funciones Administrativas
 t_log* iniciar_logger(t_log_level log_level);
-t_config* iniciar_config(void);
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets);
 
 // Conexiones

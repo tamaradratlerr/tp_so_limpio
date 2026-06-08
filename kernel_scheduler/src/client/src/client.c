@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 	}
 	if(info_km.conexion_km < 0){
 		log_error(logger, "error de la conexión con Kernel Memory (Servidor)");
-		terminar_programa(info_km.conexion_km, logger, config);
+		terminar_programa(logger, config, info_km);
 		return 1; //termino el programa
 	}
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 	enviar_op_code(OK, info_km.conexion_km);
 	crearNuevoProceso(logger, archivo_config, info_km.conexion_km);
 	inicio_todo = true;
-	//terminar_programa(info_km.conexion_km, logger, config);
+	
 
 }
 

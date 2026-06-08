@@ -126,7 +126,7 @@ t_IO* buscar_io_por_fd(int fd_buscado) {
 
 /*----- Auxiliares -----*/
 
-void terminar_programa(int conexion, t_log* logger, t_config* config, t_info_km info_km)
+void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 {
 	log_destroy(logger);
 	config_destroy(config);

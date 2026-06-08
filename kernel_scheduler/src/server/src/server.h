@@ -45,10 +45,13 @@ void init_proc(int socket_cliente);
 void exit_proceso(int socket_cpu);
 
 /*----- GESTION DE IO -----*/
-void io_sleep(int socket_cpu, int socket_io);
+void io_sleep(int socket_cpu);
+void rta_io_sleep(int socket_io);
 void nueva_io(int cliente_fd);
-void io_stdin(int socket_cpu, int socket_io, int socket_memoria);
-void io_stdout(int cpu_socket, int io_socket);
+void io_stdin(int socket_cpu);
+void rta_io_stdin (int socket_io);
+void io_stdout(int cpu_socket);
+void rta_io_stdout(int socket_io);
 void io_libre(int fd);
 
 /*----- CON EL KERNEL MEMORY -----*/
@@ -58,6 +61,8 @@ void mem_corrupt(void);
 void enviar_proceso_finalizar_KM(int pid);
 void enviar_proceso_KM(uint32_t pid, op_code opCode);
 bool es_el_mutex_buscado(void* elemento, void* contexto);
+
+
 
 
 #endif /* SERVER_H_ */

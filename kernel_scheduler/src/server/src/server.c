@@ -413,7 +413,7 @@ espera_io* encontrar_pid_io_bck (int pid) {
 
     espera_io* pcb_buscado = NULL;
     
-    for (int i = 0; i < lista_bck_io; i++) {
+    for (int i = 0; i < list_size(lista_bck_io); i++) {
         espera_io* io_pcb = list_get(lista_bck_io, i);
         if (io_pcb->pid == pid) {
             pcb_buscado = io_pcb;
@@ -619,11 +619,11 @@ void mutex_lock (int socket_cliente){
             if (mutex->valor == 1) {
                 mutex->valor = 0; 
                 pthread_mutex_unlock(&mutex_simulados);
-                log_info("## PID:[%d] Toma el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
+                log_info(logger,"## PID:[%d] Toma el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
                 break;
             }
             pthread_mutex_unlock(&mutex_simulados);
-            log_info("## PID:[%d] No pudo tomar el mutex:[%d]. Vuelve a intentarlo...",pid,mutex_id);
+            log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",pid,mutex_id);
             usleep(1000); // Pequeña pausa para no saturar el CPU
         }
 
@@ -647,7 +647,7 @@ void mutex_unlock (int socket_cliente){
         mutex->valor = 1;
         pthread_mutex_unlock (&mutex_simulados);
 
-        log_info("## PID:[%d] Libera el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
+        log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
     }
 
 //MEM_ALLOC,
@@ -707,7 +707,7 @@ void exit_proceso(int socket_cpu){
         eliminar_proceso_Lista(pcb);
     }
 
-    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]");/*Logger Obligatorio*/
+    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
     enviar_op_code(OK, socket_cpu);
     
 }
@@ -761,7 +761,7 @@ void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un 
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io sleep)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
@@ -853,7 +853,7 @@ void rta_io_stdin (int socket_io){
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdin)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
@@ -862,7 +862,7 @@ void rta_io_stdin (int socket_io){
 
     if(recibir_op_code(info_km.conexion_km)!= OK){
         log_info(logger, "Error al enviar STDIN a KM");
-        return EXIT_FAILURE;
+        return;
     }
 
     t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
@@ -918,7 +918,7 @@ void io_stdout(int cpu_socket) {
 
     // recibir de km
     t_list* lista_mem = recibir_paquete(info_km.conexion_km);
-    char* datos_leidos = *(char*)list_get(lista_mem, 0);
+    char* datos_leidos = (char*)list_get(lista_mem, 0);
 
     espera_io* io_pcb = malloc(sizeof(espera_io));
 
@@ -943,7 +943,7 @@ void rta_io_stdout(int socket_io){
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdout)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
@@ -968,7 +968,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
         io_libre->enUso = true;}
     else {
         log_error (logger, "No se encontro a la IO buscada (funcion: io_libre)");
-        return EXIT_FAILURE;
+        return;
     }
     pthread_mutex_unlock(&mutex_cpus);
 
@@ -977,9 +977,9 @@ void io_libre(int io_socket){ //Copia de atender CPU
         
         espera_io* pcb_a_ejecutar = list_get(lista_bck_io, 0);
 
-        if(pcb_a_ejecutar->io_op_code = IO_SLEEP){
+        if(pcb_a_ejecutar->io_op_code == IO_SLEEP){
             enviar_op_code(gl_IO_SLEEP, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
                 t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
                 agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
@@ -989,28 +989,28 @@ void io_libre(int io_socket){ //Copia de atender CPU
                 free(paquete_para_io);
 
         }
-        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDIN){
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
             enviar_op_code(gl_IO_STDIN, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
             
             enviar_paquete(paquete_io, io_socket);
             free(paquete_io);
         }
-        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDOUT){
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
             enviar_op_code(gl_IO_STDOUT, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
     
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
             
             enviar_paquete(paquete_io, io_socket);
             eliminar_paquete(paquete_io);
@@ -1070,4 +1070,5 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
     // strcmp devuelve 0 si los strings son exactamente iguales
     return strcmp(un_mutex->mutex_id, id_buscado) == 0;
 }
+
 

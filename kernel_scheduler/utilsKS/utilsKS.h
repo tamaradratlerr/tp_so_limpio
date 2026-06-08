@@ -75,10 +75,8 @@ PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km);
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km);
 t_IO* buscar_io_por_nombre(char* nombre_buscado);
 t_IO* buscar_io_por_fd(int fd_buscado);
-void* list_find_with_context(
-        t_list* lista,
-        bool (*condicion)(void*, void*),
-        void* contexto);
+void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
+void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 
 extern int contador_pid;
 extern t_log* logger;

@@ -3,17 +3,6 @@
 
 #include "utils.h"
 
-t_config* config;
-t_log* logger;
-t_contexto* contexto_actual;
-t_instruccion* instruccion_decodificada;
-t_cpu_sockets* sockets;
-t_proceso_ejec* proceso_en_ejecucion;
-
-int control_loop00;
-int control_loop;
-
-
 typedef struct {
     int pid;
 } t_proceso_ejec;
@@ -24,12 +13,18 @@ typedef struct {
     int conexion_memory_stick;
 } t_cpu_sockets;
 
+
+int control_loop00;
+int control_loop;
+
 extern t_config* config; 
 extern t_log* logger;
 extern t_contexto* contexto_actual;
 extern t_instruccion* instruccion_decodificada;
 extern t_cpu_sockets* sockets;
 extern t_proceso_ejec* proceso_en_ejecucion;
+
+extern char* identificador; 
 
 extern int control_loop00;
 extern int control_loop;
@@ -79,13 +74,19 @@ void ejecutar_exit(void);
 
 // Helpers de Memoria y Contexto
 void enviar_contexto_a_kernel_memory(void);
+t_contexto* recibir_contexto(int socket_km);
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio);
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio);
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion);
-uint32_t pedir_direccion_mmu(int32_t dir_logica, int tamanio_solicitado);
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado);
 void liberar_instruccion(t_instruccion* instruccion);
 uint32_t obtener_tamanio_del_registro(char* reg);
 uint32_t obtener_direccion_del_registro(char* reg);
 int apagar(void);
+
+// MMU y Memoria
+int obtener_tam_max_segmento ();
+int obtener_tam_segmento_del_pid(int pid, int num_segmento);
+int consultar_base_segmento_al_kernel(int num_segmento);
 
 #endif

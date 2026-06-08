@@ -2,6 +2,8 @@
 
 int main(int argc, char *argv[])
 {
+        printf("VERSION NUEVA\n");
+
     if(argc != 3){
         printf("Uso: ./bin/cpu [Archivo Config] [Identificador]\n");
         return 1;
@@ -87,12 +89,15 @@ int main(int argc, char *argv[])
 
         control_loop = 1;
         while (control_loop == 1){
+            contexto_actual = malloc(sizeof(t_contexto));
+
             contexto_actual = recibir_contexto(sockets ->conexion_kernel_memory);
             char* instruccion_raw = fetch(sockets); /* Fase Fetch */
             if (instruccion_raw == NULL) return EXIT_FAILURE;
             
             decode(instruccion_raw); /* Fase Decode */
-            
+
+
             contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
 
             execute(); /* Fase Execute */
@@ -290,7 +295,7 @@ int decode(char* instruccion_raw) {
     }
 
     // todos los free
-    string_iterate_lines(tokens, free);
+    string_iterate_lines(tokens, (void*)  free);
     free(tokens);
     free(instruccion_raw);
     return EXIT_SUCCESS;

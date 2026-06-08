@@ -7,7 +7,7 @@
 
 
 t_log* iniciar_logger(t_log_level log_level);
-t_config* iniciar_config(void);
+;
 
 
 

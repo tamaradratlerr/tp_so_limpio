@@ -4,7 +4,7 @@
 #include "utils.h"
 
 t_config* config;
-//t_log* logger; La declaracion de la variable logger va a estar en el GLOBALS pero se va a iniciar siempre por separado en el main (no vamos a tener problemas segun gemini)
+t_log* logger;
 t_contexto* contexto_actual;
 t_instruccion* instruccion_decodificada;
 t_cpu_sockets* sockets;

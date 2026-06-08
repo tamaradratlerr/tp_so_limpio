@@ -24,7 +24,7 @@ typedef enum {
 
 typedef struct {
     t_instruccion_code codigo;
-    char* params[3]; // en los ejemplos ponían como mucho 3 parámetros
+    char* params[10]; // en los ejemplos ponían como mucho 3 parámetros
     int cant_params;
 } t_instruccion;
 

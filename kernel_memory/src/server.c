@@ -9,7 +9,7 @@
 t_log* logger;
 t_config* config;
 
-
+// FALTA LLENAR HANDSHAKE : 7/6
 
 int main(int argc, char** argv) {
 

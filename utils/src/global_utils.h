@@ -88,6 +88,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     ks_INIT_PROC,
     ks_EXIT,
     NUEVO_KERNEL,
+    OK_ESCRITURA,
 
     // IO
     NUEVA_IO, //Se informa que hay una nueva IO
@@ -97,6 +98,13 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     IO_SLEEP,
     IO_STDOUT_RETORNO, //Devolucion del IO STDOUT por parte de la IO
     IO_STDIN_RETORNO, //Devolucion del IO STDIN por parte de la IO
+
+    // COMPACTACION
+    CPUS_DESALOJADAS_OK,       // El Kernel le avisa a la Memoria que las CPUs están vacías
+    COMPACTACION_FINALIZADA,   // La Memoria le avisa al Kernel que ya terminó de mover los bytes
+
+    // nueva memoria que viene de memory stick
+    NUEVA_MEMORIA_ACUM
 
 
 } op_code;
@@ -120,6 +128,7 @@ typedef struct {
 typedef struct {
     int pid;
     
+    
     uint32_t pc;
     // Registros de 8 bits (uint8_t)
     uint8_t ax, bx, cx, dx;
@@ -129,6 +138,12 @@ typedef struct {
     //tabla de segmentos
      t_list* tabla_segmentos; //AGREGAR EN LA CPU ESTE
 } t_contexto;
+
+
+typedef struct {
+    int pid;
+    t_list* instrucciones;
+} t_proceso;
 
 typedef enum 
 {

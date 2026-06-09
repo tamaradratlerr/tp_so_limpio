@@ -151,7 +151,8 @@ int esperar_cliente(int socket_servidor, t_log* logger){
 }
 
 int iniciar_servidor(char* puerto, t_log* logger){
-	int socket_servidor;
+	
+    int socket_servidor;
 
 	struct addrinfo hints, *servinfo;
 

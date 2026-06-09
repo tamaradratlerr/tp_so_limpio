@@ -4,8 +4,11 @@
 #include "../../utils/src/global_utils.h"
 
 
-
-
+/*--- Variable global para hacer pruebas sin KM ---*/
+bool mock = false; 
+/*FALSE => Se ejecuta Normalmente
+  TRUE => Se ejecuta sin KM (para realizar pruebas)
+*/
 
 
 
@@ -25,7 +28,7 @@ int main(void) {
 
     //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
 
-    int server_fd = iniciar_servidor(info_km.puerto_km, logger); 
+    int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
 
     log_info(logger, "Servidor listo para recibir clientes");
 
@@ -461,7 +464,6 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
     }
 }
 
-
 void* control_hilo_quantum(void* arg)
 {
     t_datos_quantum* datos = (t_datos_quantum*) arg;
@@ -485,7 +487,6 @@ void* control_hilo_quantum(void* arg)
 
     return NULL;
 }
-
 
 PCB* obtener_siguiente_proceso()
 {
@@ -515,7 +516,6 @@ PCB* obtener_siguiente_proceso()
 
     return pcb;
 }
-
 
 int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
 
@@ -836,14 +836,20 @@ void init_proc(int socket_cliente){
     
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
-    PCB* nuevo_pcb = crearNuevoProceso(logger, path, info_km.conexion_km);
-
-    if (recibir_op_code(info_km.conexion_km) == OK) {
-                    
-    cambiar_estado_pcb(nuevo_pcb, RDY);
-    agregar_proceso_lista (nuevo_pcb);
-                    
+    PCB* nuevo_pcb; 
+    if(!mock){nuevo_pcb = crearNuevoProceso(path, info_km.conexion_km);
+        
+        if (recibir_op_code(info_km.conexion_km) == OK) {
+                cambiar_estado_pcb(nuevo_pcb, RDY);
+                agregar_proceso_lista (nuevo_pcb);           
+        }
+    
     }
+    else{nuevo_pcb = crearNuevoProceso_mock(path, info_km.conexion_km);
+        cambiar_estado_pcb(nuevo_pcb, RDY);
+        agregar_proceso_lista (nuevo_pcb);    
+    }
+
     list_destroy(lista);
                 
 }
@@ -858,7 +864,8 @@ void exit_proceso(int socket_cpu){
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
-    enviar_proceso_finalizar_KM(pid_a_finalizar);
+    if(!mock){enviar_proceso_finalizar_KM(pid_a_finalizar);}
+    else{enviar_proceso_afinalizar_KM_mock(pid_a_finalizar);}
     
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
@@ -1018,14 +1025,16 @@ void rta_io_stdin (int socket_io){
 
     free(io_pcb);
 
-    enviar_op_code(km_IO_STDIN, info_km.conexion_km);
+    if(!mock){
+        
+        enviar_op_code(km_IO_STDIN, info_km.conexion_km);
 
-    if(recibir_op_code(info_km.conexion_km)!= OK){
+        if(recibir_op_code(info_km.conexion_km)!= OK){
         log_info(logger, "Error al enviar STDIN a KM");
         return;
-    }
+        }
 
-    t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
+        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
         agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
         agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
         agregar_a_paquete(paquete_mem, &datos_recibidos, sizeof(datos_recibidos));
@@ -1035,7 +1044,8 @@ void rta_io_stdin (int socket_io){
 
         eliminar_paquete(paquete_mem);
 
-    
+    }
+
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
     cambiar_estado_pcb(pcb,RDY);
@@ -1043,7 +1053,7 @@ void rta_io_stdin (int socket_io){
     eliminar_proceso_Lista(pcb);
 
     log_info (logger, "PID: [%d] Finalizo IO STDIN", pcb->data.PID);
-
+    
 }
 
 // STDOUT
@@ -1066,27 +1076,32 @@ void io_stdout(int cpu_socket) {
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
     
-    /*Le solicitamos los Datos de la KM*/
-    enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
+    espera_io* io_pcb;
+    if(!mock){
+        /*Le solicitamos los Datos de la KM*/
+        enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
 
-    t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
-    agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
-    agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
-    agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
-    enviar_paquete(req_mem, info_km.conexion_km); 
-    eliminar_paquete(req_mem);
+        t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
+        agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
+        agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
+        enviar_paquete(req_mem, info_km.conexion_km); 
+        eliminar_paquete(req_mem);
 
-    // recibir de km
-    t_list* lista_mem = recibir_paquete(info_km.conexion_km);
-    char* datos_leidos = (char*)list_get(lista_mem, 0);
+        // recibir de km
+        t_list* lista_mem = recibir_paquete(info_km.conexion_km);
+        char* datos_leidos = (char*)list_get(lista_mem, 0);
 
-    espera_io* io_pcb = malloc(sizeof(espera_io));
+        espera_io* io_pcb = malloc(sizeof(espera_io));
 
         io_pcb->pid = pcb->data.PID;
         io_pcb->io_op_code = IO_STDOUT;
         io_pcb->iostdout.length = tam;
         io_pcb->iostdout.info = datos_leidos;
 
+    }
+    else{data_io_stdout_mock(io_pcb, pcb, tam);}
+    
         pthread_mutex_lock(&mutex_ios);
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
@@ -1189,7 +1204,9 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (); // Hacer
+void mem_corrupt (){
+
+} // Hacer
 
 
 /*-----                     AUXILIARES                     -----*/
@@ -1231,4 +1248,33 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
     return strcmp(un_mutex->mutex_id, id_buscado) == 0;
 }
 
+
+/*-----                     MOCKs                     -----*/
+
+void crearNuevoProceso_mock(){
+    
+    PCB* nuevoPcb = iniciar_pcb(contador_pid);
+    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
+
+    /*Se evita Enviar el Contexto a la KM*/
+    log_info (logger, "Se le envia el Nuevo PCB a la KM [MOCK]");
+	contador_pid++;
+
+	return nuevoPcb;
+}
+
+void enviar_proceso_finalizar_KM_mock (int pid) {
+    
+    log_info(logger, " Enviado a KM, PID: %u", pid);
+
+}
+
+void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre devuelve 5555 como DATA*/
+
+    io_pcb->pid = pcb->data.PID;
+    io_pcb->io_op_code = IO_STDOUT;
+    io_pcb->iostdout.length = tam;
+    io_pcb->iostdout.info = "5555";
+
+} 
 

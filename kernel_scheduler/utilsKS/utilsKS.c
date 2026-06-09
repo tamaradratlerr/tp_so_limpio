@@ -8,6 +8,7 @@ int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
 int inicio_todo = false;
 
+
 pthread_t hilo_timer;
 
 int contador_pid = 0;
@@ -52,7 +53,7 @@ PCB* iniciar_pcb (int PID){
 	return nuevo_pcb;
 }
 
-PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+PCB* crearNuevoProceso(char* path, int fd_km) {
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid);
     log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW", contador_pid);

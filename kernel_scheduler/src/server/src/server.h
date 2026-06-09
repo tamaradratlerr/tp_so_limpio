@@ -62,6 +62,13 @@ void enviar_proceso_finalizar_KM(int pid);
 void enviar_proceso_KM(uint32_t pid, op_code opCode);
 bool es_el_mutex_buscado(void* elemento, void* contexto);
 
+/*----- MOCKS -----*/
+
+void crearNuevoProceso_mock();
+void enviar_proceso_finalizar_KM_mock (int pid);
+void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam);
+
+
 
 
 

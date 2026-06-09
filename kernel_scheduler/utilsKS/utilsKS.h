@@ -98,7 +98,7 @@ void enviarProcesoKM(
         
 PCB* iniciar_pcb (int PID);
 void terminar_pcb (PCB* pcb);
-PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km);
+PCB* crearNuevoProceso(char* path, int fd_km);
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km);
 t_IO* buscar_io_por_nombre(char* nombre_buscado);
 t_IO* buscar_io_por_fd(int fd_buscado);
@@ -108,6 +108,7 @@ void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quan
 
 extern int contador_pid;
 extern t_log* logger;
+extern bool mock;
 
 extern Planificador_Colas_Multinivel* planificador;
 extern char* ip;

@@ -1,5 +1,6 @@
 #include "client.h"
 
+mock = true;
 
 int main(int argc, char *argv[])
 {
@@ -78,20 +79,30 @@ int main(int argc, char *argv[])
 
 	// Creamos una conexión hacia el servidor
 	printf("Intentando conectar al Kernel Memory (Servidor)\n");
-	info_km.conexion_km = crear_conexion(info_km.ip_km, info_km.puerto_km, logger, KERNEL_MEMORY);
+	
+	if(!mock){
+		
+		info_km.conexion_km = crear_conexion(info_km.ip_km, info_km.puerto_km, logger, KERNEL_MEMORY);
+		
+		if (info_km.conexion_km != -1) {
+			printf("## Conectado a Kernel Memory,socket: %d\n", info_km.conexion_km); /*Logger Obligatorio*/
+		}
 
-	if (info_km.conexion_km != -1) {
-		printf("## Conectado a Kernel Memory,socket: %d\n", info_km.conexion_km); /*Logger Obligatorio*/
-	}
-	if(info_km.conexion_km < 0){
+		if(info_km.conexion_km < 0){
 		log_error(logger, "error de la conexión con Kernel Memory (Servidor)");
 		terminar_programa(logger, config, info_km);
 		return 1; //termino el programa
-	}
+		}
+		
+		enviar_op_code(OK, info_km.conexion_km);
+		}	
+
+	
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_op_code(OK, info_km.conexion_km);
-	crearNuevoProceso(logger, archivo_config, info_km.conexion_km);
+	if(mock){crearNuevoProceso(archivo_config, info_km.conexion_km);}
+	else{crearNuevoProceso_mock(archivo_config, info_km.conexion_km);}
+	
 	inicio_todo = true;
 	
 

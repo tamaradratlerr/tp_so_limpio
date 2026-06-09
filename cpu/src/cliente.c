@@ -3,7 +3,7 @@
 #include "cliente.h"
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
-bool mock = true; /*V1.0 No tiene mmu*/
+bool mock = false; /*V1.0 No tiene mmu*/
 /*-----                                                   -----*/
 
 t_config* config = NULL;

@@ -13,6 +13,7 @@ typedef struct{
     char *planificacion_algoritmo;
     char *listas_algortimo;
     int intervalo_tarea, tiempo_suspencion;
+    bool preemption;
 }t_info_config;
 
 //Estructura de dato que identifica todas las listas de los procesos
@@ -63,6 +64,31 @@ typedef struct{
 
 
 
+
+
+
+//algoritmo cola multinivel
+
+typedef enum { FIFO, RR } Algoritmo;
+            // 0 = fifo
+            // 1 = rr
+
+typedef struct {
+    Algoritmo tipo;
+    t_list* cola;       
+    int quantum;       // solo lo uso si tipo == RR
+} ColaPrioridad;
+
+typedef struct {
+    ColaPrioridad* niveles;
+    int cantidad_niveles;
+    bool preemption;    // en el config aparece QUEUE_PREEMPTION que especifica si es con o sin desalojo (únicamente afecta en CMN)
+} Planificador_Colas_Multinivel;
+
+typedef struct { // estructura para las cosasa que le mandamos al hilo
+    PCB* pcb;
+} t_datos_quantum;
+
 /*-----     FUNCIONES      -----*/
 void enviarProcesoKM(
         PCB* pcb,
@@ -77,11 +103,12 @@ t_IO* buscar_io_por_nombre(char* nombre_buscado);
 t_IO* buscar_io_por_fd(int fd_buscado);
 void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
+void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
 
 extern int contador_pid;
 extern t_log* logger;
 
-
+extern Planificador_Colas_Multinivel* planificador;
 extern char* ip;
 extern char* puerto;
 extern char* valor;
@@ -98,6 +125,7 @@ extern t_list* lista_bck_io;
 extern t_list* lista_mutex;
 extern t_info_km info_km;
 extern t_info_config info_config;
+extern t_datos_quantum* datos_quantum;
 
 /* --- SEMÁFOROS (También son variables globales) --- */
 

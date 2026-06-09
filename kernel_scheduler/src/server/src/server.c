@@ -316,40 +316,6 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
     return OK; 
 }
 
-int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
-
-    int posicion;
-    
-    if (strcmp(planificacion_algoritmo, "FIFO") == 0 || strcmp(planificacion_algoritmo, "RR") == 0) {
-        posicion = ready_FIFO(pcb);
-    } 
-    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
-        // ready_CMN(pcb)
-    }
-    else {
-        log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
-    return -1;
-    }
-    return posicion;
-}
-
-int ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
-    
-    int posicion;
-
-    pthread_mutex_lock(&mutex_ready);
-    
-    posicion = list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
-    
-    pthread_mutex_unlock(&mutex_ready);
-    
-    return posicion;
-}
-
-
-
-
-
 
 /*-----                     GESTION DE PCBs                     -----*/
 
@@ -440,57 +406,218 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
         cpu_libre->enUso = true;}
     else {
         log_error (logger, "No se encontro a la CPU buscada (funcion: mandar_proceso_cpu)");
+        pthread_mutex_unlock(&mutex_cpus);
         return;
     }
-    pthread_mutex_unlock(&mutex_cpus);
+        pthread_mutex_unlock(&mutex_cpus);
 
     /*Mandamos el PCB a la CPU*/
-    if ((cpu_libre != NULL) && (!list_is_empty(listasProcesos->rdy)) && (!list_is_empty(list_suplementarias->io))) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
+    if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
         
-        PCB* pcb_a_ejecutar = list_get(listasProcesos->rdy, 0);
+        PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
-        cambiar_estado_pcb(pcb_a_ejecutar, RNN);
+        if(pcb_a_ejecutar == NULL){
+            log_error(logger, "No se pudo obtener PCB READY");
+            cpu_libre->enUso = false;
+            return;
+        }
 
+        cambiar_estado_pcb(pcb_a_ejecutar, RNN);
+        pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
-        eliminar_proceso_Lista(pcb_a_ejecutar);//ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        
+        
 
         int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
         if (err != 1) {
-            log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error        
+            log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error
+            cpu_libre->enUso = false;        
             return;}
 
         log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->data.PID, cpu_libre->fd);
 
-        if (strcmp(planificacion_algoritmo, "RR") == 0) {
-            // ceamos un hilo que espere el Quatum y mande la interrupción --> CHEQUEAR
-            pthread_create(&hilo_timer, NULL, control_hilo_quantum, (void*)pcb_a_ejecutar);
-            pthread_detach(hilo_timer);
+        if (usa_quantum(pcb_a_ejecutar))
+        {
+            t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
 
-            if(pcb_a_ejecutar->estado_pcb == RNN){
-                enviar_desalojo(socket_cliente); /*HACER*/
-                log_info (logger, "## PID:[%d] - Desalojado por Fin de Quamtum",pcb_a_ejecutar->data.PID);/*Logger Obligatorio*/
-            }}
+            datos->pcb = pcb_a_ejecutar;
+
+            pthread_create(
+                &hilo_timer,
+                NULL,
+                control_hilo_quantum,
+                datos);
+
+            pthread_detach(hilo_timer);
+        }
     }
     else {
-        log_error (logger, "Error en verificacion de CPU IO y Procesos en READY (funcion: mandar_proceso_cpu)");
+
+        cpu_libre->enUso = false;
+
+        log_error( logger, "No hay procesos READY para ejecutar");
+
         return;
     }
 }
 
 
-void* control_hilo_quantum (void* arg) {
-    
-    PCB* pcb = (PCB*)arg;
-    
-    // Dormimos el tiempo del quantum (usleep espera microsegundos)
-    usleep(info_config.intervalo_tarea * 1000); 
-    
-    // Cuando despierta, el tiempo se terminó. 
-    // Aquí notificas al Kernel que debe pedir el desalojo.
-    log_info(logger, "Quantum expirado para PID: %d. Solicitando desalojo...", pcb->data.PID);
-    
+void* control_hilo_quantum(void* arg)
+{
+    t_datos_quantum* datos = (t_datos_quantum*) arg;
+
+    PCB* pcb = datos->pcb;
+
+    usleep(info_config.intervalo_tarea * 1000);
+
+    if(pcb->estado_pcb == RNN)
+    {
+        enviar_desalojo(pcb->fd_cpu);
+
+        log_info(
+            logger,
+            "## PID:[%d] - Desalojado por Fin de Quantum",
+            pcb->data.PID
+        );
+    }
+
+    free(datos);
+
     return NULL;
 }
+
+
+PCB* obtener_siguiente_proceso()
+{
+    PCB* pcb = NULL;
+
+    pthread_mutex_lock(&mutex_ready);
+
+    if(strcmp(planificacion_algoritmo, "FIFO") == 0)
+        pcb = list_remove(listasProcesos->rdy, 0);
+
+    else if(strcmp(planificacion_algoritmo, "RR") == 0)
+        pcb = list_remove(listasProcesos->rdy, 0);
+
+    else if(strcmp(planificacion_algoritmo, "CMN") == 0)
+    {
+        for(int i = 0; i < planificador->cantidad_niveles; i++)
+        {
+            if(!list_is_empty(planificador->niveles[i].cola))
+            {
+                pcb = list_remove(planificador->niveles[i].cola, 0);
+                break;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_ready);
+
+    return pcb;
+}
+
+
+int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
+
+    int posicion;
+    
+    if (strcmp(planificacion_algoritmo, "FIFO") == 0 || strcmp(planificacion_algoritmo, "RR") == 0) {
+        posicion = ready_FIFO(pcb);
+    } 
+    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
+        posicion = ready_CMN(pcb);
+    }
+    else {
+        log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
+    return -1;
+    }
+    return posicion;
+}
+
+int ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
+    
+    int posicion;
+
+    pthread_mutex_lock(&mutex_ready);
+    
+    posicion = list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
+    
+    pthread_mutex_unlock(&mutex_ready);
+    
+    return posicion;
+}
+
+int ready_CMN(PCB* pcb_nuevo)
+{
+    int nivel = pcb_nuevo->data.prioridad;
+
+    if(nivel < 0 || nivel >= planificador->cantidad_niveles)
+    {
+        log_error(logger, "Prioridad invalida: %d", nivel);
+        return -1;
+    }
+
+    ColaPrioridad* cola_apuntada = &planificador->niveles[nivel];
+
+    pthread_mutex_lock(&mutex_ready);
+    list_add(cola_apuntada->cola, pcb_nuevo);
+    pthread_mutex_unlock(&mutex_ready);
+
+
+//fijarse en que parte va TAMI FIJATE 
+
+    if(planificador->preemption)
+    {
+        verificar_desalojo_por_prioridad(pcb_nuevo);
+    }
+
+    return nivel;
+}
+
+void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
+{
+    pthread_mutex_lock(&sem_procesos_running);
+
+    for(int i = 0; i < list_size(listasProcesos->rnn); i++)
+    {
+        PCB* pcb_running = list_get(listasProcesos->rnn, i);
+
+        if(pcb_nuevo->data.prioridad < pcb_running->data.prioridad)
+        {
+            enviar_desalojo_CMN(pcb_running->fd_cpu);
+
+            log_info(
+                logger,
+                "PID %d desalojado por ingreso de PID %d con mayor prioridad",
+                pcb_running->data.PID,
+                pcb_nuevo->data.PID
+            );
+        }
+    }
+
+    pthread_mutex_unlock(&sem_procesos_running);
+}
+
+bool usa_quantum(PCB* pcb)
+{
+    if(strcmp(planificacion_algoritmo, "RR") == 0)
+        return true;
+
+    if(strcmp(planificacion_algoritmo, "FIFO") == 0)
+        return false;
+
+    if(strcmp(planificacion_algoritmo, "CMN") == 0)
+    {
+        int nivel = pcb->data.prioridad;
+
+        if(planificador->niveles[nivel].tipo == RR)
+            return true;
+    }
+
+    return false;
+}
+
+
 
 bool es_la_cpu_buscada (void* elemento, void* contexto) {
     
@@ -512,7 +639,7 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
     return (io->fd == socket_buscado) && (io->enUso == false);
 }
 
-void enviar_desalojo(int socket_cliente){/* HACER  */ 
+void enviar_desalojo_CMN(int socket_cliente){/* HACER  PARA CMN TAMI */ 
     
     log_info(logger,
          "Enviado Desalojo a socket %d por fin de Quantum",

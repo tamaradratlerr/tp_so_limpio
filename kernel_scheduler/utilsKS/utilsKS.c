@@ -19,7 +19,8 @@ t_list* lista_bck_io = NULL;
 t_list* lista_mutex= NULL;
 t_info_km info_km;
 t_info_config info_config;
-
+Planificador_Colas_Multinivel* planificador;
+t_datos_quantum* datos_quantum;
 
 
 /* Semaforos tipo Mutex*/
@@ -133,4 +134,25 @@ void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 
     liberar_conexion (info_km.conexion_km);
 	
+}
+
+/*   PLANIFICACIÓN     */
+
+void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default) {
+    planificador = malloc(sizeof(Planificador_Colas_Multinivel));
+    planificador->cantidad_niveles = total_colas;
+    planificador->preemption = info_config.preemption;
+    planificador->niveles = malloc(sizeof(ColaPrioridad) * total_colas);
+
+    for (int i = 0; i < total_colas; i++) {
+        planificador->niveles[i].cola = list_create(); 
+        
+        if (strcmp(algoritmos_array[i], "FIFO") == 0) {
+            planificador->niveles[i].tipo = FIFO;
+            planificador->niveles[i].quantum = 0; // en este caso no importa el quanrtum
+        } else {
+            planificador->niveles[i].tipo = RR;
+            planificador->niveles[i].quantum = quantum_default;
+        }
+    }
 }

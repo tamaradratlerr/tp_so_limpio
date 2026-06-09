@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
@@ -122,7 +123,7 @@ typedef struct {
 
 //Tipo de dato que ingresa desde el kernel memory
 typedef struct {
-    int PID, PPID, UID;
+    int PID, prioridad;
 } t_infoProceso;
 
 typedef struct {

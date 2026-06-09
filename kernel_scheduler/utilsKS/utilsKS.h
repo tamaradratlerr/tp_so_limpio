@@ -59,6 +59,7 @@ typedef struct{
 
     char* mutex_id;
     int valor;
+    t_list* cola_mutex;
 
 }mutex_cpu;
 

@@ -716,6 +716,7 @@ void mutex_create (int socket_cliente){
 
     mutex->mutex_id = mutex_id;
     mutex->valor = 1;
+    mutex->cola_mutex = NULL;
     
     list_add(lista_mutex, mutex);
 
@@ -728,7 +729,9 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
-        int pid = recibir_pid (socket_cliente);
+        int* pid = malloc(sizeof(int));
+
+        pid = recibir_pid (socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
@@ -741,40 +744,70 @@ void mutex_lock (int socket_cliente){
         return;
         }
 
+        pthread_mutex_lock(&mutex_simulados);
+        list_add(pid, mutex->cola_mutex);
+        pthread_mutex_unlock(&mutex_simulados);
+
+        
         while (1) {
-            pthread_mutex_lock(&mutex_simulados);
-            if (mutex->valor == 1) {
-                mutex->valor = 0; 
-                pthread_mutex_unlock(&mutex_simulados);
-                log_info(logger,"## PID:[%d] Toma el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
-                break;
+            
+            if(list_index_of(mutex->cola_mutex, pid) == 0){
+
+                while(1){
+                    if(mutex->valor == 1){
+
+                       log_info(logger,"## PID:[%d] Toma el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
+                       mutex->valor = 0;
+                        break; 
+
+                    }
+
+                    log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo... (Proximo en la lista)",pid,mutex_id);
+                    usleep(1000); // Pequeña pausa para no saturar el CPU
+
+                }
+                    
             }
-            pthread_mutex_unlock(&mutex_simulados);
-            log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",pid,mutex_id);
-            usleep(1000); // Pequeña pausa para no saturar el CPU
+          
+         log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",pid,mutex_id);
+         usleep(1000); // Pequeña pausa para no saturar el CPU
+                
         }
-
-        enviar_op_code(OK, socket_cliente);
-
-
+        enviar_op_code(OK, socket_cliente); 
     }
 
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
-        enviar_op_code(OK, socket_cliente);
+        
 
-        int pid = recibir_pid(socket_cliente);
+        int* pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
         pthread_mutex_lock (&mutex_simulados);
-        mutex->valor = 1;
-        pthread_mutex_unlock (&mutex_simulados);
+        int* pid_removed = list_remove(mutex->cola_mutex, 0);
+        
+        if(pid == pid_removed){
 
-        log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
+            mutex->valor = 1;
+            
+            log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
+            
+            enviar_op_code(OK, socket_cliente);
+            
+
+        }
+        else{
+            log_info (logger, "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",mutex_id,pid);
+            enviar_op_code(NOTOK, socket_cliente);
+        }
+        
+        pthread_mutex_unlock (&mutex_simulados);
+        free(pid);
+
     }
 
 //MEM_ALLOC,

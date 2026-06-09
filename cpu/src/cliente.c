@@ -1130,7 +1130,7 @@ int consultar_base_segmento_al_kernel(int num_segmento){/*Hacer*/
 
 /*---- Fucnones MOCKS ----*/
 
-char* instruccion_a_ejecutar[] = {
+char* instruccion[] = {
     "NOOP",
     "SET AX 01",
     "SET BX 01",

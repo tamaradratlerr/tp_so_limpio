@@ -1,6 +1,5 @@
 #include "cliente.h"
 
-#include "cliente.h"
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 bool mock = false; /*V1.0 No tiene mmu*/
@@ -110,20 +109,27 @@ int main(int argc, char *argv[])
 
     /*----- SOLICITAMOS UN PROCESO -----*/
     control_loop00 = 1;
-    while(control_loop00 == 1) //Este WHILE funciona para poder enviar nuevamente el CPU_LIBRE
+    while(control_loop00 == 0) //Este WHILE funciona para poder enviar nuevamente el CPU_LIBRE
     {
-        
+        int contexto_key = 0;
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler); //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
         proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
+        contexto_key++;
+
+        contexto_actual = malloc(sizeof(t_contexto));
 
         control_loop = 1;
         while (control_loop == 1){
-            contexto_actual = malloc(sizeof(t_contexto));
+            
 
             char* instruccion_raw;
 
             if(!mock){
-                contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
+                if(contexto_key == 1){ /*Para que se solicite contexto solo cuando hay un proceso nuevo en la cpu*/
+                    contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
+                    contexto_key--;
+                }
+                
                 instruccion_raw = fetch(sockets); /* Fase Fetch */
             }
             else {
@@ -168,6 +174,9 @@ t_contexto* recibir_contexto(int socket_km) {
     
     // recibir el paquete (recibo un buffer del socket)
     int buffer_size;
+
+    enviar_op_code(CONTEXTO, socket_km);
+
     void* buffer = recibir_buffer(&buffer_size, socket_km);
 
     // crear una estructura para almacenar lo recibido

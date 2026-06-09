@@ -58,6 +58,11 @@ void io_libre(int fd);
 void mem_corrupt(void);
 
 /*----- AUXILIARES -----*/
+void enviar_desalojo_CMN(int socket_cliente);
+void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
+int ready_CMN(PCB* pcb_nuevo);
+PCB* obtener_siguiente_proceso();
+bool usa_quantum (PCB* pcb);
 void enviar_proceso_finalizar_KM(int pid);
 void enviar_proceso_KM(uint32_t pid, op_code opCode);
 bool es_el_mutex_buscado(void* elemento, void* contexto);

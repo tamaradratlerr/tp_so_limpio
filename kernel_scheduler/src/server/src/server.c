@@ -488,20 +488,19 @@ void* control_hilo_quantum(void* arg)
     return NULL;
 }
 
-PCB* obtener_siguiente_proceso()
-{
+PCB* obtener_siguiente_proceso() {
+    
     PCB* pcb = NULL;
 
     pthread_mutex_lock(&mutex_ready);
 
-    if(strcmp(planificacion_algoritmo, "FIFO") == 0)
+    if(strcmp(planificacion_algoritmo, "FIFO") == 0){
         pcb = list_remove(listasProcesos->rdy, 0);
-
-    else if(strcmp(planificacion_algoritmo, "RR") == 0)
+    }
+    else if(strcmp(planificacion_algoritmo, "RR") == 0){
         pcb = list_remove(listasProcesos->rdy, 0);
-
-    else if(strcmp(planificacion_algoritmo, "CMN") == 0)
-    {
+    }
+    else if(strcmp(planificacion_algoritmo, "CMN") == 0){
         for(int i = 0; i < planificador->cantidad_niveles; i++)
         {
             if(!list_is_empty(planificador->niveles[i].cola))
@@ -598,7 +597,7 @@ void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
     pthread_mutex_unlock(&sem_procesos_running);
 }
 
-bool usa_quantum(PCB* pcb)
+bool usa_quantum (PCB* pcb)
 {
     if(strcmp(planificacion_algoritmo, "RR") == 0)
         return true;
@@ -845,7 +844,9 @@ void init_proc(int socket_cliente){
         }
     
     }
-    else{nuevo_pcb = crearNuevoProceso_mock(path, info_km.conexion_km);
+    else{
+        
+        nuevo_pcb = crearNuevoProceso_mock(path, info_km.conexion_km);
         cambiar_estado_pcb(nuevo_pcb, RDY);
         agregar_proceso_lista (nuevo_pcb);    
     }
@@ -1251,7 +1252,7 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
 
 /*-----                     MOCKs                     -----*/
 
-void crearNuevoProceso_mock(){
+PCB* crearNuevoProceso_mock(){
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid);
     log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);

@@ -46,15 +46,6 @@ typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs co
 }t_listas_suplementarias;
 
 
-typedef enum
-{
-	FIFO,
-    RR,
-    CMN
-    //No lo estamos Usado ahora, deberiamos cambiar cuando leemos el config y darle valor de esta estructura de datos
-}algortimoEnUso;
-
-
 typedef struct{
 
     char* mutex_id;

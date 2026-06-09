@@ -2,6 +2,10 @@
 
 #include "cliente.h"
 
+/*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
+bool mock = true; /*V1.0 No tiene mmu*/
+/*-----                                                   -----*/
+
 t_config* config = NULL;
 t_log* logger = NULL;
 t_contexto* contexto_actual = NULL;
@@ -10,19 +14,20 @@ t_instruccion* instruccion_decodificada = NULL;
 t_cpu_sockets* sockets = NULL;
 t_proceso_ejec* proceso_en_ejecucion = NULL;
 
-char* identificador; 
+char* identificador = NULL; 
 
 int control_loop0 = 0;
 int control_loop = 0;
 
 int main(int argc, char *argv[])
 {
-        printf("VERSION NUEVA\n");
 
     if(argc != 3){
-        printf("Uso: ./bin/cpu [Archivo Config] [Identificador]\n");
+        printf("ERROR: Usar: ./bin/cpu [Archivo Config] [Identificador]\n");
         return 1;
     }
+
+   
 
     char* archivo_config = argv[1];
     identificador = argv[2];
@@ -39,13 +44,15 @@ int main(int argc, char *argv[])
 
     if (logger == NULL || config == NULL) {
         return EXIT_FAILURE;
+
     }
 
     log_info(logger, "Modulo CPU iniciado");
-
+     if(mock){log_info(logger,"MOCK ACTIVADO");}
 
     /* ---------------- CONEXIONES ---------------- */
 
+    if(!mock){
     sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
     op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory); //Se espera que se devueva el op_code OK (1)
@@ -54,10 +61,9 @@ int main(int argc, char *argv[])
         log_error(logger, "Error en HandShake con Kernel Memory.");
 
         return EXIT_FAILURE;
-    }
-
+    }}
     
-
+    if(!mock){
     sockets->conexion_memory_stick = conexion_memory_stick(config, logger, MEMORY_STICK);
     enviar_op_code (NUEVA_CPU, sockets->conexion_memory_stick);
     op_code handshake_ms = recibir_op_code(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
@@ -66,7 +72,7 @@ int main(int argc, char *argv[])
         log_error(logger, "Error en HandShake con Memory Stick.");
 
         return EXIT_FAILURE;
-    }
+    }}
     
     
     
@@ -80,10 +86,18 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-
+    if(!mock){
     // Validacion de conexiones (Si falla una conexión crítica, cerramos)
     if (sockets->conexion_kernel_memory < 0 || sockets->conexion_kernel_scheduler < 0 || sockets->conexion_memory_stick < 0) {
         
+        log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
+        
+        terminar_programa(logger, config, sockets);
+        
+        return EXIT_FAILURE;
+    }}
+    else if (sockets->conexion_kernel_scheduler < 0){
+
         log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
         
         terminar_programa(logger, config, sockets);
@@ -106,12 +120,24 @@ int main(int argc, char *argv[])
         while (control_loop == 1){
             contexto_actual = malloc(sizeof(t_contexto));
 
-            contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
-            char* instruccion_raw = fetch(sockets); /* Fase Fetch */
-            if (instruccion_raw == NULL) return EXIT_FAILURE;
+            char* instruccion_raw;
+
+            if(!mock){
+                contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
+                instruccion_raw = fetch(sockets); /* Fase Fetch */
+            }
+            else {
+                contexto_actual = recibir_contexto_mock();
+                instruccion_raw = fetch_mock(sockets); /* Fase Fetch */
+            } 
+
+            
+            if (instruccion_raw == NULL) {
+                log_info(logger, "Error en Instruccion RAW post FETCH [== NULL]");
+                return EXIT_FAILURE;}
+            
             
             decode(instruccion_raw); /* Fase Decode */
-
 
             contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
 
@@ -209,9 +235,11 @@ void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets)
     if(config) config_destroy(config);
     
     // Cerramos todos los sockets abiertos
+    if(!mock){
     liberar_conexion(sockets -> conexion_kernel_memory);
-    liberar_conexion(sockets -> conexion_kernel_scheduler);
     liberar_conexion(sockets -> conexion_memory_stick);
+    }
+    liberar_conexion(sockets -> conexion_kernel_scheduler);
 }
 
 
@@ -506,14 +534,20 @@ void ejecutar_mov_in (t_instruccion* instr){
 
     char* reg_dest_nombre = instr->params[0];
     int tamanio = 0;
+    void* buffer;
 
     if (es_registro_32bits(reg_dest_nombre)){
         
+        uint32_t dir_fisica;
+
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
+        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);}
+        else {dir_fisica = pedir_direccion_mmu_mock(contexto_actual->si, tamanio);}
     
         // Comunicación con Memory Stick
-        void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
+        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));}
+        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint32_t));}
+
         *dest = *(uint32_t*)buffer;
         free(buffer);
 
@@ -522,11 +556,16 @@ void ejecutar_mov_in (t_instruccion* instr){
     }   
     else {
         
+        uint8_t dir_fisica;
+
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
+        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);}
+        else{dir_fisica = pedir_direccion_mmu_mock(contexto_actual->si, tamanio);}
     
         // Comunicación con Memory Stick
-        void* buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
+        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));}
+        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint32_t));}
+        
         *dest = *(uint8_t*)buffer;
         free(buffer);
 
@@ -541,15 +580,21 @@ void ejecutar_mov_out (t_instruccion* instr){
 
     char* reg_dest_nombre = instr->params[0];
     int tamanio = 0;
+    void* buffer;
 
     if (es_registro_32bits(reg_dest_nombre)){
         
+        uint32_t dir_fisica;
+
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);
+        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);}
+        else{dir_fisica = pedir_direccion_mmu_mock(contexto_actual->di, tamanio);}
     
         // Comunicación con Memory Stick
-        void* buffer = (void*)dest;
-        escribir_en_memoria(dir_fisica, buffer, sizeof(uint32_t));
+        buffer = (void*)dest;
+
+        if(!mock){escribir_en_memoria(dir_fisica, buffer, sizeof(uint32_t));}
+        else{escribir_en_memoria_mock(dir_fisica, buffer, sizeof(uint32_t));}
         free(buffer);
 
         log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
@@ -557,12 +602,16 @@ void ejecutar_mov_out (t_instruccion* instr){
     }   
     else {
         
+        uint8_t dir_fisica;
+
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        uint8_t dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);
+        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);}
+        else {dir_fisica = pedir_direccion_mmu_mock(contexto_actual->di, tamanio);}
     
         // Comunicación con Memory Stick
-        void* buffer = (void*)dest;
-        escribir_en_memoria(dir_fisica, buffer, sizeof(uint8_t));
+        buffer = (void*)dest;
+        if(!mock){escribir_en_memoria(dir_fisica, buffer, sizeof(uint8_t));}
+        else{escribir_en_memoria_mock(dir_fisica, buffer, sizeof(uint8_t));}
         free(buffer);
 
         log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
@@ -840,10 +889,13 @@ void ejecutar_stdin(t_instruccion* instr) {
 
     
     tamanio = obtener_tamanio_del_registro(instr->params[1]); 
-    direccion_logica = obtener_direccion_del_registro(instr->params[1]);  //HACER obtener_direccion_del_registro --> MMU
+    if(!mock){direccion_logica = obtener_direccion_del_registro(instr->params[1]);}  //HACER obtener_direccion_del_registro --> MMU
+    else{direccion_logica = obtener_direccion_del_registro_mock(instr->params[1]);}
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
 
     log_info (logger, "## PID:[%d] - Ejecutando [STDIN] - Destino [%d] - tamanio [%d]",contexto_actual->pid, direccion_logica, tamanio);/*Logger Obligatorio*/
+
+    enviar_op_code(gl_IO_STDIN,sockets->conexion_kernel_scheduler);
 
     t_paquete* paquete = crear_paquete(gl_IO_STDIN);
 
@@ -854,6 +906,10 @@ void ejecutar_stdin(t_instruccion* instr) {
 
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
+
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
+        log_info(logger, "Proceso creado exitosamente por el Kernel.");
+    }
 
     gestionar_desalojo_por_syscall(NULL, gl_IO_STDIN);
 }
@@ -989,26 +1045,26 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
 
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
 
-    enviar_contexto_a_kernel_memory(); 
-    t_paquete* paquete = crear_paquete(tipo_operacion);
-
-    if(valor == NULL){
-        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    }
-    else{
-        agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-        agregar_a_paquete(paquete, valor, strlen(valor) + 1);
-    }
-     
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
-
-    op_code status = recibir_op_code(sockets->conexion_kernel_scheduler);
+    if(!mock){enviar_contexto_a_kernel_memory();}
+    else {enviar_contexto_a_kernel_memory_mock();} 
     
-    if(status == OK) {
-        log_info(logger, "Desalojo confirmado. Limpiando CPU.");
-        limpiar_contexto_actual();
-    }
+    // t_paquete* paquete = crear_paquete(tipo_operacion); /*Esta Info ya se pasa en las otras funciones*/
+    // if(valor == NULL){
+    //     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    // }
+    // else{
+    //     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
+    //     agregar_a_paquete(paquete, valor, strlen(valor) + 1);
+    // }
+    // enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
+    // eliminar_paquete(paquete);
+
+    // op_code status = recibir_op_code(sockets->conexion_kernel_scheduler);
+    
+    // if(status == OK) {
+    //     log_info(logger, "Desalojo confirmado. Limpiando CPU.");
+    //     limpiar_contexto_actual();
+    // }
     
     return; // Simplemente salimos de la función void sin retornar un valor
 }
@@ -1026,7 +1082,7 @@ void liberar_instruccion(t_instruccion* instruccion) {
 }
 
 int apagar() {
-    return 0; // O el valor que desees para salir del loop
+    return 1; // O el valor que desees para salir del loop
 }
 
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
@@ -1067,5 +1123,97 @@ int obtener_tam_segmento_del_pid(int pid, int num_segmento){ /*Hacer*/
 }
 
 int consultar_base_segmento_al_kernel(int num_segmento){/*Hacer*/
+
     return 0;
 }
+
+
+/*---- Fucnones MOCKS ----*/
+
+char* instruccion_a_ejecutar[] = {
+    "NOOP",
+    "SET AX 01",
+    "SET BX 01",
+    "SUM AX BX"
+};
+
+t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cambiar algo del contexto inicial*/
+
+    // crear una estructura para almacenar lo recibido
+    t_contexto* nuevo_contexto = malloc(sizeof(t_contexto));
+
+    nuevo_contexto->ax = 0;
+    nuevo_contexto->bx = 0;
+    nuevo_contexto->cx = 0;
+    nuevo_contexto->di = 0;
+    nuevo_contexto->dx = 0;
+    nuevo_contexto->eax = 0;
+    nuevo_contexto->ebx = 0;
+    nuevo_contexto->ecx = 0;
+    nuevo_contexto->edx = 0;
+    nuevo_contexto->pc = 0;
+    nuevo_contexto->pid = 0;
+    nuevo_contexto->si = 0;
+    /*Evitamos tabla de Segmentos*/
+
+    return nuevo_contexto;
+
+}/*HACER*/
+
+char* fetch_mock(t_cpu_sockets* sockets){
+
+    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u [MOCK]", 
+             contexto_actual->pid, contexto_actual->pc);
+    int tamanio = 0;
+
+    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc, tamanio);
+    
+    if (dir_fisica == ERROR_MMU) {
+        log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
+        return NULL;
+    }
+
+    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
+             contexto_actual->pid, 
+             contexto_actual->pc);
+
+
+    
+    char* instruccion_raw = instruccion_a_ejecutar[contexto_actual->pid];
+
+    
+    if (instruccion_raw == NULL) {
+        log_error(logger, "Error en fetch");
+        return NULL;
+    }
+    
+    return instruccion_raw;
+
+}
+
+uint32_t obtener_direccion_del_registro_mock(char* reg){ /*La direccion siempre sera 1000 (segmento 1 parado en la base)*/
+
+    uint32_t dir_log = 1000;
+    log_info(logger,"Direccion Logica de un registro obtenida [MOCK]");
+    return dir_log;
+} 
+
+void enviar_contexto_a_kernel_memory_mock(){
+    log_info(logger, "Contexto Enviado a Kernel Memory [MOCK]");
+}
+
+void* leer_de_memoria_mock(uint32_t dir_fisica, int tamanio) {/*Siempre que se quiera leer devuelve 33*/
+    log_info(logger, "Se leyo en memoria [%d] [MOCK]",dir_fisica);
+    return 33;}
+
+void escribir_en_memoria_mock(uint32_t dir_fisica, void* buffer, int tamanio) {
+    log_info(logger,"Se escribio en memoria dir.F [%d] [MOCK]",dir_fisica);
+    return;}
+
+uint32_t pedir_direccion_mmu_mock(uint32_t dir_logica, int tamanio_solicitado) { /*Siempre devuelve dir_log * 100*/
+    log_info(logger,"Se solicito direccion a MMU dir_l [%d] [MOCK]",dir_logica);
+
+    uint32_t dir_f = dir_logica * 100;
+    return dir_f;}
+
+

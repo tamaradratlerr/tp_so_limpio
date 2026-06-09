@@ -2,7 +2,7 @@ include settings.mk
 
 ################################################################################
 
-outname = lib/lib$(1).a
+outname = bin/$(1)
 
 define compile_out
     $(CC) $(CFLAGS) -o "$@" $^ $(LIBDIRS:%=-L%) $(LIBS:%=-l%)

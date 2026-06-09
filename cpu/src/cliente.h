@@ -89,4 +89,13 @@ int obtener_tam_max_segmento ();
 int obtener_tam_segmento_del_pid(int pid, int num_segmento);
 int consultar_base_segmento_al_kernel(int num_segmento);
 
+//MOCK
+t_contexto* recibir_contexto_mock ();
+char* fetch_mock(t_cpu_sockets* sockets);
+uint32_t obtener_direccion_del_registro_mock(char* reg);
+void enviar_contexto_a_kernel_memory_mock();
+void* leer_de_memoria_mock(uint32_t dir_fisica, int tamanio);
+void escribir_en_memoria_mock(uint32_t dir_fisica, void* buffer, int tamanio);
+uint32_t pedir_direccion_mmu_mock(uint32_t dir_logica, int tamanio_solicitado);
+
 #endif

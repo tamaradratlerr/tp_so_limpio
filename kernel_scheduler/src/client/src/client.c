@@ -1,14 +1,5 @@
 #include "client.h"
 
-/*	
-	argc: cantidad de argumentos  -->  cuenta todo, incluyendo el nombre del programa:
-			argv[0] = "./bin/kernel_scheduler"
-			argv[1] = "config.config"
-			argv[2] = "procesos.txt"
-
-	*argv[]: Es un vector de strings
-
-*/
 
 int main(int argc, char *argv[])
 {

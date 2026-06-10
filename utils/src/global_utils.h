@@ -90,6 +90,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     ks_EXIT,
     NUEVO_KERNEL,
     OK_ESCRITURA,
+    NUEVO_ESPACIO, //En caso de nuevo MEM.STICK. o Se libere espacio (KM => KS) 
     SUSPENDIDO, //Informa que el proximo PID esta en estado SUSPENDIDO
 
     // IO

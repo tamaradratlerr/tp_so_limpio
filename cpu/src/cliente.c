@@ -3,7 +3,7 @@
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 
-bool mock = false; /*V1.0 No tiene mmu*/
+bool mock = true; /*V1.0 No tiene mmu*/
                    /*FALSE => Se ejecuta normalmente
                      TRUE  => Se ejecutan los mocks  */
 
@@ -264,7 +264,7 @@ int conexion_kernelS(t_config* config, t_log* logger, module_name module) {
     
     log_info(logger, "Iniciando conexion con KERNEL SCHEDULER");
     
-    return crear_conexion(ip, puerto, logger, module);
+    return crear_conexion_reintentando(ip, puerto, logger, module);
 }
 
 int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {

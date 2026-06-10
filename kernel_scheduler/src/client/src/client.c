@@ -1,9 +1,9 @@
 #include "client.h"
 
-mock = true;
 
 int main(int argc, char *argv[])
 {
+
     if(argc != 3){
         printf("Uso: ./bin/kernel_scheduler [archivo.config] [archivoProcesos]\n");
         return 1;

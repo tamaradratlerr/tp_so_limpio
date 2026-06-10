@@ -95,7 +95,7 @@ t_IO* buscar_io_por_fd(int fd_buscado);
 void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
-
+PCB* crearNuevoProceso_mock(char*, int);
 
 /*----- Vars Extern -----*/
 

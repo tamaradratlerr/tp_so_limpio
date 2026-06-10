@@ -9,6 +9,14 @@ int tiempo_suspencion = 0;
 int inicio_todo = false;
 
 
+//ACA PUSE EL MOCK km
+bool mock = true;
+
+/*FALSE => Se ejecuta Normalmente
+  TRUE => Se ejecuta sin KM (para realizar pruebas)
+*/
+
+
 pthread_t hilo_timer;
 
 int contador_pid = 0;
@@ -30,6 +38,9 @@ pthread_mutex_t sem_procesos_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_running = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_exit = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sem_procesos_s_block = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sem_procesos_s_ready = PTHREAD_MUTEX_INITIALIZER;
+
 
 pthread_mutex_t mutex_cpus = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ios = PTHREAD_MUTEX_INITIALIZER;
@@ -135,6 +146,19 @@ void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 
     liberar_conexion (info_km.conexion_km);
 	
+}
+
+/* ------------ MOCK ------------*/
+PCB* crearNuevoProceso_mock(char*, int){
+    
+    PCB* nuevoPcb = iniciar_pcb(contador_pid);
+    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
+
+    /*Se evita Enviar el Contexto a la KM*/
+    log_info (logger, "Se le envia el Nuevo PCB a la KM [MOCK]");
+	contador_pid++;
+
+	return nuevoPcb;
 }
 
 /*   PLANIFICACIÓN     */

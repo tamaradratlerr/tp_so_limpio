@@ -4,11 +4,7 @@
 #include "../../utils/src/global_utils.h"
 
 
-/*--- Variable global para hacer pruebas sin KM ---*/
-bool mock = false; 
-/*FALSE => Se ejecuta Normalmente
-  TRUE => Se ejecuta sin KM (para realizar pruebas)
-*/
+
 
 
 
@@ -323,9 +319,9 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
             break;
         
         case S_BCK:
-            pthread_mutex_lock(&sem_procesos_s_bck);
+            pthread_mutex_lock(&sem_procesos_s_block);
             removed = list_remove_element(listasProcesos->s_bck, pcb);
-            pthread_mutex_unlock(&sem_procesos_s_bck);
+            pthread_mutex_unlock(&sem_procesos_s_block);
             break;
         
         case S_RDY:
@@ -550,6 +546,10 @@ PCB* obtener_siguiente_proceso() {
     return pcb;
 }
 
+void enviar_desalojo(int socket_cliente){
+    /*hacer*/
+}
+
 int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
 
     int posicion;
@@ -762,59 +762,80 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
-        int* pid = malloc(sizeof(int));
 
-        pid = recibir_pid (socket_cliente);
+        int* pid_guardado = malloc(sizeof(int));
+        int pid = recibir_pid (socket_cliente);
+
+    *pid_guardado = pid;
+
+
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
-        free(mutex_id);
+        
 
         if (mutex == NULL) {
         log_error(logger, "Mutex no encontrado");
         return;
         }
 
+
+
         pthread_mutex_lock(&mutex_simulados);
-        list_add(pid, mutex->cola_mutex);
+        list_add(mutex->cola_mutex, pid_guardado);
         pthread_mutex_unlock(&mutex_simulados);
 
         
-        while (1) {
-            
-            if(list_index_of(mutex->cola_mutex, pid) == 0){
+        while (1)
+    {
+        int* primer_pid = list_get(mutex->cola_mutex, 0);
 
-                while(1){
-                    if(mutex->valor == 1){
+        if(primer_pid != NULL && *primer_pid == pid)
+        {
+            while(1)
+            {
+                if(mutex->valor == 1)
+                {
+                    log_info(logger,
+                            "## PID:[%d] Toma el mutex:[%s]",
+                            pid,
+                            mutex_id);
 
-                       log_info(logger,"## PID:[%d] Toma el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
-                       mutex->valor = 0;
-                        break; 
-
-                    }
-
-                    log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo... (Proximo en la lista)",pid,mutex_id);
-                    usleep(1000); // Pequeña pausa para no saturar el CPU
-
+                    mutex->valor = 0;
+                    break;
                 }
-                    
+
+                log_info(logger,
+                        "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo... (Proximo en la lista)",
+                        pid,
+                        mutex_id);
+
+                usleep(1000);
             }
-          
-         log_info(logger,"## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",pid,mutex_id);
-         usleep(1000); // Pequeña pausa para no saturar el CPU
-                
+
+            break;
         }
-        enviar_op_code(OK, socket_cliente); 
+
+        log_info(logger,
+                "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",
+                pid,
+                mutex_id);
+
+        usleep(1000);
     }
+
+        free(mutex_id);
+        enviar_op_code(OK, socket_cliente); 
+}
 
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
         
 
-        int* pid = recibir_pid(socket_cliente);
+        int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
 
@@ -823,7 +844,7 @@ void mutex_unlock (int socket_cliente){
         pthread_mutex_lock (&mutex_simulados);
         int* pid_removed = list_remove(mutex->cola_mutex, 0);
         
-        if(pid == pid_removed){
+        if(pid_removed != NULL && *pid_removed == pid){
 
             mutex->valor = 1;
             
@@ -839,8 +860,8 @@ void mutex_unlock (int socket_cliente){
         }
         
         pthread_mutex_unlock (&mutex_simulados);
-        free(pid);
-
+        free(pid_removed);
+        free(mutex_id);
     }
 
 //MEM_ALLOC,
@@ -900,7 +921,7 @@ void exit_proceso(int socket_cpu){
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
     if(!mock){enviar_proceso_finalizar_KM(pid_a_finalizar);}
-    else{enviar_proceso_afinalizar_KM_mock(pid_a_finalizar);}
+    else{enviar_proceso_finalizar_KM_mock(pid_a_finalizar);}
     
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
@@ -968,7 +989,7 @@ void io_sleep(int socket_cpu) {
             enviar_op_code(SUSPENDIDO,info_km.conexion_km);
             enviar_pid(pcb->data.PID, info_km.conexion_km);
             int err = recibir_op_code(info_km.conexion_km);
-            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
         }
     }
 }
@@ -1081,7 +1102,7 @@ void io_stdin(int socket_cpu) {
             enviar_op_code(SUSPENDIDO,info_km.conexion_km);
             enviar_pid(pcb->data.PID, info_km.conexion_km);
             int err = recibir_op_code(info_km.conexion_km);
-            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
         }
     }
 }
@@ -1169,7 +1190,7 @@ void io_stdout(int cpu_socket) {
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
     
-    espera_io* io_pcb;
+    espera_io* io_pcb = NULL;
     if(!mock){
         /*Le solicitamos los Datos de la KM*/
         enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
@@ -1214,7 +1235,7 @@ void io_stdout(int cpu_socket) {
             enviar_op_code(SUSPENDIDO,info_km.conexion_km);
             enviar_pid(pcb->data.PID, info_km.conexion_km);
             int err = recibir_op_code(info_km.conexion_km);
-            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
         }
     }
 }
@@ -1372,17 +1393,7 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
 
 /*-----                     MOCKs                     -----*/
 
-PCB* crearNuevoProceso_mock(){
-    
-    PCB* nuevoPcb = iniciar_pcb(contador_pid);
-    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
 
-    /*Se evita Enviar el Contexto a la KM*/
-    log_info (logger, "Se le envia el Nuevo PCB a la KM [MOCK]");
-	contador_pid++;
-
-	return nuevoPcb;
-}
 
 void enviar_proceso_finalizar_KM_mock (int pid) {
     

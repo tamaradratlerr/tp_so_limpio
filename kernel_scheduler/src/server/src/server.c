@@ -172,11 +172,13 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
 t_listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas las listas de los Procesos*/
 
-	listasProcesos->new = list_create();
-	listasProcesos->rnn = list_create();
-	listasProcesos->bck = list_create();
-	listasProcesos->ext = list_create();
-	listasProcesos->rdy = list_create();
+	listasProcesos->new   = list_create();
+	listasProcesos->rnn   = list_create();
+	listasProcesos->bck   = list_create();
+	listasProcesos->ext   = list_create();
+	listasProcesos->rdy   = list_create();
+    listasProcesos->s_bck = list_create();
+    listasProcesos->s_rdy = list_create();
 
 	return listasProcesos;
 };
@@ -188,6 +190,8 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
 	list_destroy(listasProcesos->bck);
 	list_destroy(listasProcesos->ext);
 	list_destroy(listasProcesos->rdy);
+    list_destroy(listasProcesos->s_bck);
+    list_destroy(listasProcesos->s_rdy);
 
 
 }
@@ -242,6 +246,24 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_block);
 		posicion = list_add(listasProcesos->bck, pcb);
         pthread_mutex_unlock(&sem_procesos_block);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
+        break;
+    
+    case S_BCK: //BLOCK
+
+        pthread_mutex_lock(&sem_procesos_s_block);
+		posicion = list_add(listasProcesos->s_bck, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_block);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
+        break;
+
+    case S_RDY: //BLOCK
+
+        pthread_mutex_lock(&sem_procesos_s_ready);
+		posicion = list_add(listasProcesos->s_rdy, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_ready);
         return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
 
         break;
@@ -300,6 +322,18 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
             pthread_mutex_unlock(&sem_procesos_exit);
             break;
         
+        case S_BCK:
+            pthread_mutex_lock(&sem_procesos_s_bck);
+            removed = list_remove_element(listasProcesos->s_bck, pcb);
+            pthread_mutex_unlock(&sem_procesos_s_bck);
+            break;
+        
+        case S_RDY:
+            pthread_mutex_lock(&sem_procesos_s_ready);
+            removed = list_remove_element(listasProcesos->s_rdy, pcb);
+            pthread_mutex_unlock(&sem_procesos_s_ready);
+            break;
+
         case RDY:
             pthread_mutex_lock(&sem_procesos_ready);
             removed = list_remove_element(listasProcesos->rdy, pcb);
@@ -918,6 +952,25 @@ void io_sleep(int socket_cpu) {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
         enviar_op_code(NOTOK, socket_cpu);
     }
+
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ 
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un SLEEP de un proceso
@@ -936,9 +989,18 @@ void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un 
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
 
     log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
@@ -1003,6 +1065,25 @@ void io_stdin(int socket_cpu) {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
         enviar_op_code(NOTOK, socket_cpu);
     }
+
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ 
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_stdin (int socket_io){
@@ -1049,9 +1130,20 @@ void rta_io_stdin (int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
+      
+    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
     log_info (logger, "PID: [%d] Finalizo IO STDIN", pcb->data.PID);
     
@@ -1107,7 +1199,24 @@ void io_stdout(int cpu_socket) {
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
 
-   
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ /*Mediano Plazo*/
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err =! OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_stdout(int socket_io){
@@ -1126,9 +1235,20 @@ void rta_io_stdout(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
+      
+    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
     log_info (logger, "PID: [%d] Finalizo IO stdout", pcb->data.PID);
 }

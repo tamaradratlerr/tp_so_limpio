@@ -13,9 +13,21 @@ typedef struct {
     int conexion_memory_stick;
 } t_cpu_sockets;
 
+/*----- VARIABLES -----*/
 
-int control_loop00;
-int control_loop;
+t_config* config                        = NULL;
+t_log* logger                           = NULL;
+t_contexto* contexto_actual             = NULL;
+t_instruccion* instruccion_decodificada = NULL;
+t_cpu_sockets* sockets                  = NULL;
+t_proceso_ejec* proceso_en_ejecucion    = NULL;
+
+char* identificador                     = NULL; 
+
+int control_loop0                       = 0;
+int control_loop                        = 0;
+
+/*----- EXTERN -----*/
 
 extern t_config* config; 
 extern t_log* logger;

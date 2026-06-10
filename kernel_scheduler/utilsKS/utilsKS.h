@@ -23,6 +23,8 @@ typedef struct
 	t_list* rnn;
     t_list* rdy;
 	t_list* bck;
+    t_list* s_bck;
+    t_list* s_rdy;
 	t_list* ext;
 
     //Faltan agregar los estados del CheckPoint 3
@@ -82,11 +84,8 @@ typedef struct { // estructura para las cosasa que le mandamos al hilo
 } t_datos_quantum;
 
 /*-----     FUNCIONES      -----*/
-void enviarProcesoKM(
-        PCB* pcb,
-        char* path,
-        int fd_km);
-        
+
+void enviarProcesoKM(PCB* pcb, char* path, int fd_km);        
 PCB* iniciar_pcb (int PID);
 void terminar_pcb (PCB* pcb);
 PCB* crearNuevoProceso(char* path, int fd_km);
@@ -96,6 +95,9 @@ t_IO* buscar_io_por_fd(int fd_buscado);
 void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
+
+
+/*----- Vars Extern -----*/
 
 extern int contador_pid;
 extern t_log* logger;
@@ -127,6 +129,8 @@ extern pthread_mutex_t sem_procesos_ready;
 extern pthread_mutex_t sem_procesos_running;
 extern pthread_mutex_t sem_procesos_block;
 extern pthread_mutex_t sem_procesos_exit;
+extern pthread_mutex_t sem_procesos_s_block;
+extern pthread_mutex_t sem_procesos_s_ready;
 
 extern pthread_mutex_t mutex_cpus;
 extern pthread_mutex_t mutex_ios;

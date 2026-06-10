@@ -90,6 +90,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     ks_EXIT,
     NUEVO_KERNEL,
     OK_ESCRITURA,
+    SUSPENDIDO, //Informa que el proximo PID esta en estado SUSPENDIDO
 
     // IO
     NUEVA_IO, //Se informa que hay una nueva IO
@@ -152,6 +153,8 @@ typedef enum
     RNN,
     RDY,
     BCK,
+    S_BCK,
+    S_RDY,
     EXT,
     NO_ESTADO
     

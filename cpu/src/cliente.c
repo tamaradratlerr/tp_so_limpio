@@ -2,21 +2,13 @@
 
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
+
 bool mock = false; /*V1.0 No tiene mmu*/
+                   /*FALSE => Se ejecuta normalmente
+                     TRUE  => Se ejecutan los mocks  */
+
 /*-----                                                   -----*/
 
-t_config* config = NULL;
-t_log* logger = NULL;
-t_contexto* contexto_actual = NULL;
-t_instruccion* instruccion_decodificada = NULL;
-
-t_cpu_sockets* sockets = NULL;
-t_proceso_ejec* proceso_en_ejecucion = NULL;
-
-char* identificador = NULL; 
-
-int control_loop0 = 0;
-int control_loop = 0;
 
 int main(int argc, char *argv[])
 {
@@ -27,6 +19,7 @@ int main(int argc, char *argv[])
     }
 
    
+    /*---Iniciamos Log y Config---*/
 
     char* archivo_config = argv[1];
     identificador = argv[2];
@@ -39,15 +32,13 @@ int main(int argc, char *argv[])
     t_log_level log_level = log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
     logger = iniciar_logger(log_level);
       
-    
-
     if (logger == NULL || config == NULL) {
         return EXIT_FAILURE;
 
     }
 
     log_info(logger, "Modulo CPU iniciado");
-     if(mock){log_info(logger,"MOCK ACTIVADO");}
+    if(mock){log_info(logger,"MOCK ACTIVADO");}
 
     /* ---------------- CONEXIONES ---------------- */
 
@@ -1090,7 +1081,7 @@ void liberar_instruccion(t_instruccion* instruccion) {
     free(instruccion);
 }
 
-int apagar() {
+int apagar() {/*Hacer*/
     return 1; // O el valor que desees para salir del loop
 }
 

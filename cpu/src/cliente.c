@@ -99,8 +99,9 @@ int main(int argc, char *argv[])
 
 
     /*----- SOLICITAMOS UN PROCESO -----*/
-    control_loop00 = 1;
-    while(control_loop00 == 0) //Este WHILE funciona para poder enviar nuevamente el CPU_LIBRE
+    int control_loop00 = 1;
+
+    while(control_loop00 == 1) //Este WHILE funciona para poder enviar nuevamente el CPU_LIBRE
     {
         int contexto_key = 0;
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler); //Al iniciar una CPU obligatoriamente debemos mandar el CPU_LIBRE y esperar un PID (KERNEL SCHEDULER)
@@ -1179,7 +1180,7 @@ char* fetch_mock(t_cpu_sockets* sockets){
 
 
     
-    char* instruccion_raw = instruccion_a_ejecutar[contexto_actual->pid];
+    char* instruccion_raw = instruccion[contexto_actual->pid];
 
     
     if (instruccion_raw == NULL) {
@@ -1187,7 +1188,7 @@ char* fetch_mock(t_cpu_sockets* sockets){
         return NULL;
     }
     
-    return instruccion_raw;
+    return strdup(instruccion_raw);
 
 }
 
@@ -1203,9 +1204,16 @@ void enviar_contexto_a_kernel_memory_mock(){
 }
 
 void* leer_de_memoria_mock(uint32_t dir_fisica, int tamanio) {/*Siempre que se quiera leer devuelve 33*/
-    log_info(logger, "Se leyo en memoria [%d] [MOCK]",dir_fisica);
-    return 33;}
 
+    uint32_t* valor = malloc(sizeof(uint32_t));
+
+    *valor = 33;
+
+    log_info(logger, "Se leyo en memoria [%u] [MOCK]", dir_fisica);
+
+    return valor;
+
+}
 void escribir_en_memoria_mock(uint32_t dir_fisica, void* buffer, int tamanio) {
     log_info(logger,"Se escribio en memoria dir.F [%d] [MOCK]",dir_fisica);
     return;}

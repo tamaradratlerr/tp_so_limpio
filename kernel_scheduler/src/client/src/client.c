@@ -100,8 +100,8 @@ int main(int argc, char *argv[])
 	
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	if(mock){crearNuevoProceso(archivo_config, info_km.conexion_km);}
-	else{crearNuevoProceso_mock(archivo_config, info_km.conexion_km);}
+	if(mock){crearNuevoProceso_mock(archivo_config, info_km.conexion_km);}
+	else{crearNuevoProceso(archivo_config, info_km.conexion_km);}
 	
 	inicio_todo = true;
 	

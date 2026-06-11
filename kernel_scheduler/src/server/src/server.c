@@ -872,15 +872,68 @@ void mutex_unlock (int socket_cliente){
 //MEM_ALLOC,
 void mem_alloc (int socket_cliente){//Hacer
     
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente); //HandShake
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente); 
+
+    char* tamanio = recibir_mensaje(socket_cliente,logger);
+    enviar_op_code(OK,socket_cliente);
+
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK,socket_cliente);
+    
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
+
+    /*Le envamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_ALLOC);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
+    }
 
 }; 
 //MEM_FREE,
 void mem_free (int socket_cliente){// Hacer
 
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente);
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente);
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK, socket_cliente); 
+
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
+
+    /*Le enviamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_FREE);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);
+    }
 } 
 //INIT PROC
 void init_proc(int socket_cliente){

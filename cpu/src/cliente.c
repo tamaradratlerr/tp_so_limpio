@@ -798,6 +798,11 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     enviar_mensaje (tamanio, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
+
+    enviar_pid (contexto_actual->pid, sockets->conexion_kernel_scheduler); 
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
+
     log_info (logger, "ok"); //Completar LOG
             
 }
@@ -810,11 +815,14 @@ void ejecutar_mem_free (t_instruccion* instr){
     log_info (logger, "## PID:[%d] - Ejecutando [MEM ALLOC] - ID [%s]",contexto_actual->pid, id_segmento);/*Logger Obligatorio*/
 
     enviar_op_code (gl_MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
-    
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
     enviar_mensaje (id_segmento, sockets->conexion_kernel_scheduler); 
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
+    if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
+
+    enviar_pid (contexto_actual->pid, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
@@ -1214,6 +1222,7 @@ void* leer_de_memoria_mock(uint32_t dir_fisica, int tamanio) {/*Siempre que se q
     return valor;
 
 }
+
 void escribir_en_memoria_mock(uint32_t dir_fisica, void* buffer, int tamanio) {
     log_info(logger,"Se escribio en memoria dir.F [%d] [MOCK]",dir_fisica);
     return;}

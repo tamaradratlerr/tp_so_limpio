@@ -706,7 +706,6 @@ void eliminar_segmento(int pid, int id_segmento) {
         return;
     }
 
-    // 1. Buscamos el segmento en la tabla del proceso
     t_segmento_aux* seg_a_eliminar = NULL;
     int indice_seg = -1;
 
@@ -725,37 +724,41 @@ void eliminar_segmento(int pid, int id_segmento) {
         return;
     }
 
-    // Lo sacamos de la lista lógica del proceso
     list_remove(ctx->tabla_segmentos, indice_seg);
     pthread_mutex_unlock(&mutex_contextos);
 
-    // 2. Devolvemos el espacio a la lista de huecos libres
     pthread_mutex_lock(&mutex_lista_libres);
     
     t_hueco* nuevo_hueco = malloc(sizeof(t_hueco));
     nuevo_hueco->direccion_base = seg_a_eliminar->direccion_base;
     nuevo_hueco->tamanio = seg_a_eliminar->limite;
-    
     list_add(lista_huecos_libres, nuevo_hueco);
 
-    //  Ordenar por dirección base para que la memoria quede limpia
+    // Definimos la función lambda/auxiliar para ordenar por dirección base
     bool _ordenar_huecos_por_base(void* h1, void* h2) {
         return ((t_hueco*)h1)->direccion_base < ((t_hueco*)h2)->direccion_base;
     }
     list_sort(lista_huecos_libres, _ordenar_huecos_por_base);
 
-    // TODO: Acá podrías meter una lógica para consolidar/unir huecos contiguos si quieren nota extra
+    for (int i = 0; i < list_size(lista_huecos_libres) - 1; i++) {
+        t_hueco* actual = list_get(lista_huecos_libres, i);
+        t_hueco* siguiente = list_get(lista_huecos_libres, i + 1);
 
+        // Si el actual termina justo donde empieza el siguiente, se unen
+        if (actual->direccion_base + actual->tamanio == siguiente->direccion_base) {
+            actual->tamanio += siguiente->tamanio;
+            list_remove(lista_huecos_libres, i + 1);
+            free(siguiente);
+            i--; // Volvemos un índice atrás para verificar si se puede seguir uniendo
+        }
+    }
     pthread_mutex_unlock(&mutex_lista_libres);
 
     log_info(logger, "## PID: %d - Segmento %d Liberado (Base: %u, Tamaño: %u)", 
              pid, id_segmento, seg_a_eliminar->direccion_base, seg_a_eliminar->limite);
 
-    // Liberamos la estructura del segmento que ya no existe
     free(seg_a_eliminar);
 }
-
-
 
 
 t_contexto* buscar_contexto(int pid) {
@@ -773,29 +776,24 @@ t_contexto* buscar_contexto(int pid) {
 }
 
 void enviar_contexto_cpu(int socket_cpu, int pid) {
-
     t_contexto* contexto = buscar_contexto(pid);
 
     if(contexto == NULL) {
-
         log_error(logger, "No existe contexto para PID %d", pid);
-
         enviar_op_code(NOTOK, socket_cpu);
         return;
     }
 
     enviar_op_code(CONTEXTO, socket_cpu);
-
     t_paquete* paquete = crear_paquete(CONTEXTO);
 
+    // Registros base
     agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
     agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
-
     agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
-
     agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
@@ -803,12 +801,25 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     agregar_a_paquete(paquete, &contexto->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->di, sizeof(uint32_t));
 
+    // tabla de segmentos
+    pthread_mutex_lock(&mutex_contextos);
+    int cantidad_segmentos = list_size(contexto->tabla_segmentos);
+    agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
+
+    for (int i = 0; i < cantidad_segmentos; i++) {
+        t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
+        agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
+    }
+    pthread_mutex_unlock(&mutex_contextos);
+
+
     enviar_paquete(paquete, socket_cpu);
     eliminar_paquete(paquete);
 
-    log_info(logger, "Contexto enviado PID %d", pid);
+    log_info(logger, "Contexto enviado PID %d con %d segmentos", pid, cantidad_segmentos);
 }
-
 //lo recibo en el mismo orden en el que la cpu lo envia
 
 void recibir_contexto_cpu(int socket_cpu) {

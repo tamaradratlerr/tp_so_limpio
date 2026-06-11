@@ -172,6 +172,12 @@ typedef struct{
     int identificador; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }t_CPU;
+typedef struct {
+    int id_memory_stick;      // A qué chip le tenemos que hablar
+    uint32_t direccion_fisica; // Dirección física LOCAL dentro de ese chip
+    uint32_t tamanio;         
+    uint32_t offset_buffer;    // Desde qué posición de nuestro buffer de datos arranca este pedazo
+} t_sub_peticion;
 
 
 

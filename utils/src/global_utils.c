@@ -231,7 +231,7 @@ t_list* recibir_paquete(int socket_cliente){
         desplazamiento += tamanio;
 
         // 4. Lo guardamos en la lista
-        list_add(valores, valor);
+        list_add(valores, valor); 
     }
 
     free(buffer);

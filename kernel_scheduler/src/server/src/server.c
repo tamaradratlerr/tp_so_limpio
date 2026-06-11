@@ -144,6 +144,11 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 rta_io_stdout(cliente_fd);
                 break;
             
+            case NUEVO_ESPACIO:
+                nuevo_espacio(cliente_fd);
+                break;
+            
+            
             case -1:
                 log_info(logger, "El cliente se desconectó.");
                 control_loop = 0;
@@ -867,15 +872,68 @@ void mutex_unlock (int socket_cliente){
 //MEM_ALLOC,
 void mem_alloc (int socket_cliente){//Hacer
     
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente); //HandShake
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente); 
+
+    char* tamanio = recibir_mensaje(socket_cliente,logger);
+    enviar_op_code(OK,socket_cliente);
+
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK,socket_cliente);
+    
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
+
+    /*Le envamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_ALLOC);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
+    }
 
 }; 
 //MEM_FREE,
 void mem_free (int socket_cliente){// Hacer
 
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente);
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente);
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK, socket_cliente); 
+
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
+
+    /*Le enviamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_FREE);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);
+    }
 } 
 //INIT PROC
 void init_proc(int socket_cliente){
@@ -1346,9 +1404,62 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (){
+void mem_corrupt (){ /*HACER*/
 
 } // Hacer
+
+//NUEVO_ESPACIO
+void nuevo_espacio(int cliente_fd){/*HACER y Pensar mejor*/
+
+
+    PCB* pcb = NULL;
+
+    if(list_is_empty(listasProcesos->s_rdy)){
+        
+        log_info(logger, "La lista de s_rdy esta vacia");
+        enviar_op_code(NOTOK, info_km.conexion_km); //Para que sepa que la lista esta vacia
+        return;
+    }
+
+    if(strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
+
+        for(int prioridad = 1; prioridad <= planificador->niveles && pcb == NULL; prioridad++)
+    {
+        for(int i = 0; i < list_size(listasProcesos->s_rdy); i++)
+        {
+            PCB* aux = list_get(listasProcesos->s_rdy, i);
+
+            if(aux->data.prioridad == prioridad)
+            {
+                pcb = (PCB*) list_remove(listasProcesos->s_rdy, i);
+                break;
+            }
+        }
+    }
+    }
+    
+    else{
+
+        pcb = (PCB*)list_remove(listasProcesos->s_rdy,0);
+
+    }
+
+    if(pcb == NULL) {   
+        log_info(logger,"Error a encontrar en s_rdy PID:[%d]",pcb->data.PID);
+        return;
+    }
+
+    cambiar_estado_pcb(pcb, RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    enviar_pid(pcb->data.PID, info_km.conexion_km);
+    int err = recibir_op_code(info_km.conexion_km);
+    if(err != OK){log_info(logger,"Error al informar a la KM sobre desuspender PID:[%d]",pcb->data.PID);}
+
+    return;
+}
+
 
 
 /*-----                     AUXILIARES                     -----*/

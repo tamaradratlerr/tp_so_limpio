@@ -7,6 +7,7 @@ t_config* config;
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
 int inicio_todo = false;
+int mem_corrupt_value = 0;
 
 
 //ACA PUSE EL MOCK km

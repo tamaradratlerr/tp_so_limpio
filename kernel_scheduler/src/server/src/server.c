@@ -98,10 +98,14 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 // Se conecta una interfaz de IO al Kernel por primera vez
                 nueva_io(cliente_fd); 
                 break;
-            case DESALOJO:
-                //por parte de la km
-                deslojarTodasCpus();
+            case DESALOJO: /*Consulta de la CPU por si debe desalojar*/
+                desalojo(cliente_fd);
                 break;
+
+            case MEM_CORRUPT:
+                mem_corrupt(cliente_fd);
+                break;
+
             case gl_IO_SLEEP: {
                 io_sleep(cliente_fd); 
                 break;}
@@ -838,7 +842,7 @@ void mutex_lock (int socket_cliente){
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
-        
+        enviar_op_code(OK,socket_cliente);
 
         int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
@@ -867,6 +871,7 @@ void mutex_unlock (int socket_cliente){
         pthread_mutex_unlock (&mutex_simulados);
         free(pid_removed);
         free(mutex_id);
+
     }
 
 //MEM_ALLOC,
@@ -949,7 +954,9 @@ void init_proc(int socket_cliente){
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
     PCB* nuevo_pcb; 
-    if(!mock){nuevo_pcb = crearNuevoProceso(path, info_km.conexion_km);
+    if(!mock){
+        
+        nuevo_pcb = crearNuevoProceso(path, info_km.conexion_km);
         
         if (recibir_op_code(info_km.conexion_km) == OK) {
                 cambiar_estado_pcb(nuevo_pcb, RDY);
@@ -965,6 +972,7 @@ void init_proc(int socket_cliente){
     }
 
     list_destroy(lista);
+    enviar_op_code(OK,socket_cliente);
                 
 }
 //EXIT
@@ -1404,9 +1412,40 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (){ /*HACER*/
+void mem_corrupt (int socket_cliente){ /*HACER*/
 
-} // Hacer
+    mem_corrupt_value = 1;
+    log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
+} 
+
+void desalojo (int socket_cliente){
+    
+    int pid = recibir_pid(socket_cliente);
+    int cpu_id = recibir_pid(socket_cliente);
+    if(mem_corrupt_value == 1){
+        
+        enviar_op_code(DESALOJO, socket_cliente);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%D]",pid,cpu_id);
+
+    }
+    else if (/*Analizar como hacer con herencia de prioridades*, capaz por pid*/){
+
+    }
+    else {
+        enviar_op_code(OK,socket_cliente);
+    }
+
+    int err = recibir_op_code(socket_cliente);
+    if (err == OK){
+
+        PCB* pcb = buscar_pcb_por_pid(pid);
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%D]",pid,cpu_id);
+    }
+}   
 
 //NUEVO_ESPACIO
 void nuevo_espacio(int cliente_fd){/*HACER y Pensar mejor*/

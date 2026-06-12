@@ -27,8 +27,8 @@ char* identificador                     = NULL;
 int control_loop0                       = 0;
 int control_loop                        = 0;
 
-/*----- EXTERN -----*/
 
+/*----- EXTERN -----*/
 extern t_config* config; 
 extern t_log* logger;
 extern t_contexto* contexto_actual;

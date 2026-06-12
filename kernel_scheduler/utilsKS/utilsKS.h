@@ -102,6 +102,7 @@ PCB* crearNuevoProceso_mock(char*, int);
 extern int contador_pid;
 extern t_log* logger;
 extern bool mock;
+extern int mem_corrupt_value;
 
 extern Planificador_Colas_Multinivel* planificador;
 extern char* ip;

@@ -141,7 +141,11 @@ int main(int argc, char *argv[])
 
             execute(); /* Fase Execute */
 
+            /* Fase Interrupt */
             enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
+            enviar_pid (contexto_actual->pid,sockets->conexion_kernel_scheduler);
+            enviar_pid (identificador, sockets->conexion_kernel_scheduler);
+            
             int cod_op = recibir_op_code (sockets->conexion_kernel_scheduler);
             if (cod_op == DESALOJO) {
                 log_info (logger, "## Interrupcion recibida"); /*Logger Obligatorio*/
@@ -770,6 +774,7 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) log_error(logger, "Error en operacion: %d", (int)err);//MARCAR ERROR
 
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -939,6 +944,8 @@ void ejecutar_init_proc(t_instruccion* instr) {
     enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
     eliminar_paquete(paquete);
 
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
+
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "Proceso creado exitosamente por el Kernel.");
     }
@@ -1057,23 +1064,9 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     if(!mock){enviar_contexto_a_kernel_memory();}
     else {enviar_contexto_a_kernel_memory_mock();} 
     
-    // t_paquete* paquete = crear_paquete(tipo_operacion); /*Esta Info ya se pasa en las otras funciones*/
-    // if(valor == NULL){
-    //     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    // }
-    // else{
-    //     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    //     agregar_a_paquete(paquete, valor, strlen(valor) + 1);
-    // }
-    // enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    // eliminar_paquete(paquete);
+    enviar_op_code(OK,sockets->conexion_kernel_scheduler);
 
-    // op_code status = recibir_op_code(sockets->conexion_kernel_scheduler);
-    
-    // if(status == OK) {
-    //     log_info(logger, "Desalojo confirmado. Limpiando CPU.");
-    //     limpiar_contexto_actual();
-    // }
+    control_loop = 0;
     
     return; // Simplemente salimos de la función void sin retornar un valor
 }

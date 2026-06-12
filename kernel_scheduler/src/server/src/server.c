@@ -1,4 +1,4 @@
-#include "../../client/src/client.h"
+
 #include "server.h"
 #include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
@@ -8,13 +8,17 @@
 
 
 
-int main(void) {
+int main(int argc, char *argv[])
+{
 
-    while (!inicio_todo)
-    {
-        /* nada ehago una esoera activa por que no se q hacer */
+    if(argc != 3){
+        printf("Uso: ./bin/kernel_scheduler [archivo.config] [archivoProcesos]\n");
+        return 1;
     }
-    
+
+
+    int err = cliente_Kernel_Scheduler (argc, argv);
+    if(err != 0){log_debug(logger, "ERROR al inciar cliente");}
     
     pthread_mutex_init(&mutex_cpus, NULL);
 
@@ -372,7 +376,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     log_info (logger, "## PID:[%d] pasa del estado [%d] al estado [%d]",pcb->data.PID,pcb->estado_anterior,pcb->estado_pcb);
 }
 
-PCB* buscar_pcb_por_pid(uint32_t pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
+PCB* buscar_pcb_por_pid(int pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
     
     t_list* listas_a_revisar[] = { 
         listasProcesos-> new, listasProcesos->rdy, 
@@ -726,7 +730,6 @@ void cpu_libre (int cliente_fd){
 void fin_proceso (int cliente_fd){ /*HACER*/
 
     
-
 
 }
 
@@ -1421,14 +1424,14 @@ void mem_corrupt (int socket_cliente){ /*HACER*/
 void desalojo (int socket_cliente){
     
     int pid = recibir_pid(socket_cliente);
-    int cpu_id = recibir_pid(socket_cliente);
+    char* cpu_id = recibir_mensaje(socket_cliente, logger);
     if(mem_corrupt_value == 1){
         
         enviar_op_code(DESALOJO, socket_cliente);
-        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%D]",pid,cpu_id);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
 
     }
-    else if (/*Analizar como hacer con herencia de prioridades*, capaz por pid*/){
+    else if ( 1 == 0/*Analizar como hacer con herencia de prioridades*, capaz por pid*/){
 
     }
     else {
@@ -1443,7 +1446,7 @@ void desalojo (int socket_cliente){
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
 
-        log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%D]",pid,cpu_id);
+        log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
     }
 }   
 
@@ -1462,7 +1465,7 @@ void nuevo_espacio(int cliente_fd){/*HACER y Pensar mejor*/
 
     if(strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
 
-        for(int prioridad = 1; prioridad <= planificador->niveles && pcb == NULL; prioridad++)
+        for(int prioridad = 1; prioridad <= planificador->cantidad_niveles && pcb == NULL; prioridad++)
     {
         for(int i = 0; i < list_size(listasProcesos->s_rdy); i++)
         {

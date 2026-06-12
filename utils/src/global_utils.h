@@ -216,6 +216,8 @@ t_config* iniciar_config(char* path_config);
 
 int crear_conexion(char *ip, char* puerto, t_log*, module_name module);
 
+int crear_conexion_reintentando(char *ip, char* puerto, t_log* logger, module_name module);
+
 const char* getModuleName(module_name module);
 
 void enviar_mensaje(char* mensaje, int socket_cliente);

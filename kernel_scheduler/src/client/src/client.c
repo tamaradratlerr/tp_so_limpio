@@ -1,7 +1,7 @@
 #include "client.h"
 
 
-int main(int argc, char *argv[])
+int cliente_Kernel_Scheduler (int argc, char *argv[])
 {
 
     if(argc != 3){
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
 	if(mock){crearNuevoProceso_mock(archivo_config, info_km.conexion_km);}
 	else{crearNuevoProceso(archivo_config, info_km.conexion_km);}
 	
-	inicio_todo = true;
+	return 0;
 	
 
 }

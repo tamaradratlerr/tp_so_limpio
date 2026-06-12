@@ -1,6 +1,7 @@
 #ifndef SERVER_H_
 #define SERVER_H_
 
+#include "client.h"
 #include "utils.h"
 
 pthread_t hilo_quantum;
@@ -22,7 +23,7 @@ int ready_FIFO(PCB* pcb_nuevo);
 
 /*----- GESTION DE PCBs -----*/
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
-PCB* buscar_pcb_por_pid(uint32_t pid_recibido);
+PCB* buscar_pcb_por_pid(int pid_recibido);
 PCB* encontrar_pcb_rnn_por_pid(int pid);
 
 /*----- GESTION DE CPUs -----*/
@@ -43,6 +44,7 @@ void mem_alloc(int socket_cliente);
 void mem_free(int socket_cliente);
 void init_proc(int socket_cliente);
 void exit_proceso(int socket_cpu);
+void desalojo (int socket_cliente);
 
 /*----- GESTION DE IO -----*/
 void io_sleep(int socket_cpu);
@@ -53,9 +55,10 @@ void rta_io_stdin (int socket_io);
 void io_stdout(int cpu_socket);
 void rta_io_stdout(int socket_io);
 void io_libre(int fd);
+void nuevo_espacio(int cliente_fd);
 
 /*----- CON EL KERNEL MEMORY -----*/
-void mem_corrupt(void);
+void mem_corrupt(int fd);
 
 /*----- AUXILIARES -----*/
 void enviar_desalojo_CMN(int socket_cliente);

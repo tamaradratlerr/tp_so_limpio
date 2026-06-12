@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
             /* Fase Interrupt */
             enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
             enviar_pid (contexto_actual->pid,sockets->conexion_kernel_scheduler);
-            enviar_pid (identificador, sockets->conexion_kernel_scheduler);
+            enviar_mensaje (identificador, sockets->conexion_kernel_scheduler);
             
             int cod_op = recibir_op_code (sockets->conexion_kernel_scheduler);
             if (cod_op == DESALOJO) {

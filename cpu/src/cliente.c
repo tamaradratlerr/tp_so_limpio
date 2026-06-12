@@ -1012,27 +1012,27 @@ void enviar_contexto_a_kernel_memory() {
 
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
 
-    enviar_op_code(LEER_MEMORIA, sockets->conexion_kernel_memory); 
+    enviar_op_code(LEER_MEMORIA, sockets->conexion_memory_stick); 
    
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
     t_paquete* paquete = crear_paquete(LEER_MEMORIA);
     agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
     agregar_a_paquete(paquete, &tamanio, sizeof(int));
     
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_memory_stick);
     eliminar_paquete(paquete);
 
     // recibir la respuesta (el buffer con los datos)
     // asumiendo que el protocolo del KM devuelve un buffer de bytes
     void* buffer = malloc(tamanio);
-    buffer = recibir_paquete(sockets->conexion_kernel_memory);
+    buffer = recibir_paquete(sockets->conexion_memory_stick);
     
     return buffer;
 }
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     
-    enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_kernel_memory);
+    enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_memory_stick);
 
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
     t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
@@ -1040,11 +1040,11 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     agregar_a_paquete(paquete, &tamanio, sizeof(int));
     agregar_a_paquete(paquete, buffer, tamanio);
     
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
+    enviar_paquete(paquete, sockets->conexion_memory_stick);
     eliminar_paquete(paquete);
     
     // esperar confirmación de la memoria
-    int resultado = recibir_op_code(sockets->conexion_kernel_memory);
+    int resultado = recibir_op_code(sockets->conexion_memory_stick);
     if (resultado != OK) {
         log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
         

@@ -52,6 +52,7 @@ typedef struct{
 
     char* mutex_id;
     int valor;
+    PCB* dueño_actual;
     t_list* cola_mutex;
 
 }mutex_cpu;
@@ -86,16 +87,16 @@ typedef struct { // estructura para las cosasa que le mandamos al hilo
 /*-----     FUNCIONES      -----*/
 
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km);        
-PCB* iniciar_pcb (int PID);
+PCB* iniciar_pcb (int PID, int prioridad);
 void terminar_pcb (PCB* pcb);
-PCB* crearNuevoProceso(char* path, int fd_km);
+PCB* crearNuevoProceso(char* path, int prioridad, int fd_km);
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km);
 t_IO* buscar_io_por_nombre(char* nombre_buscado);
 t_IO* buscar_io_por_fd(int fd_buscado);
 void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
-PCB* crearNuevoProceso_mock(char*, int);
+PCB* crearNuevoProceso_mock(char*, int prioridad, int);
 
 /*----- Vars Extern -----*/
 

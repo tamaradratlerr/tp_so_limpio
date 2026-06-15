@@ -123,10 +123,6 @@ typedef struct {
     t_buffer* buffer;
 } t_paquete;
 
-//Tipo de dato que ingresa desde el kernel memory
-typedef struct {
-    int PID, prioridad;
-} t_infoProceso;
 
 typedef struct {
     int pid;
@@ -162,8 +158,16 @@ typedef enum
     //Faltan agregar los estados del CheckPoint 3
 }estado;
 
+
+//Tipo de dato que ingresa desde el kernel memory
+typedef struct {
+    int PID, prioridad, prioridad_original;
+ 
+} t_infoProceso;
+
 typedef struct 
 {
+    t_list* mutex_tomados;
     t_infoProceso data;
     estado estado_pcb;
     estado estado_anterior;

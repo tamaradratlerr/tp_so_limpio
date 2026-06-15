@@ -70,6 +70,12 @@ void enviar_proceso_finalizar_KM(int pid);
 void enviar_proceso_KM(uint32_t pid, op_code opCode);
 bool es_el_mutex_buscado(void* elemento, void* contexto);
 
+/* ---------HERENCIA -------------*/
+void actualizar_herencia(mutex_cpu* mutex);
+void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad);
+void recalcular_prioridad(PCB* pcb);
+
+
 /*----- MOCKS -----*/
 
 void enviar_proceso_finalizar_KM_mock (int pid);

@@ -55,19 +55,22 @@ pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
 
 /*------     PCB     -----*/
 
-PCB* iniciar_pcb (int PID){
+PCB* iniciar_pcb (int PID, int prioridad){
 
 	PCB* nuevo_pcb = malloc(sizeof(PCB));
 	nuevo_pcb->data.PID = PID;
 	nuevo_pcb->estado_pcb = NEW;
 	nuevo_pcb->estado_anterior = NO_ESTADO;
+    nuevo_pcb->data.prioridad_original = prioridad;
+    nuevo_pcb->data.prioridad = prioridad;
+    nuevo_pcb -> mutex_tomados = list_create();
 
 	return nuevo_pcb;
 }
 
-PCB* crearNuevoProceso(char* path, int fd_km) {
+PCB* crearNuevoProceso(char* path, int prioridad, int fd_km) {
     
-    PCB* nuevoPcb = iniciar_pcb(contador_pid);
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
     log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW", contador_pid);
 
     enviarProcesoKM(nuevoPcb, path, fd_km);
@@ -75,6 +78,7 @@ PCB* crearNuevoProceso(char* path, int fd_km) {
 
 	return nuevoPcb;
 }
+
 void* list_find_with_context(
         t_list* lista,
         bool (*condicion)(void*, void*),
@@ -150,9 +154,9 @@ void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 }
 
 /* ------------ MOCK ------------*/
-PCB* crearNuevoProceso_mock(char*, int){
+PCB* crearNuevoProceso_mock(char*, int prioridad, int){
     
-    PCB* nuevoPcb = iniciar_pcb(contador_pid);
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
     log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
 
     /*Se evita Enviar el Contexto a la KM*/

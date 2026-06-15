@@ -610,7 +610,6 @@ int ready_CMN(PCB* pcb_nuevo)
     pthread_mutex_unlock(&mutex_ready);
 
 
-//fijarse en que parte va TAMI FIJATE 
 
     if(planificador->preemption)
     {
@@ -685,11 +684,15 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
     return (io->fd == socket_buscado) && (io->enUso == false);
 }
 
-void enviar_desalojo_CMN(int socket_cliente){/* HACER  PARA CMN TAMI */ 
-    
-    log_info(logger,
-         "Enviado Desalojo a socket %d por fin de Quantum",
-         socket_cliente);
+void enviar_desalojo_CMN(int socket_cliente)
+{
+    enviar_op_code(DESALOJO, socket_cliente);
+
+    log_info(
+        logger,
+        "Enviado DESALOJO a CPU socket %d",
+        socket_cliente
+    );
 }
 
 
@@ -761,7 +764,8 @@ void mutex_create (int socket_cliente){
 
     mutex->mutex_id = mutex_id;
     mutex->valor = 1;
-    mutex->cola_mutex = NULL;
+    mutex->cola_mutex = list_create();
+    mutex->dueño_actual = NULL;
     
     list_add(lista_mutex, mutex);
 
@@ -778,7 +782,7 @@ void mutex_lock (int socket_cliente){
         int* pid_guardado = malloc(sizeof(int));
         int pid = recibir_pid (socket_cliente);
 
-    *pid_guardado = pid;
+        *pid_guardado = pid;
 
 
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
@@ -797,12 +801,20 @@ void mutex_lock (int socket_cliente){
 
         pthread_mutex_lock(&mutex_simulados);
         list_add(mutex->cola_mutex, pid_guardado);
+        if(mutex->dueño_actual != NULL)
+        {
+            actualizar_herencia(mutex);
+        }
         pthread_mutex_unlock(&mutex_simulados);
 
         
         while (1)
     {
+        pthread_mutex_lock(&mutex_simulados);
+
         int* primer_pid = list_get(mutex->cola_mutex, 0);
+
+        pthread_mutex_unlock(&mutex_simulados);
 
         if(primer_pid != NULL && *primer_pid == pid)
         {
@@ -814,9 +826,15 @@ void mutex_lock (int socket_cliente){
                             "## PID:[%d] Toma el mutex:[%s]",
                             pid,
                             mutex_id);
+                PCB* pcb = buscar_pcb_por_pid(pid);
 
-                    mutex->valor = 0;
-                    break;
+                mutex->dueño_actual = pcb;
+
+                list_add(pcb->mutex_tomados, mutex);
+
+                mutex->valor = 0;
+
+                break;
                 }
 
                 log_info(logger,
@@ -853,13 +871,47 @@ void mutex_unlock (int socket_cliente){
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
-        pthread_mutex_lock (&mutex_simulados);
+        if(mutex == NULL)
+        {
+            log_error(logger, "Mutex no encontrado");
+            free(mutex_id);
+            return;
+        }
+
+        pthread_mutex_lock(&mutex_simulados);
+
+        int* primer_pid = list_get(mutex->cola_mutex, 0);
+
+        if(primer_pid == NULL || *primer_pid != pid)
+        {
+            pthread_mutex_unlock(&mutex_simulados);
+
+            log_info(logger,
+                "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",
+                mutex_id,
+                pid);
+
+            enviar_op_code(NOTOK, socket_cliente);
+
+            free(mutex_id);
+            return;
+        }
+
         int* pid_removed = list_remove(mutex->cola_mutex, 0);
         
         if(pid_removed != NULL && *pid_removed == pid){
 
             mutex->valor = 1;
-            
+            PCB* pcb = buscar_pcb_por_pid(pid);
+
+            list_remove_element(
+                pcb->mutex_tomados,
+                mutex
+            );
+
+            recalcular_prioridad(pcb);
+
+            mutex->dueño_actual = NULL;
             log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
             
             enviar_op_code(OK, socket_cliente);
@@ -913,6 +965,110 @@ void mem_alloc (int socket_cliente){//Hacer
     }
 
 }; 
+
+
+// -------------- HERENCIA -----------------
+
+void actualizar_herencia(mutex_cpu* mutex)
+{
+    
+    if(mutex->dueño_actual == NULL)
+        return;
+
+    int mejor_prioridad =
+        mutex->dueño_actual->data.prioridad_original;
+
+    for(int i = 0; i < list_size(mutex->cola_mutex); i++)
+    {
+        int* pid_bloqueado =
+            list_get(mutex->cola_mutex, i);
+
+        PCB* pcb_bloqueado =
+            buscar_pcb_por_pid(*pid_bloqueado);
+
+        if(pcb_bloqueado == NULL)
+            continue;
+
+        if(pcb_bloqueado->data.prioridad < mejor_prioridad)
+        {
+            mejor_prioridad =
+                pcb_bloqueado->data.prioridad;
+        }
+    }
+
+    PCB* duenio = mutex->dueño_actual;
+
+    int prioridad_anterior =
+        duenio->data.prioridad;
+
+    actualizar_prioridad_pcb( duenio, mejor_prioridad);
+
+    if(prioridad_anterior != mejor_prioridad)
+    {
+        verificar_desalojo_por_prioridad(duenio);
+    }
+}
+
+void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
+{
+    int prioridad_vieja = pcb->data.prioridad;
+
+    if(prioridad_vieja == nueva_prioridad)
+        return;
+
+    pcb->data.prioridad = nueva_prioridad;
+
+    if(pcb->estado_pcb == RDY)
+    {
+        pthread_mutex_lock(&mutex_ready);
+
+        list_remove_element(
+            planificador->niveles[prioridad_vieja].cola,
+            pcb
+        );
+
+        list_add(
+            planificador->niveles[nueva_prioridad].cola,
+            pcb
+        );
+
+        pthread_mutex_unlock(&mutex_ready);
+    }
+}
+
+void recalcular_prioridad(PCB* pcb)
+{
+    int nueva_prioridad =
+        pcb->data.prioridad_original;
+
+    for(int i = 0; i < list_size(pcb->mutex_tomados); i++)
+    {
+        mutex_cpu* mutex =
+            list_get(pcb->mutex_tomados, i);
+
+        for(int j = 0; j < list_size(mutex->cola_mutex); j++)
+        {
+            int* pid_esperando =
+                list_get(mutex->cola_mutex, j);
+
+            PCB* esperando =
+                buscar_pcb_por_pid(*pid_esperando);
+
+            if(esperando == NULL)
+                continue;
+
+            if(esperando->data.prioridad <
+               nueva_prioridad)
+            {
+                nueva_prioridad =
+                    esperando->data.prioridad;
+            }
+        }
+    }
+
+    actualizar_prioridad_pcb( pcb, nueva_prioridad );
+}
+
 //MEM_FREE,
 void mem_free (int socket_cliente){// Hacer
 
@@ -959,7 +1115,7 @@ void init_proc(int socket_cliente){
     PCB* nuevo_pcb; 
     if(!mock){
         
-        nuevo_pcb = crearNuevoProceso(path, info_km.conexion_km);
+        nuevo_pcb = crearNuevoProceso(path, prioridad, info_km.conexion_km);
         
         if (recibir_op_code(info_km.conexion_km) == OK) {
                 cambiar_estado_pcb(nuevo_pcb, RDY);
@@ -969,7 +1125,7 @@ void init_proc(int socket_cliente){
     }
     else{
         
-        nuevo_pcb = crearNuevoProceso_mock(path, info_km.conexion_km);
+        nuevo_pcb = crearNuevoProceso_mock(path, prioridad, info_km.conexion_km);
         cambiar_estado_pcb(nuevo_pcb, RDY);
         agregar_proceso_lista (nuevo_pcb);    
     }

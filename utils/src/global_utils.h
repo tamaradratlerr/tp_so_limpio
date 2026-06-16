@@ -135,8 +135,14 @@ typedef struct {
     uint32_t eax, ebx, ecx, edx;
     uint32_t si, di;
     //tabla de segmentos
-     t_list* tabla_segmentos; //AGREGAR EN LA CPU ESTE
+     t_list* tabla_segmentos; 
 } t_contexto;
+
+typedef struct {
+    int id_segmento;
+    int tamanio;
+    int base;
+} t_segmento;
 
 
 typedef struct {

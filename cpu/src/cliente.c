@@ -808,6 +808,10 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
+    int base = recibir_pid(sockets->conexion_kernel_scheduler); /*Uso esta aunque no sea para esto*/
+
+    crear_segmento((int*)id_segmento,(int*)tamanio, base);
+
     log_info (logger, "ok"); //Completar LOG
             
 }
@@ -830,6 +834,8 @@ void ejecutar_mem_free (t_instruccion* instr){
     enviar_pid (contexto_actual->pid, sockets->conexion_kernel_scheduler); 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
+
+    eliminar_segmento((int*)id_segmento);
 
 }
 
@@ -1009,6 +1015,8 @@ void enviar_contexto_a_kernel_memory() {
     agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
 
+    agregar_a_paquete(paquete, &contexto_actual->tabla_segmentos, (sizeof(&contexto_actual->tabla_segmentos)));
+
     enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
 
@@ -1071,6 +1079,79 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     return; // Simplemente salimos de la función void sin retornar un valor
 }
 
+/* ------------------ MMU ------------------*/
+
+void crear_segmento(int id, int tamanio, int base){
+
+    t_segmento* nuevo_segmento = malloc(sizeof(t_segmento));
+
+    nuevo_segmento->id_segmento = id;
+    nuevo_segmento->tamanio = tamanio;
+    nuevo_segmento->base = base;
+
+    list_add(contexto_actual->tabla_segmentos, nuevo_segmento);
+
+}
+
+static int id_buscado = NULL;
+
+bool tiene_mismo_id(void* elemento) {
+    t_segmento* segmento = (t_segmento*) elemento;
+
+    return (id_buscado == segmento->id_segmento);
+}
+
+void eliminar_segmento(int id) {
+
+    id_buscado = id;
+
+    t_segmento* segmento_a_eliminar = list_remove_by_condition(
+        contexto_actual->tabla_segmentos,
+        tiene_mismo_id
+    );
+
+    if (segmento_a_eliminar == NULL) {
+        return;
+    }
+
+    free(segmento_a_eliminar->id_segmento);
+    free(segmento_a_eliminar);
+}
+
+
+
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
+   
+ int id_segmento = 0;
+   
+    if (dir_logica < 10){
+        id_segmento = (dir_logica / 1);
+   }
+   else if (dir_logica < 100){
+        id_segmento = (dir_logica / 10);
+   }
+   else if (dir_logica < 1000){
+        id_segmento = (dir_logica / 100);
+   }
+   else {
+        id_segmento = (dir_logica / 1000);
+   }
+    
+   id_buscado = id_segmento;
+   t_segmento* segmento = list_find(contexto_actual->tabla_segmentos,tiene_mismo_id);
+
+    int desplazamiento = dir_logica % segmento->tamanio;
+    
+    if ((desplazamiento + tamanio_solicitado) >segmento->tamanio) {
+        log_error(logger, "SEG_FAULT: Acceso fuera de limites en PID %d", proceso_en_ejecucion->pid);
+        gestionar_desalojo_por_syscall(NULL, DESALOJO); // Avisas al Kernel
+        return ERROR_SEGMENTATION_FAULT;
+    }
+
+    uint32_t dir_fisica = segmento->base + desplazamiento;
+    
+    return dir_fisica;
+}
 
 
 // --- Funciones que faltan por implementar ---
@@ -1087,25 +1168,6 @@ int apagar() {/*Hacer*/
     return 1; // O el valor que desees para salir del loop
 }
 
-uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
-    
-    int tam_max_segmento = obtener_tam_max_segmento(); 
-    int num_segmento = dir_logica / tam_max_segmento;
-
-    int tam_segmento_actual = obtener_tam_segmento_del_pid(proceso_en_ejecucion->pid, num_segmento);
-
-    int desplazamiento = dir_logica % tam_max_segmento;
-
-    if ((desplazamiento + tamanio_solicitado) > tam_segmento_actual) {
-        log_error(logger, "SEG_FAULT: Acceso fuera de limites en PID %d", proceso_en_ejecucion->pid);
-        gestionar_desalojo_por_syscall(NULL, DESALOJO); // Avisas al Kernel
-        return ERROR_SEGMENTATION_FAULT;
-    }
-
-    uint32_t dir_fisica = consultar_base_segmento_al_kernel(num_segmento) + desplazamiento;
-    
-    return dir_fisica;
-}
 
 uint32_t obtener_tamanio_del_registro(char* reg) {
     return es_registro_32bits(reg) ? 4 : 1;
@@ -1114,19 +1176,6 @@ uint32_t obtener_tamanio_del_registro(char* reg) {
 uint32_t obtener_direccion_del_registro(char* reg) {
     uint32_t* ptr = (uint32_t*)obtener_registro(reg);
     return (ptr != NULL) ? *ptr : 0;
-}
-
-int obtener_tam_max_segmento (){ /*Hacer*/
-    return 0;
-}
-
-int obtener_tam_segmento_del_pid(int pid, int num_segmento){ /*Hacer*/
-    return 0;
-}
-
-int consultar_base_segmento_al_kernel(int num_segmento){/*Hacer*/
-
-    return 0;
 }
 
 

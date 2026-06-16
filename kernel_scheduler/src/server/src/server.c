@@ -960,9 +960,14 @@ void mem_alloc (int socket_cliente){//Hacer
     enviar_paquete(paquete, info_km.conexion_km);
     eliminar_paquete(paquete);
 
+    
+
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
     }
+
+    int base = recibir_pid(info_km.conexion_km);
+    enviar_pid(base, socket_cliente);
 
 }; 
 

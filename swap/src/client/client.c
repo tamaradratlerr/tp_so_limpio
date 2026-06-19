@@ -10,7 +10,7 @@ int main(void)
 	logger = iniciar_logger();
 
 	// 2. CONFIG
-	config = iniciar_config(); // Lee "cliente.config" como ya tenías
+	config = iniciar_config(); // Lee "client.config" 
 
 	// 3. LEER VALORES ESPECÍFICOS DE SWAP
 	// Mantenemos tipos de datos simples (int y char*)
@@ -19,6 +19,19 @@ int main(void)
 	int tamano_bloque = config_get_int_value(config, "BLOCK_SIZE");
 	char* ip_km = config_get_string_value(config, "IP_KM");
 	char* puerto_km = config_get_string_value(config, "PUERTO_KM");
+
+//evitar divisiones invalidas al momento de calcular la cantidad de bloques y que asi queden de tamaño fijo
+if(tamano_swap <= 0 || tamano_bloque <= 0) {
+	log_error(logger, "El tamaño de SWAP y el tamaño de bloque tienen que ser mayores a 0");
+	terminar_programa(-1, logger, config);
+	return 1;
+}
+
+if(tamano_swap % tamano_bloque != 0) {
+	log_error(logger, "El tamaño de SWAP tiene que ser múltiplo del tamaño de bloque");
+	terminar_programa(-1, logger, config);
+	return 1;
+}
 
 	// 4. INICIALIZAR ARCHIVO SWAP (Consigna)
 	// Esta función debe crear el archivo con ftruncate
@@ -35,7 +48,7 @@ int main(void)
 
 	log_info(logger, "## Conectado a Kernel Memory");
 
-	/* ---------------- PARTE CLAVE PARA SWAP ---------------- */
+	
 	
 	// CUMPLIR CONSIGNAS: Informar tamaño de bloque y tamaño total
 	t_paquete* p = crear_paquete();
@@ -65,9 +78,9 @@ t_log* iniciar_logger(void)
 
 t_config* iniciar_config(void)
 {
-	t_config* nuevo_config = config_create("cliente.config");
+	t_config* nuevo_config = config_create("client.config");
 	if (nuevo_config == NULL) {
-		perror("No se pudo crear el config");
+		perror("No se pudo leer el config");
 		exit(1);
 	}
 	return nuevo_config;

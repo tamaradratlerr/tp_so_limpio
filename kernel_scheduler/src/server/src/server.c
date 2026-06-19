@@ -1,4 +1,4 @@
-#include "../../client/src/client.h"
+
 #include "server.h"
 #include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
@@ -8,14 +8,17 @@
 
 
 
+int main(int argc, char *argv[])
+{
 
-int main(void) {
-
-    while (!inicio_todo)
-    {
-        /* nada ehago una esoera activa por que no se q hacer */
+    if(argc != 3){
+        printf("Uso: ./bin/kernel_scheduler [archivo.config] [archivoProcesos]\n");
+        return 1;
     }
-    
+
+
+    int err = cliente_Kernel_Scheduler (argc, argv);
+    if(err != 0){log_debug(logger, "ERROR al inciar cliente");}
     
     pthread_mutex_init(&mutex_cpus, NULL);
 
@@ -25,7 +28,7 @@ int main(void) {
 
     //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
 
-    int server_fd = iniciar_servidor(info_km.puerto_km, logger); 
+    int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
 
     log_info(logger, "Servidor listo para recibir clientes");
 
@@ -99,10 +102,14 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 // Se conecta una interfaz de IO al Kernel por primera vez
                 nueva_io(cliente_fd); 
                 break;
-            case DESALOJO:
-                //por parte de la km
-                deslojarTodasCpus();
+            case DESALOJO: /*Consulta de la CPU por si debe desalojar*/
+                desalojo(cliente_fd);
                 break;
+
+            case MEM_CORRUPT:
+                mem_corrupt(cliente_fd);
+                break;
+
             case gl_IO_SLEEP: {
                 io_sleep(cliente_fd); 
                 break;}
@@ -145,6 +152,11 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 rta_io_stdout(cliente_fd);
                 break;
             
+            case NUEVO_ESPACIO:
+                nuevo_espacio(cliente_fd);
+                break;
+            
+            
             case -1:
                 log_info(logger, "El cliente se desconectó.");
                 control_loop = 0;
@@ -169,11 +181,13 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
 t_listas_procesos* Iniciar_listas_procesos (void){ /*Funcion que inicializa todas las listas de los Procesos*/
 
-	listasProcesos->new = list_create();
-	listasProcesos->rnn = list_create();
-	listasProcesos->bck = list_create();
-	listasProcesos->ext = list_create();
-	listasProcesos->rdy = list_create();
+	listasProcesos->new   = list_create();
+	listasProcesos->rnn   = list_create();
+	listasProcesos->bck   = list_create();
+	listasProcesos->ext   = list_create();
+	listasProcesos->rdy   = list_create();
+    listasProcesos->s_bck = list_create();
+    listasProcesos->s_rdy = list_create();
 
 	return listasProcesos;
 };
@@ -185,6 +199,8 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
 	list_destroy(listasProcesos->bck);
 	list_destroy(listasProcesos->ext);
 	list_destroy(listasProcesos->rdy);
+    list_destroy(listasProcesos->s_bck);
+    list_destroy(listasProcesos->s_rdy);
 
 
 }
@@ -239,6 +255,24 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_block);
 		posicion = list_add(listasProcesos->bck, pcb);
         pthread_mutex_unlock(&sem_procesos_block);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
+        break;
+    
+    case S_BCK: //BLOCK
+
+        pthread_mutex_lock(&sem_procesos_s_block);
+		posicion = list_add(listasProcesos->s_bck, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_block);
+        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
+
+        break;
+
+    case S_RDY: //BLOCK
+
+        pthread_mutex_lock(&sem_procesos_s_ready);
+		posicion = list_add(listasProcesos->s_rdy, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_ready);
         return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
 
         break;
@@ -297,6 +331,18 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
             pthread_mutex_unlock(&sem_procesos_exit);
             break;
         
+        case S_BCK:
+            pthread_mutex_lock(&sem_procesos_s_block);
+            removed = list_remove_element(listasProcesos->s_bck, pcb);
+            pthread_mutex_unlock(&sem_procesos_s_block);
+            break;
+        
+        case S_RDY:
+            pthread_mutex_lock(&sem_procesos_s_ready);
+            removed = list_remove_element(listasProcesos->s_rdy, pcb);
+            pthread_mutex_unlock(&sem_procesos_s_ready);
+            break;
+
         case RDY:
             pthread_mutex_lock(&sem_procesos_ready);
             removed = list_remove_element(listasProcesos->rdy, pcb);
@@ -316,40 +362,6 @@ op_code eliminar_proceso_Lista(PCB* pcb) {
     return OK; 
 }
 
-int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
-
-    int posicion;
-    
-    if (strcmp(planificacion_algoritmo, "FIFO") == 0 || strcmp(planificacion_algoritmo, "RR") == 0) {
-        posicion = ready_FIFO(pcb);
-    } 
-    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
-        // ready_CMN(pcb)
-    }
-    else {
-        log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
-    return -1;
-    }
-    return posicion;
-}
-
-int ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
-    
-    int posicion;
-
-    pthread_mutex_lock(&mutex_ready);
-    
-    posicion = list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
-    
-    pthread_mutex_unlock(&mutex_ready);
-    
-    return posicion;
-}
-
-
-
-
-
 
 /*-----                     GESTION DE PCBs                     -----*/
 
@@ -364,7 +376,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     log_info (logger, "## PID:[%d] pasa del estado [%d] al estado [%d]",pcb->data.PID,pcb->estado_anterior,pcb->estado_pcb);
 }
 
-PCB* buscar_pcb_por_pid(uint32_t pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
+PCB* buscar_pcb_por_pid(int pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
     
     t_list* listas_a_revisar[] = { 
         listasProcesos-> new, listasProcesos->rdy, 
@@ -413,7 +425,7 @@ espera_io* encontrar_pid_io_bck (int pid) {
 
     espera_io* pcb_buscado = NULL;
     
-    for (int i = 0; i < lista_bck_io; i++) {
+    for (int i = 0; i < list_size(lista_bck_io); i++) {
         espera_io* io_pcb = list_get(lista_bck_io, i);
         if (io_pcb->pid == pid) {
             pcb_buscado = io_pcb;
@@ -440,57 +452,217 @@ void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayo
         cpu_libre->enUso = true;}
     else {
         log_error (logger, "No se encontro a la CPU buscada (funcion: mandar_proceso_cpu)");
+        pthread_mutex_unlock(&mutex_cpus);
         return;
     }
-    pthread_mutex_unlock(&mutex_cpus);
+        pthread_mutex_unlock(&mutex_cpus);
 
     /*Mandamos el PCB a la CPU*/
-    if ((cpu_libre != NULL) && (!list_is_empty(listasProcesos->rdy)) && (!list_is_empty(list_suplementarias->io))) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
+    if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
         
-        PCB* pcb_a_ejecutar = list_get(listasProcesos->rdy, 0);
+        PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
-        cambiar_estado_pcb(pcb_a_ejecutar, RNN);
+        if(pcb_a_ejecutar == NULL){
+            log_error(logger, "No se pudo obtener PCB READY");
+            cpu_libre->enUso = false;
+            return;
+        }
 
+        cambiar_estado_pcb(pcb_a_ejecutar, RNN);
+        pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
-        eliminar_proceso_Lista(pcb_a_ejecutar);//ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        
+        
 
         int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
         if (err != 1) {
-            log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error        
+            log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error
+            cpu_libre->enUso = false;        
             return;}
 
         log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->data.PID, cpu_libre->fd);
 
-        if (strcmp(planificacion_algoritmo, "RR") == 0) {
-            // ceamos un hilo que espere el Quatum y mande la interrupción --> CHEQUEAR
-            pthread_create(&hilo_timer, NULL, control_hilo_quantum, (void*)pcb_a_ejecutar);
-            pthread_detach(hilo_timer);
+        if (usa_quantum(pcb_a_ejecutar))
+        {
+            t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
 
-            if(pcb_a_ejecutar->estado_pcb == RNN){
-                enviar_desalojo(socket_cliente); /*HACER*/
-                log_info (logger, "## PID:[%d] - Desalojado por Fin de Quamtum",pcb_a_ejecutar->data.PID);/*Logger Obligatorio*/
-            }}
+            datos->pcb = pcb_a_ejecutar;
+
+            pthread_create(
+                &hilo_timer,
+                NULL,
+                control_hilo_quantum,
+                datos);
+
+            pthread_detach(hilo_timer);
+        }
     }
     else {
-        log_error (logger, "Error en verificacion de CPU IO y Procesos en READY (funcion: mandar_proceso_cpu)");
+
+        cpu_libre->enUso = false;
+
+        log_error( logger, "No hay procesos READY para ejecutar");
+
         return;
     }
 }
 
+void* control_hilo_quantum(void* arg)
+{
+    t_datos_quantum* datos = (t_datos_quantum*) arg;
 
-void* control_hilo_quantum (void* arg) {
-    
-    PCB* pcb = (PCB*)arg;
-    
-    // Dormimos el tiempo del quantum (usleep espera microsegundos)
-    usleep(info_config.intervalo_tarea * 1000); 
-    
-    // Cuando despierta, el tiempo se terminó. 
-    // Aquí notificas al Kernel que debe pedir el desalojo.
-    log_info(logger, "Quantum expirado para PID: %d. Solicitando desalojo...", pcb->data.PID);
-    
+    PCB* pcb = datos->pcb;
+
+    usleep(info_config.intervalo_tarea * 1000);
+
+    if(pcb->estado_pcb == RNN)
+    {
+        enviar_desalojo(pcb->fd_cpu);
+
+        log_info(
+            logger,
+            "## PID:[%d] - Desalojado por Fin de Quantum",
+            pcb->data.PID
+        );
+    }
+
+    free(datos);
+
     return NULL;
 }
+
+PCB* obtener_siguiente_proceso() {
+    
+    PCB* pcb = NULL;
+
+    pthread_mutex_lock(&mutex_ready);
+
+    if(strcmp(planificacion_algoritmo, "FIFO") == 0){
+        pcb = list_remove(listasProcesos->rdy, 0);
+    }
+    else if(strcmp(planificacion_algoritmo, "RR") == 0){
+        pcb = list_remove(listasProcesos->rdy, 0);
+    }
+    else if(strcmp(planificacion_algoritmo, "CMN") == 0){
+        for(int i = 0; i < planificador->cantidad_niveles; i++)
+        {
+            if(!list_is_empty(planificador->niveles[i].cola))
+            {
+                pcb = list_remove(planificador->niveles[i].cola, 0);
+                break;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_ready);
+
+    return pcb;
+}
+
+void enviar_desalojo(int socket_cliente){
+    /*hacer*/
+}
+
+int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
+
+    int posicion;
+    
+    if (strcmp(planificacion_algoritmo, "FIFO") == 0 || strcmp(planificacion_algoritmo, "RR") == 0) {
+        posicion = ready_FIFO(pcb);
+    } 
+    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
+        posicion = ready_CMN(pcb);
+    }
+    else {
+        log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
+    return -1;
+    }
+    return posicion;
+}
+
+int ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
+    
+    int posicion;
+
+    pthread_mutex_lock(&mutex_ready);
+    
+    posicion = list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
+    
+    pthread_mutex_unlock(&mutex_ready);
+    
+    return posicion;
+}
+
+int ready_CMN(PCB* pcb_nuevo)
+{
+    int nivel = pcb_nuevo->data.prioridad;
+
+    if(nivel < 0 || nivel >= planificador->cantidad_niveles)
+    {
+        log_error(logger, "Prioridad invalida: %d", nivel);
+        return -1;
+    }
+
+    ColaPrioridad* cola_apuntada = &planificador->niveles[nivel];
+
+    pthread_mutex_lock(&mutex_ready);
+    list_add(cola_apuntada->cola, pcb_nuevo);
+    pthread_mutex_unlock(&mutex_ready);
+
+
+
+    if(planificador->preemption)
+    {
+        verificar_desalojo_por_prioridad(pcb_nuevo);
+    }
+
+    return nivel;
+}
+
+void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
+{
+    pthread_mutex_lock(&sem_procesos_running);
+
+    for(int i = 0; i < list_size(listasProcesos->rnn); i++)
+    {
+        PCB* pcb_running = list_get(listasProcesos->rnn, i);
+
+        if(pcb_nuevo->data.prioridad < pcb_running->data.prioridad)
+        {
+            enviar_desalojo_CMN(pcb_running->fd_cpu);
+
+            log_info(
+                logger,
+                "PID %d desalojado por ingreso de PID %d con mayor prioridad",
+                pcb_running->data.PID,
+                pcb_nuevo->data.PID
+            );
+        }
+    }
+
+    pthread_mutex_unlock(&sem_procesos_running);
+}
+
+bool usa_quantum (PCB* pcb)
+{
+    if(strcmp(planificacion_algoritmo, "RR") == 0)
+        return true;
+
+    if(strcmp(planificacion_algoritmo, "FIFO") == 0)
+        return false;
+
+    if(strcmp(planificacion_algoritmo, "CMN") == 0)
+    {
+        int nivel = pcb->data.prioridad;
+
+        if(planificador->niveles[nivel].tipo == RR)
+            return true;
+    }
+
+    return false;
+}
+
+
 
 bool es_la_cpu_buscada (void* elemento, void* contexto) {
     
@@ -512,11 +684,15 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
     return (io->fd == socket_buscado) && (io->enUso == false);
 }
 
-void enviar_desalojo(int socket_cliente){/* HACER  */ 
-    
-    log_info(logger,
-         "Enviado Desalojo a socket %d por fin de Quantum",
-         socket_cliente);
+void enviar_desalojo_CMN(int socket_cliente)
+{
+    enviar_op_code(DESALOJO, socket_cliente);
+
+    log_info(
+        logger,
+        "Enviado DESALOJO a CPU socket %d",
+        socket_cliente
+    );
 }
 
 
@@ -558,7 +734,6 @@ void fin_proceso (int cliente_fd){ /*HACER*/
 
     
 
-
 }
 
 //DESALOJO,
@@ -589,6 +764,8 @@ void mutex_create (int socket_cliente){
 
     mutex->mutex_id = mutex_id;
     mutex->valor = 1;
+    mutex->cola_mutex = list_create();
+    mutex->dueño_actual = NULL;
     
     list_add(lista_mutex, mutex);
 
@@ -601,41 +778,92 @@ void mutex_lock (int socket_cliente){
 
         enviar_op_code(OK, socket_cliente);
 
+
+        int* pid_guardado = malloc(sizeof(int));
         int pid = recibir_pid (socket_cliente);
+
+        *pid_guardado = pid;
+
+
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
 
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
-        free(mutex_id);
+        
 
         if (mutex == NULL) {
         log_error(logger, "Mutex no encontrado");
         return;
         }
 
-        while (1) {
-            pthread_mutex_lock(&mutex_simulados);
-            if (mutex->valor == 1) {
-                mutex->valor = 0; 
-                pthread_mutex_unlock(&mutex_simulados);
-                log_info("## PID:[%d] Toma el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
+
+
+        pthread_mutex_lock(&mutex_simulados);
+        list_add(mutex->cola_mutex, pid_guardado);
+        if(mutex->dueño_actual != NULL)
+        {
+            actualizar_herencia(mutex);
+        }
+        pthread_mutex_unlock(&mutex_simulados);
+
+        
+        while (1)
+    {
+        pthread_mutex_lock(&mutex_simulados);
+
+        int* primer_pid = list_get(mutex->cola_mutex, 0);
+
+        pthread_mutex_unlock(&mutex_simulados);
+
+        if(primer_pid != NULL && *primer_pid == pid)
+        {
+            while(1)
+            {
+                if(mutex->valor == 1)
+                {
+                    log_info(logger,
+                            "## PID:[%d] Toma el mutex:[%s]",
+                            pid,
+                            mutex_id);
+                PCB* pcb = buscar_pcb_por_pid(pid);
+
+                mutex->dueño_actual = pcb;
+
+                list_add(pcb->mutex_tomados, mutex);
+
+                mutex->valor = 0;
+
                 break;
+                }
+
+                log_info(logger,
+                        "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo... (Proximo en la lista)",
+                        pid,
+                        mutex_id);
+
+                usleep(1000);
             }
-            pthread_mutex_unlock(&mutex_simulados);
-            log_info("## PID:[%d] No pudo tomar el mutex:[%d]. Vuelve a intentarlo...",pid,mutex_id);
-            usleep(1000); // Pequeña pausa para no saturar el CPU
+
+            break;
         }
 
-        enviar_op_code(OK, socket_cliente);
+        log_info(logger,
+                "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",
+                pid,
+                mutex_id);
 
-
+        usleep(1000);
     }
+
+        free(mutex_id);
+        enviar_op_code(OK, socket_cliente); 
+}
 
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente){
 
-        enviar_op_code(OK, socket_cliente);
+        enviar_op_code(OK,socket_cliente);
 
         int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
@@ -643,25 +871,238 @@ void mutex_unlock (int socket_cliente){
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
-        pthread_mutex_lock (&mutex_simulados);
-        mutex->valor = 1;
-        pthread_mutex_unlock (&mutex_simulados);
+        if(mutex == NULL)
+        {
+            log_error(logger, "Mutex no encontrado");
+            free(mutex_id);
+            return;
+        }
 
-        log_info("## PID:[%d] Libera el mutex:[%d]",pid,mutex_id);/*Logger Obligatorio*/
+        pthread_mutex_lock(&mutex_simulados);
+
+        int* primer_pid = list_get(mutex->cola_mutex, 0);
+
+        if(primer_pid == NULL || *primer_pid != pid)
+        {
+            pthread_mutex_unlock(&mutex_simulados);
+
+            log_info(logger,
+                "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",
+                mutex_id,
+                pid);
+
+            enviar_op_code(NOTOK, socket_cliente);
+
+            free(mutex_id);
+            return;
+        }
+
+        int* pid_removed = list_remove(mutex->cola_mutex, 0);
+        
+        if(pid_removed != NULL && *pid_removed == pid){
+
+            mutex->valor = 1;
+            PCB* pcb = buscar_pcb_por_pid(pid);
+
+            list_remove_element(
+                pcb->mutex_tomados,
+                mutex
+            );
+
+            recalcular_prioridad(pcb);
+
+            mutex->dueño_actual = NULL;
+            log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
+            
+            enviar_op_code(OK, socket_cliente);
+            
+
+        }
+        else{
+            log_info (logger, "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",mutex_id,pid);
+            enviar_op_code(NOTOK, socket_cliente);
+        }
+        
+        pthread_mutex_unlock (&mutex_simulados);
+        free(pid_removed);
+        free(mutex_id);
+
     }
 
 //MEM_ALLOC,
 void mem_alloc (int socket_cliente){//Hacer
     
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente); //HandShake
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente); 
+
+    char* tamanio = recibir_mensaje(socket_cliente,logger);
+    enviar_op_code(OK,socket_cliente);
+
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK,socket_cliente);
+    
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
 
+    /*Le envamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_ALLOC);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
+    }
+
+    int base = recibir_pid(info_km.conexion_km);
+    enviar_pid(base, socket_cliente);
+
 }; 
+
+
+// -------------- HERENCIA -----------------
+
+void actualizar_herencia(mutex_cpu* mutex)
+{
+    
+    if(mutex->dueño_actual == NULL)
+        return;
+
+    int mejor_prioridad =
+        mutex->dueño_actual->data.prioridad_original;
+
+    for(int i = 0; i < list_size(mutex->cola_mutex); i++)
+    {
+        int* pid_bloqueado =
+            list_get(mutex->cola_mutex, i);
+
+        PCB* pcb_bloqueado =
+            buscar_pcb_por_pid(*pid_bloqueado);
+
+        if(pcb_bloqueado == NULL)
+            continue;
+
+        if(pcb_bloqueado->data.prioridad < mejor_prioridad)
+        {
+            mejor_prioridad =
+                pcb_bloqueado->data.prioridad;
+        }
+    }
+
+    PCB* duenio = mutex->dueño_actual;
+
+    int prioridad_anterior =
+        duenio->data.prioridad;
+
+    actualizar_prioridad_pcb( duenio, mejor_prioridad);
+
+    if(prioridad_anterior != mejor_prioridad)
+    {
+        verificar_desalojo_por_prioridad(duenio);
+    }
+}
+
+void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
+{
+    int prioridad_vieja = pcb->data.prioridad;
+
+    if(prioridad_vieja == nueva_prioridad)
+        return;
+
+    pcb->data.prioridad = nueva_prioridad;
+
+    if(pcb->estado_pcb == RDY)
+    {
+        pthread_mutex_lock(&mutex_ready);
+
+        list_remove_element(
+            planificador->niveles[prioridad_vieja].cola,
+            pcb
+        );
+
+        list_add(
+            planificador->niveles[nueva_prioridad].cola,
+            pcb
+        );
+
+        pthread_mutex_unlock(&mutex_ready);
+    }
+}
+
+void recalcular_prioridad(PCB* pcb)
+{
+    int nueva_prioridad =
+        pcb->data.prioridad_original;
+
+    for(int i = 0; i < list_size(pcb->mutex_tomados); i++)
+    {
+        mutex_cpu* mutex =
+            list_get(pcb->mutex_tomados, i);
+
+        for(int j = 0; j < list_size(mutex->cola_mutex); j++)
+        {
+            int* pid_esperando =
+                list_get(mutex->cola_mutex, j);
+
+            PCB* esperando =
+                buscar_pcb_por_pid(*pid_esperando);
+
+            if(esperando == NULL)
+                continue;
+
+            if(esperando->data.prioridad <
+               nueva_prioridad)
+            {
+                nueva_prioridad =
+                    esperando->data.prioridad;
+            }
+        }
+    }
+
+    actualizar_prioridad_pcb( pcb, nueva_prioridad );
+}
+
 //MEM_FREE,
 void mem_free (int socket_cliente){// Hacer
 
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
+    enviar_op_code(OK,socket_cliente);
+
+    char* id_segmento = recibir_mensaje(socket_cliente, logger);
+    enviar_op_code(OK,socket_cliente);
+
+    int pid = recibir_pid(socket_cliente);
+    enviar_op_code(OK, socket_cliente); 
+
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
+
+    /*Le enviamos la DATA a la Kernel Memory*/
+
+    enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
+
+    t_paquete* paquete = crear_paquete(gl_MEM_FREE);
+
+    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
+    
+
+    enviar_paquete(paquete, info_km.conexion_km);
+    eliminar_paquete(paquete);
+
+    if (recibir_op_code(info_km.conexion_km) == OK) {
+        log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);
+    }
 } 
 //INIT PROC
 void init_proc(int socket_cliente){
@@ -676,15 +1117,26 @@ void init_proc(int socket_cliente){
     
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
-    PCB* nuevo_pcb = crearNuevoProceso(logger, path, info_km.conexion_km);
-
-    if (recibir_op_code(info_km.conexion_km) == OK) {
-                    
-    cambiar_estado_pcb(nuevo_pcb, RDY);
-    agregar_proceso_lista (nuevo_pcb);
-                    
+    PCB* nuevo_pcb; 
+    if(!mock){
+        
+        nuevo_pcb = crearNuevoProceso(path, prioridad, info_km.conexion_km);
+        
+        if (recibir_op_code(info_km.conexion_km) == OK) {
+                cambiar_estado_pcb(nuevo_pcb, RDY);
+                agregar_proceso_lista (nuevo_pcb);           
+        }
+    
     }
+    else{
+        
+        nuevo_pcb = crearNuevoProceso_mock(path, prioridad, info_km.conexion_km);
+        cambiar_estado_pcb(nuevo_pcb, RDY);
+        agregar_proceso_lista (nuevo_pcb);    
+    }
+
     list_destroy(lista);
+    enviar_op_code(OK,socket_cliente);
                 
 }
 //EXIT
@@ -698,7 +1150,8 @@ void exit_proceso(int socket_cpu){
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
-    enviar_proceso_finalizar_KM(pid_a_finalizar);
+    if(!mock){enviar_proceso_finalizar_KM(pid_a_finalizar);}
+    else{enviar_proceso_finalizar_KM_mock(pid_a_finalizar);}
     
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
@@ -707,7 +1160,7 @@ void exit_proceso(int socket_cpu){
         eliminar_proceso_Lista(pcb);
     }
 
-    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]");/*Logger Obligatorio*/
+    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
     enviar_op_code(OK, socket_cpu);
     
 }
@@ -750,6 +1203,25 @@ void io_sleep(int socket_cpu) {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
         enviar_op_code(NOTOK, socket_cpu);
     }
+
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ 
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un SLEEP de un proceso
@@ -761,16 +1233,25 @@ void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un 
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io sleep)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
 
     log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
@@ -835,6 +1316,25 @@ void io_stdin(int socket_cpu) {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
         enviar_op_code(NOTOK, socket_cpu);
     }
+
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ 
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_stdin (int socket_io){
@@ -853,19 +1353,21 @@ void rta_io_stdin (int socket_io){
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdin)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
 
-    enviar_op_code(km_IO_STDIN, info_km.conexion_km);
+    if(!mock){
+        
+        enviar_op_code(km_IO_STDIN, info_km.conexion_km);
 
-    if(recibir_op_code(info_km.conexion_km)!= OK){
+        if(recibir_op_code(info_km.conexion_km)!= OK){
         log_info(logger, "Error al enviar STDIN a KM");
-        return EXIT_FAILURE;
-    }
+        return;
+        }
 
-    t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
+        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
         agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
         agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
         agregar_a_paquete(paquete_mem, &datos_recibidos, sizeof(datos_recibidos));
@@ -875,15 +1377,27 @@ void rta_io_stdin (int socket_io){
 
         eliminar_paquete(paquete_mem);
 
-    
+    }
+
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
+      
+    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
     log_info (logger, "PID: [%d] Finalizo IO STDIN", pcb->data.PID);
-
+    
 }
 
 // STDOUT
@@ -906,32 +1420,54 @@ void io_stdout(int cpu_socket) {
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
     
-    /*Le solicitamos los Datos de la KM*/
-    enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
+    espera_io* io_pcb = NULL;
+    if(!mock){
+        /*Le solicitamos los Datos de la KM*/
+        enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
 
-    t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
-    agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
-    agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
-    agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
-    enviar_paquete(req_mem, info_km.conexion_km); 
-    eliminar_paquete(req_mem);
+        t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
+        agregar_a_paquete(req_mem, &pid, sizeof(uint32_t));
+        agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
+        agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
+        enviar_paquete(req_mem, info_km.conexion_km); 
+        eliminar_paquete(req_mem);
 
-    // recibir de km
-    t_list* lista_mem = recibir_paquete(info_km.conexion_km);
-    char* datos_leidos = *(char*)list_get(lista_mem, 0);
+        // recibir de km
+        t_list* lista_mem = recibir_paquete(info_km.conexion_km);
+        char* datos_leidos = (char*)list_get(lista_mem, 0);
 
-    espera_io* io_pcb = malloc(sizeof(espera_io));
+        espera_io* io_pcb = malloc(sizeof(espera_io));
 
         io_pcb->pid = pcb->data.PID;
         io_pcb->io_op_code = IO_STDOUT;
         io_pcb->iostdout.length = tam;
         io_pcb->iostdout.info = datos_leidos;
 
+    }
+    else{data_io_stdout_mock(io_pcb, pcb, tam);}
+    
         pthread_mutex_lock(&mutex_ios);
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
 
-   
+    /*----- Mediano Plazo -----*/
+    usleep(info_config.tiempo_suspencion);
+
+    if (pcb->estado_pcb == BCK){ /*Mediano Plazo*/
+        
+        cambiar_estado_pcb(pcb,S_BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+
+        if(!mock){
+            enviar_op_code(SUSPENDIDO,info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+    }
 }
 
 void rta_io_stdout(int socket_io){
@@ -943,16 +1479,27 @@ void rta_io_stdout(int socket_io){
 
     if(!list_remove_element(lista_bck_io,io_pcb)){
         log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdout)");
-        return EXIT_FAILURE;
+        return;
     }
 
     free(io_pcb);
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
-    cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    if(pcb->estado_pcb == BCK){
+
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else if (pcb->estado_pcb == S_BCK){
+        
+        cambiar_estado_pcb(pcb,S_RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+    }  
+      
+    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
     log_info (logger, "PID: [%d] Finalizo IO stdout", pcb->data.PID);
 }
@@ -968,7 +1515,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
         io_libre->enUso = true;}
     else {
         log_error (logger, "No se encontro a la IO buscada (funcion: io_libre)");
-        return EXIT_FAILURE;
+        return;
     }
     pthread_mutex_unlock(&mutex_cpus);
 
@@ -977,9 +1524,9 @@ void io_libre(int io_socket){ //Copia de atender CPU
         
         espera_io* pcb_a_ejecutar = list_get(lista_bck_io, 0);
 
-        if(pcb_a_ejecutar->io_op_code = IO_SLEEP){
+        if(pcb_a_ejecutar->io_op_code == IO_SLEEP){
             enviar_op_code(gl_IO_SLEEP, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
                 t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
                 agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
@@ -989,28 +1536,28 @@ void io_libre(int io_socket){ //Copia de atender CPU
                 free(paquete_para_io);
 
         }
-        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDIN){
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
             enviar_op_code(gl_IO_STDIN, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
             
             enviar_paquete(paquete_io, io_socket);
             free(paquete_io);
         }
-        else if (pcb_a_ejecutar->io_op_code = gl_IO_STDOUT){
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
             enviar_op_code(gl_IO_STDOUT, io_socket);
-            if(recibir_op_code(io_socket) != OK) return EXIT_FAILURE;
+            if(recibir_op_code(io_socket) != OK) return;
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
     
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->pid, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
             
             enviar_paquete(paquete_io, io_socket);
             eliminar_paquete(paquete_io);
@@ -1029,7 +1576,93 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (); // Hacer
+void mem_corrupt (int socket_cliente){ /*HACER*/
+
+    mem_corrupt_value = 1;
+    log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
+} 
+
+void desalojo (int socket_cliente){
+    
+    int pid = recibir_pid(socket_cliente);
+    char* cpu_id = recibir_mensaje(socket_cliente, logger);
+    if(mem_corrupt_value == 1){
+        
+        enviar_op_code(DESALOJO, socket_cliente);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
+
+    }
+    else if ( 1 == 0/*Analizar como hacer con herencia de prioridades*, capaz por pid*/){
+
+    }
+    else {
+        enviar_op_code(OK,socket_cliente);
+    }
+
+    int err = recibir_op_code(socket_cliente);
+    if (err == OK){
+
+        PCB* pcb = buscar_pcb_por_pid(pid);
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
+    }
+}   
+
+//NUEVO_ESPACIO
+void nuevo_espacio(int cliente_fd){/*HACER y Pensar mejor*/
+
+
+    PCB* pcb = NULL;
+
+    if(list_is_empty(listasProcesos->s_rdy)){
+        
+        log_info(logger, "La lista de s_rdy esta vacia");
+        enviar_op_code(NOTOK, info_km.conexion_km); //Para que sepa que la lista esta vacia
+        return;
+    }
+
+    if(strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
+
+        for(int prioridad = 1; prioridad <= planificador->cantidad_niveles && pcb == NULL; prioridad++)
+    {
+        for(int i = 0; i < list_size(listasProcesos->s_rdy); i++)
+        {
+            PCB* aux = list_get(listasProcesos->s_rdy, i);
+
+            if(aux->data.prioridad == prioridad)
+            {
+                pcb = (PCB*) list_remove(listasProcesos->s_rdy, i);
+                break;
+            }
+        }
+    }
+    }
+    
+    else{
+
+        pcb = (PCB*)list_remove(listasProcesos->s_rdy,0);
+
+    }
+
+    if(pcb == NULL) {   
+        log_info(logger,"Error a encontrar en s_rdy PID:[%d]",pcb->data.PID);
+        return;
+    }
+
+    cambiar_estado_pcb(pcb, RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    enviar_pid(pcb->data.PID, info_km.conexion_km);
+    int err = recibir_op_code(info_km.conexion_km);
+    if(err != OK){log_info(logger,"Error al informar a la KM sobre desuspender PID:[%d]",pcb->data.PID);}
+
+    return;
+}
+
 
 
 /*-----                     AUXILIARES                     -----*/
@@ -1070,4 +1703,24 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
     // strcmp devuelve 0 si los strings son exactamente iguales
     return strcmp(un_mutex->mutex_id, id_buscado) == 0;
 }
+
+
+/*-----                     MOCKs                     -----*/
+
+
+
+void enviar_proceso_finalizar_KM_mock (int pid) {
+    
+    log_info(logger, " Enviado a KM, PID: %u", pid);
+
+}
+
+void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre devuelve 5555 como DATA*/
+
+    io_pcb->pid = pcb->data.PID;
+    io_pcb->io_op_code = IO_STDOUT;
+    io_pcb->iostdout.length = tam;
+    io_pcb->iostdout.info = "5555";
+
+} 
 

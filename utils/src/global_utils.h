@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
@@ -89,6 +90,8 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     ks_EXIT,
     NUEVO_KERNEL,
     OK_ESCRITURA,
+    NUEVO_ESPACIO, //En caso de nuevo MEM.STICK. o Se libere espacio (KM => KS) 
+    SUSPENDIDO, //Informa que el proximo PID esta en estado SUSPENDIDO
 
     // IO
     NUEVA_IO, //Se informa que hay una nueva IO
@@ -120,10 +123,6 @@ typedef struct {
     t_buffer* buffer;
 } t_paquete;
 
-//Tipo de dato que ingresa desde el kernel memory
-typedef struct {
-    int PID, PPID, UID;
-} t_infoProceso;
 
 typedef struct {
     int pid;
@@ -136,8 +135,14 @@ typedef struct {
     uint32_t eax, ebx, ecx, edx;
     uint32_t si, di;
     //tabla de segmentos
-     t_list* tabla_segmentos; //AGREGAR EN LA CPU ESTE
+     t_list* tabla_segmentos; 
 } t_contexto;
+
+typedef struct {
+    int id_segmento;
+    int tamanio;
+    int base;
+} t_segmento;
 
 
 typedef struct {
@@ -151,14 +156,24 @@ typedef enum
     RNN,
     RDY,
     BCK,
+    S_BCK,
+    S_RDY,
     EXT,
     NO_ESTADO
     
     //Faltan agregar los estados del CheckPoint 3
 }estado;
 
+
+//Tipo de dato que ingresa desde el kernel memory
+typedef struct {
+    int PID, prioridad, prioridad_original;
+ 
+} t_infoProceso;
+
 typedef struct 
 {
+    t_list* mutex_tomados;
     t_infoProceso data;
     estado estado_pcb;
     estado estado_anterior;
@@ -216,6 +231,8 @@ typedef struct {
 t_config* iniciar_config(char* path_config); 
 
 int crear_conexion(char *ip, char* puerto, t_log*, module_name module);
+
+int crear_conexion_reintentando(char *ip, char* puerto, t_log* logger, module_name module);
 
 const char* getModuleName(module_name module);
 

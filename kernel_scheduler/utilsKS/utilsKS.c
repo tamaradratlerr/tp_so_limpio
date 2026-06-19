@@ -7,6 +7,16 @@ t_config* config;
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
 int inicio_todo = false;
+int mem_corrupt_value = 0;
+
+
+//ACA PUSE EL MOCK km
+bool mock = true;
+
+/*FALSE => Se ejecuta Normalmente
+  TRUE => Se ejecuta sin KM (para realizar pruebas)
+*/
+
 
 pthread_t hilo_timer;
 
@@ -19,7 +29,8 @@ t_list* lista_bck_io = NULL;
 t_list* lista_mutex= NULL;
 t_info_km info_km;
 t_info_config info_config;
-
+Planificador_Colas_Multinivel* planificador;
+t_datos_quantum* datos_quantum;
 
 
 /* Semaforos tipo Mutex*/
@@ -28,6 +39,9 @@ pthread_mutex_t sem_procesos_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_running = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_exit = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sem_procesos_s_block = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sem_procesos_s_ready = PTHREAD_MUTEX_INITIALIZER;
+
 
 pthread_mutex_t mutex_cpus = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ios = PTHREAD_MUTEX_INITIALIZER;
@@ -41,19 +55,22 @@ pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
 
 /*------     PCB     -----*/
 
-PCB* iniciar_pcb (int PID){
+PCB* iniciar_pcb (int PID, int prioridad){
 
 	PCB* nuevo_pcb = malloc(sizeof(PCB));
 	nuevo_pcb->data.PID = PID;
 	nuevo_pcb->estado_pcb = NEW;
 	nuevo_pcb->estado_anterior = NO_ESTADO;
+    nuevo_pcb->data.prioridad_original = prioridad;
+    nuevo_pcb->data.prioridad = prioridad;
+    nuevo_pcb -> mutex_tomados = list_create();
 
 	return nuevo_pcb;
 }
 
-PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
+PCB* crearNuevoProceso(char* path, int prioridad, int fd_km) {
     
-    PCB* nuevoPcb = iniciar_pcb(contador_pid);
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
     log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW", contador_pid);
 
     enviarProcesoKM(nuevoPcb, path, fd_km);
@@ -61,6 +78,7 @@ PCB* crearNuevoProceso(t_log* logger, char* path, int fd_km) {
 
 	return nuevoPcb;
 }
+
 void* list_find_with_context(
         t_list* lista,
         bool (*condicion)(void*, void*),
@@ -126,11 +144,45 @@ t_IO* buscar_io_por_fd(int fd_buscado) {
 
 /*----- Auxiliares -----*/
 
-void terminar_programa(int conexion, t_log* logger, t_config* config, t_info_km info_km)
+void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 {
 	log_destroy(logger);
 	config_destroy(config);
 
     liberar_conexion (info_km.conexion_km);
 	
+}
+
+/* ------------ MOCK ------------*/
+PCB* crearNuevoProceso_mock(char*, int prioridad, int){
+    
+    PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
+    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
+
+    /*Se evita Enviar el Contexto a la KM*/
+    log_info (logger, "Se le envia el Nuevo PCB a la KM [MOCK]");
+	contador_pid++;
+
+	return nuevoPcb;
+}
+
+/*   PLANIFICACIÓN     */
+
+void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default) {
+    planificador = malloc(sizeof(Planificador_Colas_Multinivel));
+    planificador->cantidad_niveles = total_colas;
+    planificador->preemption = info_config.preemption;
+    planificador->niveles = malloc(sizeof(ColaPrioridad) * total_colas);
+
+    for (int i = 0; i < total_colas; i++) {
+        planificador->niveles[i].cola = list_create(); 
+        
+        if (strcmp(algoritmos_array[i], "FIFO") == 0) {
+            planificador->niveles[i].tipo = FIFO;
+            planificador->niveles[i].quantum = 0; // en este caso no importa el quanrtum
+        } else {
+            planificador->niveles[i].tipo = RR;
+            planificador->niveles[i].quantum = quantum_default;
+        }
+    }
 }

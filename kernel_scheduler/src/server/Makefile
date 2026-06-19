@@ -26,11 +26,15 @@ MAKE=make --no-print-directory
 # Set prerrequisites
 SRCS_C += $(shell find src -iname "*.c")
 SRCS_H += $(shell find src -iname "*.h")
+
+CLIENT_SRC := ../client/src/client.c
+CLIENT_H := ../client/src/client.h
+
 DEPS = $(foreach SHL,$(SHARED_LIBPATHS),$(SHL:%=%/lib/lib$(notdir $(SHL)).so)) \
 	$(foreach STL,$(STATIC_LIBPATHS),$(STL:%=%/lib/lib$(notdir $(STL)).a))
 
 # Set header paths to (-I)nclude
-IDIRS += $(addsuffix /src,$(SHARED_LIBPATHS) $(STATIC_LIBPATHS) .) /usr/local/include
+IDIRS += ./src /usr/local/include
 
 # Set library paths to (-L)ook
 LIBDIRS = $(addsuffix /lib,$(SHARED_LIBPATHS) $(STATIC_LIBPATHS)) /usr/local/lib
@@ -40,6 +44,7 @@ RUNDIRS = $(SHARED_LIBPATHS:%=$(shell pwd)/%/lib)
 
 # Set intermediate objects
 OBJS = $(patsubst src/%.c,obj/%.o,$(SRCS_C))
+OBJS += obj/client.o
 
 # Set output
 OUT = $(call outname,$(NAME))
@@ -66,9 +71,21 @@ $(OUT): $(OBJS) | $(dir $(OUT))
 obj/%.o: src/%.c $(SRCS_H) $(DEPS) | $(dir $(OBJS))
 	$(call compile_objs)
 
-.SECONDEXPANSION:
-$(DEPS): $$(shell find $$(patsubst %lib/,%src/,$$(dir $$@)) -iname "*.c" -or -iname "*.h")
-	$(MAKE) -C $(patsubst %lib/,%,$(dir $@)) 3>&1 1>&2 2>&3 | sed -E 's,(src/)[^ ]+\.(c|h)\:,$(patsubst %lib/,%,$(dir $@))&,' 3>&2 2>&1 1>&3
+obj/client.o: $(CLIENT_SRC) $(CLIENT_H) $(DEPS) | obj/
+	$(CC) $(CFLAGS) -c -o "$@" "$<" $(IDIRS:%=-I%)
+
+UTILSKS_LIB := ../../utilsKS/lib/libutilsKS.a
+UTILS_LIB := ../../../utils/lib/libutils.a
+
+$(UTILSKS_LIB): ../../utilsKS/utilsKS.c ../../utilsKS/utilsKS.h ../../utilsKS/Makefile ../../utilsKS/settings.mk
+	$(MAKE) -C ../../utilsKS
+
+$(UTILS_LIB): $(shell find ../../../utils/src -type f \( -name "*.c" -o -name "*.h" \))
+	$(MAKE) -C ../../../utils
+
+# .SECONDEXPANSION:
+# $(DEPS): $$(shell find $$(patsubst %lib/,%src/,$$(dir $$@)) -iname "*.c" -or -iname "*.h")
+# 	$(MAKE) -C $(patsubst %lib/,%,$(dir $@)) 3>&1 1>&2 2>&3 | sed -E 's,(src/)[^ ]+\.(c|h)\:,$(patsubst %lib/,%,$(dir $@))&,' 3>&2 2>&1 1>&3
 
 $(sort $(dir $(OUT) $(OBJS))):
 	mkdir -pv $@

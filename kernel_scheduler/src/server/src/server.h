@@ -1,6 +1,7 @@
 #ifndef SERVER_H_
 #define SERVER_H_
 
+#include "client.h"
 #include "utils.h"
 
 pthread_t hilo_quantum;
@@ -22,7 +23,7 @@ int ready_FIFO(PCB* pcb_nuevo);
 
 /*----- GESTION DE PCBs -----*/
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
-PCB* buscar_pcb_por_pid(uint32_t pid_recibido);
+PCB* buscar_pcb_por_pid(int pid_recibido);
 PCB* encontrar_pcb_rnn_por_pid(int pid);
 
 /*----- GESTION DE CPUs -----*/
@@ -43,21 +44,45 @@ void mem_alloc(int socket_cliente);
 void mem_free(int socket_cliente);
 void init_proc(int socket_cliente);
 void exit_proceso(int socket_cpu);
+void desalojo (int socket_cliente);
 
 /*----- GESTION DE IO -----*/
-void io_sleep(int socket_cpu, int socket_io);
+void io_sleep(int socket_cpu);
+void rta_io_sleep(int socket_io);
 void nueva_io(int cliente_fd);
-void io_stdin(int socket_cpu, int socket_io, int socket_memoria);
-void io_stdout(int cpu_socket, int io_socket);
+void io_stdin(int socket_cpu);
+void rta_io_stdin (int socket_io);
+void io_stdout(int cpu_socket);
+void rta_io_stdout(int socket_io);
 void io_libre(int fd);
+void nuevo_espacio(int cliente_fd);
 
 /*----- CON EL KERNEL MEMORY -----*/
-void mem_corrupt(void);
+void mem_corrupt(int fd);
 
 /*----- AUXILIARES -----*/
+void enviar_desalojo_CMN(int socket_cliente);
+void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
+int ready_CMN(PCB* pcb_nuevo);
+PCB* obtener_siguiente_proceso();
+bool usa_quantum (PCB* pcb);
 void enviar_proceso_finalizar_KM(int pid);
 void enviar_proceso_KM(uint32_t pid, op_code opCode);
 bool es_el_mutex_buscado(void* elemento, void* contexto);
+
+/* ---------HERENCIA -------------*/
+void actualizar_herencia(mutex_cpu* mutex);
+void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad);
+void recalcular_prioridad(PCB* pcb);
+
+
+/*----- MOCKS -----*/
+
+void enviar_proceso_finalizar_KM_mock (int pid);
+void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam);
+
+
+
 
 
 #endif /* SERVER_H_ */

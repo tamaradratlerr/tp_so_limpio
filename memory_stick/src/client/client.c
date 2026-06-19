@@ -1,123 +1,29 @@
-#include "client.h"
+#include "utils.h"
 
-int memory_stick_client(void)
-{
-	int conexion;
-	char* ip;
-	char* puerto;
-	char* clave;
+extern t_log* logger;
+extern t_config* config;
+extern t_memory_stick_globals ms_globals;
 
-	t_log* logger;
-	t_config* config;
+void arrancar_cliente_km(void) {
+    char* ip_km = config_get_string_value(config, "IP_KM");
+    char* puerto_km = config_get_string_value(config, "PUERTO_KM");
 
-	/* Inicio el logging */
-	logger = iniciar_logger();
-	log_info(logger, "Log cliente iniciado.");
+    int socket_km = crear_conexion(ip_km, puerto_km, logger, 0);
+    if (socket_km < 0) {
+        log_error(logger, "Error: No se pudo conectar a la Kernel Memory. Abortando.");
+        exit(EXIT_FAILURE);
+    }
+    log_info(logger, "## Conectado a Kernel Memory");
 
-	/* Cargo configuración */
-	config = iniciar_config();
-	if (config == NULL) {
-		abort();
-	}
-	ip = config_get_string_value(config, "IP");
-	puerto = config_get_string_value(config, "PUERTO");
-	clave = config_get_string_value(config, "CLAVE");
-	// Loggeamos el valor de config
-	log_info(logger, ip);
-	log_info(logger, puerto);
+    t_paquete* p_handshake = crear_paquete(NUEVA_MEMORIA_ACUM); 
+    agregar_a_paquete(p_handshake, &(ms_globals.memory_size), sizeof(uint32_t));
+    enviar_paquete(p_handshake, socket_km);
+    eliminar_paquete(p_handshake);
 
-	/* ---------------- LEER DE CONSOLA ---------------- */
-	leer_consola(logger);
-
-	// Creamos una conexión hacia el servidor
-	conexion = crear_conexion(ip, puerto);
-
-	// Enviamos al servidor el valor de CLAVE como mensaje
-	enviar_mensaje(clave, conexion);
-	// Armamos y enviamos el paquete
-	paquete(conexion);
-
-	terminar_programa(conexion, logger, config);
-
-}
-
-t_log* iniciar_logger(void)
-{
-	t_log* nuevo_logger;
-
-	char *file = "tp0.log";
-	char *process_name = "tp0_logs";
-	bool is_active_console = true;
-	t_log_level level = LOG_LEVEL_INFO;
-	
-	nuevo_logger = log_create(file, process_name, is_active_console, level);
-	return nuevo_logger;
-}
-
-t_config* iniciar_config(void)
-{
-	t_config* nuevo_config;
-
-	char *path = "cliente.config";
-
-	nuevo_config = config_create(path);
-	return nuevo_config;
-}
-
-void leer_consola(t_log* logger)
-{
-	char* leido;
-	while (1)
-	{
-		// La primera te la dejo de yapa
-		leido = readline("> ");
-
-		if (!strcmp(leido, "")){
-			/* Es linea vacía. */
-			break;
-		}
-		// El resto, las vamos leyendo y logueando hasta recibir un string vacío
-		if(leido){
-			add_history(leido);
-		}
-		log_info(logger, leido);
-		// ¡No te olvides de liberar las lineas antes de regresar!
-	}
-	free(leido);
-}
-
-void paquete(int conexion)
-{
-	// Ahora toca lo divertido!
-	char* leido;
-	t_paquete* paquete = crear_paquete();
-
-	// Leemos y esta vez agregamos las lineas al paquete
-	while (1)
-	{
-		leido = readline("> ");
-
-		if (!strcmp(leido, "")){
-			break;
-		}
-
-		if(leido){
-			agregar_a_paquete(paquete, leido, strlen(leido) + 1);
-		}
-	}
-	free(leido);
-	enviar_paquete(paquete, conexion);
-
-	// ¡No te olvides de liberar las líneas y el paquete antes de regresar!
-	eliminar_paquete(paquete);
-	
-}
-
-void terminar_programa(int conexion, t_log* logger, t_config* config)
-{
-	/* Y por ultimo, hay que liberar lo que utilizamos (conexion, log y config) 
-	  con las funciones de las commons y del TP mencionadas en el enunciado */
-	  log_destroy(logger);
-	  config_destroy(config);
-	  liberar_conexion(conexion);
+    pthread_t thread_km;
+    int* socket_km_ptr = malloc(sizeof(int));
+    *socket_km_ptr = socket_km;
+    
+    pthread_create(&thread_km, NULL, atender_cliente, socket_km_ptr);
+    pthread_detach(thread_km);
 }

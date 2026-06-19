@@ -1,5 +1,12 @@
 #include "utils.h"
 
+// DESP VER QUE BORRAR Y AGREGAR
+
+
+
+
+
+
 
 /* Implementación de funciones que uso SOLO dentro de éste archivo */
 void crear_buffer(t_paquete* paquete)

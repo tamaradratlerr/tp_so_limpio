@@ -4,75 +4,93 @@
 #include <commons/collections/list.h>
 #include <commons/log.h> 
 #include <commons/string.h>
-#include <pthread.h>     
+#include <commons/config.h> // Para que reconozca t_config
+#include <pthread.h>  
+#include <stdint.h>
+#include "../../utils/src/global_utils.h" // Aquí ya están los op_code y funciones de red
 
-// Estructuras del Sistema (typedef struct)
-
-typedef enum {
-    NUEVA_CPU = 1,
-    SOLICITUD_INSTRUCCION,
-    LEER_MEMORIA,
-    ESCRIBIR_MEMORIA,
-    km_GUARDAR_CONTEXTO
-} op_code;
-typedef struct {
-    uint8_t ax, bx, cx, dx;         // 8 bits
-    uint32_t eax, ebx, ecx, edx;    // 32 bits
-    uint32_t si, di;                // 32 bits
-    uint32_t pc;                    // 32 bits
-} t_registros;
 
 typedef struct {
-    int id;
-    int base;
-    int limite;
-} t_segmento;
+    uint32_t direccion_base; 
+    uint32_t tamanio;        
+} t_hueco;
 
+typedef struct {
+    int id_segmento;
+    uint32_t direccion_base; 
+    uint32_t limite;         
+} t_segmento_aux;
+
+//DESP BORRO DA ERROR , SOLUCONAR ARCH GLOBAL
 typedef struct {
     int pid;
-    t_registros registros;    
-    t_list* tabla_segmentos;  
-} t_contexto;
+    uint32_t pc;
+    uint8_t ax, bx, cx, dx;
+    uint32_t eax, ebx, ecx, edx;
+    uint32_t si, di;
+    t_list* tabla_segmentos;
+} t_contexto; 
 
 typedef struct {
+    int socket_fd;           // Socket de conexión física a esta Memory Stick
+    uint32_t base_global;    // Dónde arranca en el mapa globalizado
+    uint32_t tamanio;        // Cuánto espacio aporta
+} t_memory_stick_nodo;
+
+// Estructura para manejar los procesos en KM 
+typedef struct {
     int pid;
-    t_list* instrucciones;    
+    t_list* instrucciones;
 } t_proceso;
 
 
-// Variables Globales (Compartidas)
-
-
-extern t_log* logger; 
-
-extern t_list* lista_contextos;
-extern pthread_mutex_t mutex_contextos;
-
+// VARIABLES GLOBALES
+extern t_list* lista_huecos_libres;  
+extern t_list* lista_contextos;      
+extern t_list* lista_memory_sticks;  
 extern t_list* lista_procesos;
+extern uint32_t memoria_total_sistema;
+
+extern pthread_mutex_t mutex_lista_libres;
+extern pthread_mutex_t mutex_contextos;
+extern pthread_mutex_t mutex_ms;
 extern pthread_mutex_t mutex_procesos;
 
+extern t_log* logger; 
+extern t_config* config_km;
 
+
+
+// Inicialización
 void inicializar_utils(void);
 
-int iniciar_servidor(char* puerto);
-int esperar_cliente(int socket_servidor);
-int recibir_operacion(int socket_cliente);
-void* recibir_buffer(int* size, int socket_cliente);
-void recibir_mensaje(int socket_cliente);
-t_list* recibir_paquete(int socket_cliente);
-
-// Gestión Interna de Procesos y Contextos
+// Gestión de Contextos y Procesos
 t_contexto* crear_contexto(int pid);
 void agregar_contexto(int pid);
-void manejar_crear_proceso(int socket_cliente);
+t_contexto* buscar_contexto(int pid);
 int buscar_indice_proceso(int pid);
 int buscar_indice_contexto(int pid);
-void manejar_finalizar_proceso(int socket_cliente);
 
-// Espejos de Ciclo de Instrucción de CPU (Mocks y Reales)
+// Manejadores de Sockets / Protocolo KM
+void manejar_crear_proceso(int socket_cliente);
+void manejar_finalizar_proceso(int socket_cliente);
 void manejar_pedido_instruccion_cpu(int socket_cliente);
-void manejar_lectura_memoria(int socket_cliente);
-void manejar_escritura_memoria(int socket_cliente);
+void manejar_lectura_memoria(int socket_ks);
+void manejar_escritura_memoria(int socket_ks);
 void manejar_guardar_contexto(int socket_cliente);
+void enviar_contexto_cpu(int socket_cpu, int pid);
+void recibir_contexto_cpu(int socket_cpu);
+
+// Gestión de Memory Sticks, Segmentación y Compactación
+void conexion_memory_stick(int socket_ms, int socket_kernel_scheduler);
+t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global);
+void* leer_bytes_globales(uint32_t dir_global, uint32_t tamanio);
+void escribir_bytes_globales(uint32_t dir_global, uint32_t tamanio, void* datos);
+int calcular_espacio_libre_total(void);
+t_hueco* seleccionar_hueco_segun_algoritmo(uint32_t tamanio_solicitado);
+void ejecutar_compactacion_fisica_memory_stick(void);
+void solicitar_y_ejecutar_compactacion(int socket_ks);
+void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmento, uint32_t tamanio_segmento);
+void eliminar_segmento(int pid, int id_segmento); // La que armamos recién
 
 #endif /* UTILS_H_ */

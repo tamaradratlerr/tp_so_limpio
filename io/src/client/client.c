@@ -1,4 +1,5 @@
 #include "client.h"
+t_log* logger;
 
 int main(int argc, char** argv)
 {
@@ -13,7 +14,6 @@ int main(int argc, char** argv)
 	char* log_process_name;
 	char* log_is_active_console;
 	char* io = argv[2];
-	t_log* logger;
 
 	/* Inicio configuración */
 	t_config* io_config = iniciar_config(argv[1]);
@@ -40,19 +40,120 @@ int main(int argc, char** argv)
 	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
 	log_info(logger, "Esperando peticiones IO desde %s", getModuleName(KERNEL_SCHEDULER));
 	
-	int status = 0;
-
-	while (status != -1)
+	while (1)
     {
-        status = atender_peticiones_del_KS(fd_conexion, logger);
+		/* Bucle principal de la IO */
+		enviar_op_code(IO_LIBRE, fd_conexion);
+
+		op_code cod_op = recibir_op_code(fd_conexion);
+		
+
+	switch (cod_op) {
+		case gl_IO_SLEEP: {
+			t_list* lista = recibir_paquete(fd_conexion);
+			
+			// Extraemos los datos directamente de la lista
+			uint32_t pid = *(uint32_t*)list_get(lista, 0);
+			uint32_t mseg = *(uint32_t*)list_get(lista, 1);
+
+			log_info(logger, "## PID: %u - Haciendo sleep por %u milisegundos.", pid, mseg);
+			
+			usleep(mseg * 1000);
+			
+			enviar_op_code(IO_SLEEP, fd_conexion);
+			if(recibir_op_code(fd_conexion) != OK){
+				log_info (logger, "Error al responder SLEEP");
+				return EXIT_FAILURE;
+			}
+
+			enviar_pid(pid, fd_conexion);
+			list_destroy(lista);
+			break;
+    	}
+
+    	case gl_IO_STDIN: {
+			
+			enviar_op_code(OK,fd_conexion);
+			
+			t_list* lista = recibir_paquete(fd_conexion);
+			
+			uint32_t pid = *(uint32_t*)list_get(lista, 0);
+			uint32_t direccion_logica = *(uint32_t*)list_get(lista, 1);
+			uint32_t bytes_a_leer = *(uint32_t*)list_get(lista, 2);
+
+			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
+			
+			char* buffer_usuario = malloc(bytes_a_leer);
+			read(STDIN_FILENO, buffer_usuario, bytes_a_leer);
+
+			enviar_op_code(IO_STDIN, fd_conexion);
+			if(recibir_op_code(fd_conexion) != OK){
+				log_info (logger, "Error al responder STDIN");
+				return EXIT_FAILURE;
+			}
+
+			t_paquete* paquete_retorno = crear_paquete(IO_STDIN_RETORNO);
+			agregar_a_paquete(paquete_retorno, &direccion_logica, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, &bytes_a_leer, sizeof(uint32_t));
+			agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
+			agregar_a_paquete(paquete_retorno, &pid, sizeof(u_int32_t));
+			
+			enviar_paquete(paquete_retorno, fd_conexion); 
+			
+			free(buffer_usuario);
+			list_destroy(lista);
+			eliminar_paquete(paquete_retorno);
+        	break;
+    	}
+
+    case gl_IO_STDOUT: {
+        
+		enviar_op_code(OK,fd_conexion);
+		
+		t_list* lista = recibir_paquete(fd_conexion);
+        
+        uint32_t pid = *(uint32_t*)list_get(lista, 0);
+        uint32_t tam = *(uint32_t*)list_get(lista, 1);
+        void* datos_imprimir = list_get(lista, 2);
+
+        log_info(logger, "## PID: %u - Operación STDOUT.", pid);
+        write(STDOUT_FILENO, datos_imprimir, tam);
+        printf("\n");
+
+		enviar_op_code(IO_STDIN, fd_conexion);
+		if(recibir_op_code(fd_conexion) != OK){
+			log_info (logger, "Error al responder STDIN");
+			return EXIT_FAILURE;
+		}
+		
+        enviar_pid(pid,fd_conexion);
+        
+        list_destroy(lista);
+        break;
     }
+
+
+		case -1:
+
+			log_error(logger, "El cliente se desconectó");
+			close(fd_conexion);
+			return NULL;
+
+		default:
+			log_warning(logger,"IO desconocida.");
+			
+			break;
+	}
+
+	}
+	
 	
 	terminar_programa(fd_conexion, logger, io_config);
 
 	return 0;
 }
 
-/* 
+/*
  ****************
  *	Funciones	*
  ****************
@@ -75,11 +176,10 @@ t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_
 {
 	t_log* nuevo_logger;
 
-	char *file = file;
-	char *process_name = process_name;
-	bool is_active_console = is_active_console;
 	t_log_level level;
-
+	
+	bool active = (strcmp(is_active_console, "true") == 0);
+	
 	//Condicional que me permite modificar el nivel del log a partir de lo recibido en el .config//
 	if (strcmp(log_level, "INFO") == 0)
 	{
@@ -90,7 +190,7 @@ t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_
 		level = LOG_LEVEL_DEBUG;
 	}
 	
-	nuevo_logger = log_create(file, process_name, is_active_console, level);
+	nuevo_logger = log_create(file, process_name, active, level);
 	
 	return nuevo_logger;
 }
@@ -109,3 +209,4 @@ void validar_argumentos(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
 }
+

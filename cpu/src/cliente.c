@@ -1052,8 +1052,8 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
     // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
     t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
     agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(int));
     agregar_a_paquete(paquete, buffer, tamanio);
+    agregar_a_paquete(paquete, &tamanio, sizeof(int));
     
     enviar_paquete(paquete, sockets->conexion_memory_stick);
     eliminar_paquete(paquete);
@@ -1095,7 +1095,7 @@ void crear_segmento(int id, int tamanio, int base){
 
 static int id_buscado = NULL;
 
-bool tiene_mismo_id(void* elemento) {
+    bool tiene_mismo_id(void* elemento) {
     t_segmento* segmento = (t_segmento*) elemento;
 
     return (id_buscado == segmento->id_segmento);
@@ -1152,6 +1152,7 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
     
     return dir_fisica;
 }
+
 
 
 // --- Funciones que faltan por implementar ---

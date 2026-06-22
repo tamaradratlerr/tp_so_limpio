@@ -415,6 +415,7 @@ void manejar_guardar_contexto(int socket_cliente) {
         ctx->si  = *(uint32_t*)list_get(paquete, 10);
         ctx->di  = *(uint32_t*)list_get(paquete, 11);
         
+        //tabla segmentos
         pthread_mutex_unlock(&mutex_contextos);
         log_info(logger, "## Contexto Resguardado Completo - PID: %d - PC: %u", pid, ctx->pc);
     } else {

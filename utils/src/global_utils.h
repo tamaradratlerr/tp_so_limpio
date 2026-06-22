@@ -144,6 +144,10 @@ typedef struct {
     int base;
 } t_segmento;
 
+typedef struct{
+    int tamanio, base;
+}t_mem_stick;
+
 
 typedef struct {
     int pid;
@@ -224,6 +228,8 @@ typedef struct {
 	t_io_stdout iostdout; //Estructura con info necesaria para ejecutar un stdout
 	t_io_stdin iostdin; //Estructura con info necesaria para ejecutar un stdin
 	} espera_io;
+
+
 
 /*-----     FUNCIONES     -----*/
 

@@ -48,6 +48,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     // CPU
     NUEVA_CPU, //Se informa que hay una nueva CPU
     CPU_LIBRE, //Se informa que una CPU no tiene ningun PCB asociado
+    NUEVA_MEMORY_STICK,
 
     // Extras para CPU
     FIN_PROCESO, //Se informa que el proceso que estaba en la CPU finalizo
@@ -145,8 +146,24 @@ typedef struct {
 } t_segmento;
 
 typedef struct{
-    int tamanio, base;
-}t_mem_stick;
+    uint32_t base;
+    uint32_t tamanio;
+
+    char* ip;
+    char* puerto;
+
+    int socket;
+} t_mem_stick;
+
+typedef struct{
+    t_mem_stick* memory_stick;
+    uint32_t direccion_local;
+} t_direccion_memoria;
+
+typedef struct{
+    t_mem_stick* memory_stick;
+    uint32_t direccion_local;
+} t_direccion_fisica;
 
 
 typedef struct {

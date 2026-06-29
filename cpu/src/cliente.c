@@ -25,9 +25,21 @@ int main(int argc, char *argv[])
     identificador = argv[2];
 
     sockets = malloc(sizeof(t_cpu_sockets));
+    sockets->memory_sticks = list_create();
     proceso_en_ejecucion = malloc(sizeof(t_proceso_ejec));
 
     config = iniciar_config(archivo_config);
+
+    sockets->ip_kernel_memory = config_get_string_value(config, "IP_KERNEL_MEMORY");
+    sockets->puerto_kernel_memory = config_get_string_value(config, "PUERTO_KERNEL_MEMORY");
+
+    sockets->ip_kernel_scheduler = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
+    sockets->puerto_kernel_scheduler = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER");
+    sockets->puerto_kernel_scheduler_dispatch = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_DISPATCH");
+    sockets->puerto_kernel_scheduler_interrupt = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_INTERRUPT");
+
+    sockets->ip_memory_stick = config_get_string_value(config, "IP_MEMORY_STICK");
+    sockets->puerto_memory_stick = config_get_string_value(config, "PUERTO_MEMORY_STICK");
 
     t_log_level log_level = log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
     logger = iniciar_logger(log_level);
@@ -52,18 +64,7 @@ int main(int argc, char *argv[])
 
         return EXIT_FAILURE;
     }}
-    
-    if(!mock){
-    sockets->conexion_memory_stick = conexion_memory_stick(config, logger, MEMORY_STICK);
-    enviar_op_code (NUEVA_CPU, sockets->conexion_memory_stick);
-    op_code handshake_ms = recibir_op_code(sockets->conexion_memory_stick); //Se espera que se devueva el op_code OK (1)
-    
-     if(handshake_ms != 1){
-        log_error(logger, "Error en HandShake con Memory Stick.");
-
-        return EXIT_FAILURE;
-    }}
-    
+       
     
     
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
@@ -78,7 +79,9 @@ int main(int argc, char *argv[])
 
     if(!mock){
     // Validacion de conexiones (Si falla una conexión crítica, cerramos)
-    if (sockets->conexion_kernel_memory < 0 || sockets->conexion_kernel_scheduler < 0 || sockets->conexion_memory_stick < 0) {
+    if (sockets->conexion_kernel_memory < 0 || 
+    sockets->conexion_kernel_scheduler < 0 || 
+    sockets->memory_sticks == NULL) {
         
         log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
         
@@ -108,7 +111,6 @@ int main(int argc, char *argv[])
         proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
         contexto_key++;
 
-        contexto_actual = malloc(sizeof(t_contexto));
 
         control_loop = 1;
         while (control_loop == 1){
@@ -138,7 +140,12 @@ int main(int argc, char *argv[])
             decode(instruccion_raw); /* Fase Decode */
 
             contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
-
+            
+            if(instruccion_decodificada == NULL)
+            {
+                log_error(logger,"No hay instruccion decodificada");
+                continue;
+            }
             execute(); /* Fase Execute */
 
             /* Fase Interrupt */
@@ -152,6 +159,9 @@ int main(int argc, char *argv[])
                 interrupciones();
                 continue; // Saltamos el ciclo de ejecución actual
             }
+            else if(cod_op == NUEVA_MEMORY_STICK){
+                recibir_memory_stick(sockets->conexion_kernel_scheduler);
+            }
         }
 
             liberar_instruccion(instruccion_decodificada);
@@ -163,6 +173,21 @@ int main(int argc, char *argv[])
     terminar_programa (logger, config, sockets); /*Pensar si hay algo mas que se tenga que [cerrar / terminar]*/
 }
 
+t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica)
+{
+    for(int i = 0; i < list_size(sockets->memory_sticks); i++)
+    {
+        t_mem_stick* ms = list_get(sockets->memory_sticks, i);
+
+        if(direccion_fisica >= ms->base &&
+           direccion_fisica < (ms->base + ms->tamanio))
+        {
+            return ms;
+        }
+    }
+
+    return NULL;
+}
 
 
 //recibir 
@@ -213,8 +238,28 @@ t_contexto* recibir_contexto(int socket_km) {
     offset += sizeof(uint32_t);
 
     // Tabla de Segmentos
-    memcpy(&nuevo_contexto->tabla_segmentos, buffer + offset, sizeof(t_list*));
-    offset += sizeof(uint32_t);
+    nuevo_contexto->tabla_segmentos = list_create();
+
+    int cantidad;
+
+    memcpy(&cantidad, buffer + offset, sizeof(int));
+    offset += sizeof(int);
+
+    for(int i = 0; i < cantidad; i++)
+    {
+        t_segmento* seg = malloc(sizeof(t_segmento));
+
+        memcpy(&seg->id_segmento, buffer + offset, sizeof(int));
+        offset += sizeof(int);
+
+        memcpy(&seg->base, buffer + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+
+        memcpy(&seg->tamanio, buffer + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+
+        list_add(nuevo_contexto->tabla_segmentos, seg);
+    }
 
     free(buffer);
     return nuevo_contexto;
@@ -236,49 +281,72 @@ t_log* iniciar_logger(t_log_level log_level)
 
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets)
 {
-    if(logger) log_destroy(logger);
-    if(config) config_destroy(config);
-    
-    // Cerramos todos los sockets abiertos
-    if(!mock){
-    liberar_conexion(sockets -> conexion_kernel_memory);
-    liberar_conexion(sockets -> conexion_memory_stick);
+    if(logger) 
+        log_destroy(logger);
+
+    if(config) 
+        config_destroy(config);
+
+
+    // Cerrar Memory Sticks
+    if(sockets->memory_sticks != NULL)
+    {
+        for(int i = 0; i < list_size(sockets->memory_sticks); i++)
+        {
+            t_mem_stick* ms = list_get(sockets->memory_sticks, i);
+
+            if(ms->socket >= 0)
+                liberar_conexion(ms->socket);
+
+            if(ms->ip)
+                free(ms->ip);
+
+            if(ms->puerto)
+                free(ms->puerto);
+            free(ms);
+        }
+
+        list_destroy(sockets->memory_sticks);
     }
-    liberar_conexion(sockets -> conexion_kernel_scheduler);
+
+
+    // Cerrar Scheduler
+    if(sockets->conexion_kernel_scheduler >= 0)
+        liberar_conexion(sockets->conexion_kernel_scheduler);
+
+
+    // Cerrar Kernel Memory si existe
+    if(!mock && sockets->conexion_kernel_memory >= 0)
+        liberar_conexion(sockets->conexion_kernel_memory);
+
+
+    free(sockets);
 }
 
 
-
 /* ---------------- IMPLEMENTACION DE CONEXIONES ---------------- */
-
 int conexion_kernel_memory(t_config* config, t_log* logger, module_name module) {
-
-    char* ip = config_get_string_value(config, "IP_KERNEL_MEMORY");
-    char* puerto = config_get_string_value(config, "PUERTO_KERNEL_MEMORY");
 
     log_info(logger, "Iniciando conexion con KERNEL MEMORY");
 
-    return crear_conexion(ip, puerto, logger, module);
+    return crear_conexion(
+        sockets->ip_kernel_memory,
+        sockets->puerto_kernel_memory,
+        logger,
+        module
+    );
 }
 
 int conexion_kernelS(t_config* config, t_log* logger, module_name module) {
 
-    char* ip = config_get_string_value(config, "IP_KERNEL_SCHEDULER");
-    char* puerto = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER");
-    
     log_info(logger, "Iniciando conexion con KERNEL SCHEDULER");
-    
-    return crear_conexion_reintentando(ip, puerto, logger, module);
-}
 
-int conexion_memory_stick(t_config* config, t_log* logger, module_name module) {
-    
-    char* ip = config_get_string_value(config, "IP_MEMORY_STICK");
-    char* puerto = config_get_string_value(config, "PUERTO_MEMORY_STICK");
-    
-    log_info(logger, "Iniciando conexion con MEMORY STICK");
-    
-    return crear_conexion(ip, puerto, logger, module);
+    return crear_conexion_reintentando(
+        sockets->ip_kernel_scheduler,
+        sockets->puerto_kernel_scheduler,
+        logger,
+        module
+    );
 }
 
 
@@ -365,7 +433,7 @@ void execute() {
             break;
 
          case MOV_IN:      
-            ejecutar_mov_out(instr);      
+            ejecutar_mov_in(instr);      
             break;
 
         case MOV_OUT:      
@@ -551,7 +619,7 @@ void ejecutar_mov_in (t_instruccion* instr){
     
         // Comunicación con Memory Stick
         if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));}
-        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint32_t));}
+        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint8_t));}
 
         *dest = *(uint32_t*)buffer;
         free(buffer);
@@ -561,15 +629,15 @@ void ejecutar_mov_in (t_instruccion* instr){
     }   
     else {
         
-        uint8_t dir_fisica;
+        uint32_t dir_fisica;
 
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
         if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);}
         else{dir_fisica = pedir_direccion_mmu_mock(contexto_actual->si, tamanio);}
     
         // Comunicación con Memory Stick
-        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));}
-        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint32_t));}
+        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint8_t));}
+        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint8_t));}
         
         *dest = *(uint8_t*)buffer;
         free(buffer);
@@ -581,51 +649,74 @@ void ejecutar_mov_in (t_instruccion* instr){
     }
 }
 
-void ejecutar_mov_out (t_instruccion* instr){
+void ejecutar_mov_out(t_instruccion* instr){
 
-    char* reg_dest_nombre = instr->params[0];
+    char* reg_dir_nombre = instr->params[0];
+    char* reg_valor_nombre = instr->params[1];
+
     int tamanio = 0;
     void* buffer;
 
-    if (es_registro_32bits(reg_dest_nombre)){
-        
+
+    uint32_t direccion_logica = obtener_direccion_del_registro(reg_dir_nombre);
+
+
+    if(es_registro_32bits(reg_valor_nombre)){
+
+        tamanio = sizeof(uint32_t);
+
+        uint32_t* valor = obtener_registro(reg_valor_nombre);
+
         uint32_t dir_fisica;
 
-        uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);}
-        else{dir_fisica = pedir_direccion_mmu_mock(contexto_actual->di, tamanio);}
-    
-        // Comunicación con Memory Stick
-        buffer = (void*)dest;
+        if(!mock)
+            dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
+        else
+            dir_fisica = pedir_direccion_mmu_mock(direccion_logica,tamanio);
 
-        if(!mock){escribir_en_memoria(dir_fisica, buffer, sizeof(uint32_t));}
-        else{escribir_en_memoria_mock(dir_fisica, buffer, sizeof(uint32_t));}
-        free(buffer);
 
-        log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
-        log_info(logger, "[EXEC] MOV_OUT 32b: %s = %u", reg_dest_nombre, *dest);
-    }   
-    else {
-        
-        uint8_t dir_fisica;
+        buffer = valor;
 
-        uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        if(!mock){dir_fisica = pedir_direccion_mmu(contexto_actual->di, tamanio);}
-        else {dir_fisica = pedir_direccion_mmu_mock(contexto_actual->di, tamanio);}
-    
-        // Comunicación con Memory Stick
-        buffer = (void*)dest;
-        if(!mock){escribir_en_memoria(dir_fisica, buffer, sizeof(uint8_t));}
-        else{escribir_en_memoria_mock(dir_fisica, buffer, sizeof(uint8_t));}
-        free(buffer);
 
-        log_info (logger, "## PID:[%d] - Ejecutando [MOV OUT] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
-        log_info(logger, "[EXEC] MOV_OUT 8b: %s = %u", reg_dest_nombre, *dest);
+        if(!mock)
+            escribir_en_memoria(dir_fisica,buffer,tamanio);
+        else
+            escribir_en_memoria_mock(dir_fisica,buffer,tamanio);
 
+
+        log_info(logger,
+        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [%s] - Valor [%u]",
+        contexto_actual->pid,
+        reg_dir_nombre,
+        *valor);
 
     }
+    else{
 
+        tamanio = sizeof(uint8_t);
+
+        uint8_t* valor = obtener_registro(reg_valor_nombre);
+
+        uint32_t dir_fisica;
+
+
+        if(!mock)
+            dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
+        else
+            dir_fisica = pedir_direccion_mmu_mock(direccion_logica,tamanio);
+
+
+        buffer = valor;
+
+
+        if(!mock)
+            escribir_en_memoria(dir_fisica,buffer,tamanio);
+        else
+            escribir_en_memoria_mock(dir_fisica,buffer,tamanio);
+
+    }
 }
+
 
 void ejecutar_sum(t_instruccion* instr) {
     
@@ -677,17 +768,18 @@ void ejecutar_sub(t_instruccion* instr) {
 
 void ejecutar_jnz(t_instruccion* instr) {
     
-    // los JNZ --> gemini dice que no es necesario los de 8 bits xq generalmente operan sobre registros de 32 bits (como el PC o contadores)
-    uint32_t* registro = (uint32_t*)obtener_registro(instr->params[0]);
-    
-    if (*registro != 0) {
+    void* reg = obtener_registro(instr->params[0]);
 
-        /*atoi toma una cadena de caracteres q contiene números y la traduce a su valor numérico real en meomria
-        --> Si no usas atoi estarías intentando asignar una dirección de memoria (donde vive el texto "5")*/
-        contexto_actual->pc = (uint32_t)atoi(instr->params[1]);
-        
-        log_info (logger, "## PID:[%d] - Ejecutando [JNZ] - Valor [%d]",contexto_actual->pid, contexto_actual->pc);/*Logger Obligatorio*/
-        log_info(logger, "[EXEC] JNZ: Salto a PC %u", contexto_actual->pc);
+    uint32_t valor;
+
+    if(es_registro_32bits(instr->params[0]))
+        valor = *(uint32_t*)reg;
+    else
+        valor = *(uint8_t*)reg;
+
+    if(valor != 0)
+    {
+        contexto_actual->pc = atoi(instr->params[1]);
     }
 }
 
@@ -810,7 +902,11 @@ void ejecutar_mem_alloc (t_instruccion* instr){
 
     int base = recibir_pid(sockets->conexion_kernel_scheduler); /*Uso esta aunque no sea para esto*/
 
-    crear_segmento((int*)id_segmento,(int*)tamanio, base);
+    crear_segmento(
+        atoi(id_segmento),
+        atoi(tamanio),
+        base
+    );
 
     log_info (logger, "ok"); //Completar LOG
             
@@ -908,7 +1004,7 @@ void ejecutar_stdin(t_instruccion* instr) {
     }
 
     
-    tamanio = obtener_tamanio_del_registro(instr->params[1]); 
+    tamanio = obtener_tamanio_del_registro(reg_tam);
     if(!mock){direccion_logica = obtener_direccion_del_registro(instr->params[1]);}  //HACER obtener_direccion_del_registro --> MMU
     else{direccion_logica = obtener_direccion_del_registro_mock(instr->params[1]);}
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
@@ -1015,7 +1111,18 @@ void enviar_contexto_a_kernel_memory() {
     agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
 
-    agregar_a_paquete(paquete, &contexto_actual->tabla_segmentos, (sizeof(&contexto_actual->tabla_segmentos)));
+    int cantidad = list_size(contexto_actual->tabla_segmentos);
+
+    agregar_a_paquete(paquete, &cantidad, sizeof(int));
+
+    for(int i = 0; i < cantidad; i++)
+    {
+        t_segmento* seg = list_get(contexto_actual->tabla_segmentos, i);
+
+        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
+        agregar_a_paquete(paquete, &seg->base, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &seg->tamanio, sizeof(uint32_t));
+    }
 
     enviar_paquete(paquete, sockets->conexion_kernel_memory);
     eliminar_paquete(paquete);
@@ -1025,45 +1132,115 @@ void enviar_contexto_a_kernel_memory() {
 
 }
 
-void* leer_de_memoria(uint32_t dir_fisica, int tamanio) {
+void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
+{
+    void* buffer_total = malloc(tamanio);
 
-    enviar_op_code(LEER_MEMORIA, sockets->conexion_memory_stick); 
-   
-    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO)
-    t_paquete* paquete = crear_paquete(LEER_MEMORIA);
-    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(int));
-    
-    enviar_paquete(paquete, sockets->conexion_memory_stick);
-    eliminar_paquete(paquete);
+    int bytes_restantes = tamanio;
+    uint32_t direccion_actual = dir_fisica;
+    int offset_buffer = 0;
 
-    // recibir la respuesta (el buffer con los datos)
-    // asumiendo que el protocolo del KM devuelve un buffer de bytes
-    void* buffer = malloc(tamanio);
-    buffer = recibir_paquete(sockets->conexion_memory_stick);
-    
-    return buffer;
+    while(bytes_restantes > 0)
+    {
+        t_mem_stick* ms = buscar_memory_stick(direccion_actual);
+
+        if(ms == NULL){
+            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
+            free(buffer_total);
+            return NULL;
+        }
+
+        uint32_t dir_local = direccion_actual - ms->base;
+
+        int espacio_disponible = ms->tamanio - dir_local;
+
+        int bytes_a_leer =
+            (bytes_restantes < espacio_disponible)
+            ? bytes_restantes
+            : espacio_disponible;
+
+        enviar_op_code(LEER_MEMORIA, ms->socket);
+
+        t_paquete* paquete = crear_paquete(LEER_MEMORIA);
+        agregar_a_paquete(paquete, &dir_local, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &bytes_a_leer, sizeof(int));
+
+        enviar_paquete(paquete, ms->socket);
+        eliminar_paquete(paquete);
+
+        void* parte = recibir_paquete(ms->socket);
+
+        if(parte == NULL)
+        {
+            free(buffer_total);
+            return NULL;
+        }
+
+        memcpy((char*)buffer_total + offset_buffer,
+               parte,
+               bytes_a_leer);
+
+        free(parte);
+
+        direccion_actual += bytes_a_leer;
+        offset_buffer += bytes_a_leer;
+        bytes_restantes -= bytes_a_leer;
+    }
+
+    return buffer_total;
 }
 
-void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio) {
-    
-    enviar_op_code(ESCRIBIR_MEMORIA, sockets->conexion_memory_stick);
+void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
+{
+    int bytes_restantes = tamanio;
+    uint32_t direccion_actual = dir_fisica;
+    int offset_buffer = 0;
 
-    // preparar el paquete (Protocolo: DIRECCION_FISICA, TAMANIO, DATA)
-    t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
-    agregar_a_paquete(paquete, &dir_fisica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, buffer, tamanio);
-    agregar_a_paquete(paquete, &tamanio, sizeof(int));
-    
-    enviar_paquete(paquete, sockets->conexion_memory_stick);
-    eliminar_paquete(paquete);
-    
-    // esperar confirmación de la memoria
-    int resultado = recibir_op_code(sockets->conexion_memory_stick);
-    if (resultado != OK) {
-        log_error(logger, "Error al escribir en memoria física %u", dir_fisica);
-        
-        log_error(logger, "Error en operacion: %d", (int)resultado);
+    while(bytes_restantes > 0)
+    {
+        t_mem_stick* ms = buscar_memory_stick(direccion_actual);
+
+        if(ms == NULL){
+            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
+            return;
+        }
+
+        uint32_t dir_local = direccion_actual - ms->base;
+
+        int espacio_disponible = ms->tamanio - dir_local;
+
+        int bytes_a_escribir =
+            (bytes_restantes < espacio_disponible)
+            ? bytes_restantes
+            : espacio_disponible;
+
+        enviar_op_code(ESCRIBIR_MEMORIA, ms->socket);
+
+        t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
+
+        agregar_a_paquete(paquete, &dir_local, sizeof(uint32_t));
+
+        agregar_a_paquete(paquete,
+                          (char*)buffer + offset_buffer,
+                          bytes_a_escribir);
+
+        agregar_a_paquete(paquete,
+                          &bytes_a_escribir,
+                          sizeof(int));
+
+        enviar_paquete(paquete, ms->socket);
+        eliminar_paquete(paquete);
+
+        int resultado = recibir_op_code(ms->socket);
+
+        if(resultado != OK){
+            log_error(logger, "Error escribiendo en Memory Stick");
+            return;
+        }
+
+        direccion_actual += bytes_a_escribir;
+        offset_buffer += bytes_a_escribir;
+        bytes_restantes -= bytes_a_escribir;
     }
 }
 
@@ -1093,7 +1270,7 @@ void crear_segmento(int id, int tamanio, int base){
 
 }
 
-static int id_buscado = NULL;
+static int id_buscado = 0;
 
     bool tiene_mismo_id(void* elemento) {
     t_segmento* segmento = (t_segmento*) elemento;
@@ -1110,15 +1287,11 @@ void eliminar_segmento(int id) {
         tiene_mismo_id
     );
 
-    if (segmento_a_eliminar == NULL) {
+    if(segmento_a_eliminar == NULL)
         return;
-    }
 
-    free(segmento_a_eliminar->id_segmento);
     free(segmento_a_eliminar);
 }
-
-
 
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
    
@@ -1139,6 +1312,11 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
     
    id_buscado = id_segmento;
    t_segmento* segmento = list_find(contexto_actual->tabla_segmentos,tiene_mismo_id);
+    
+    if(segmento == NULL){
+    log_error(logger,"Segmento inexistente");
+    return ERROR_SEGMENTATION_FAULT;
+    }
 
     int desplazamiento = dir_logica % segmento->tamanio;
     
@@ -1153,8 +1331,6 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
     return dir_fisica;
 }
 
-
-
 // --- Funciones que faltan por implementar ---
 
 void liberar_instruccion(t_instruccion* instruccion) {
@@ -1166,12 +1342,28 @@ void liberar_instruccion(t_instruccion* instruccion) {
 }
 
 int apagar() {/*Hacer*/
-    return 1; // O el valor que desees para salir del loop
+    return 0; // O el valor que desees para salir del loop
 }
 
 
-uint32_t obtener_tamanio_del_registro(char* reg) {
-    return es_registro_32bits(reg) ? 4 : 1;
+uint32_t obtener_tamanio_del_registro(char* reg)
+{
+    void* registro = obtener_registro(reg);
+
+    if(registro == NULL)
+    {
+        log_error(logger, "Registro inexistente: %s", reg);
+        return 0;
+    }
+
+    if(es_registro_32bits(reg))
+    {
+        return *(uint32_t*)registro;
+    }
+    else
+    {
+        return (uint32_t)(*(uint8_t*)registro);
+    }
 }
 
 uint32_t obtener_direccion_del_registro(char* reg) {
@@ -1206,7 +1398,16 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
     nuevo_contexto->pc = 0;
     nuevo_contexto->pid = 0;
     nuevo_contexto->si = 0;
-    /*Evitamos tabla de Segmentos*/
+    
+    nuevo_contexto->tabla_segmentos = list_create();
+
+    t_segmento* seg = malloc(sizeof(t_segmento));
+
+    seg->id_segmento = 1;
+    seg->base = 1000;
+    seg->tamanio = 1000;
+
+    list_add(nuevo_contexto->tabla_segmentos, seg);
 
     return nuevo_contexto;
 
@@ -1231,8 +1432,14 @@ char* fetch_mock(t_cpu_sockets* sockets){
 
 
     
-    char* instruccion_raw = instruccion[contexto_actual->pid];
+    static int nro_instr = 0;
 
+    char* instruccion_raw = instruccion[nro_instr];
+
+    nro_instr++;
+
+    if(nro_instr >=4)
+        nro_instr=0;
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");
@@ -1277,3 +1484,96 @@ uint32_t pedir_direccion_mmu_mock(uint32_t dir_logica, int tamanio_solicitado) {
     return dir_f;}
 
 
+
+//------ nueva memory stick
+
+void recibir_memory_stick(int socket_ks)
+{
+    int size;
+    void* buffer = recibir_buffer(&size,socket_ks);
+
+
+    // liberar al KS primero
+    enviar_op_code(OK,socket_ks);
+
+
+    t_mem_stick* ms = malloc(sizeof(t_mem_stick));
+
+    int offset=0;
+
+    ms->ip = strdup(buffer+offset);
+    offset += strlen(ms->ip)+1;
+
+
+    ms->puerto = strdup(buffer+offset);
+    offset += strlen(ms->puerto)+1;
+
+
+    memcpy(&ms->base,buffer+offset,sizeof(uint32_t));
+    offset+=sizeof(uint32_t);
+
+
+    memcpy(&ms->tamanio,buffer+offset,sizeof(uint32_t));
+
+
+    ms->socket = crear_conexion_reintentando(
+        ms->ip,
+        ms->puerto,
+        logger,
+        MEMORY_STICK
+    );
+
+
+    if(ms->socket <0)
+    {
+        log_error(logger,"No conecta Memory Stick");
+        return;
+    }
+
+
+    enviar_op_code(NUEVA_MEMORY_STICK,ms->socket);
+
+    if(recibir_op_code(ms->socket)!=OK)
+    {
+        log_error(logger,"Handshake MS falló");
+        return;
+    }
+
+
+    list_add_sorted(
+        sockets->memory_sticks,
+        ms,
+        comparar_base_memory_stick
+    );
+
+    free(buffer);
+}
+
+
+bool comparar_base_memory_stick(void* a, void* b)
+{
+    t_mem_stick* ms1 = a;
+    t_mem_stick* ms2 = b;
+
+    return ms1->base < ms2->base;
+}
+
+bool rango_ocupado(t_mem_stick* nuevo)
+{
+    for(int i=0;i<list_size(sockets->memory_sticks);i++)
+    {
+        t_mem_stick* actual = list_get(sockets->memory_sticks,i);
+
+        uint32_t fin_actual = actual->base + actual->tamanio;
+        uint32_t fin_nuevo = nuevo->base + nuevo->tamanio;
+
+
+        if(nuevo->base < fin_actual &&
+           fin_nuevo > actual->base)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}

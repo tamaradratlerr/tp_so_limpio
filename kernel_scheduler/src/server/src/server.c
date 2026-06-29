@@ -98,6 +98,12 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 mandar_proceso_cpu(cliente_fd);
                 break;
 
+            case NUEVA_MEMORY_STICK:
+
+            recibir_nueva_memory_stick(cliente_fd);
+
+            break;
+
             case NUEVA_IO:
                 // Se conecta una interfaz de IO al Kernel por primera vez
                 nueva_io(cliente_fd); 
@@ -209,6 +215,7 @@ void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs 
     
     list_suplementarias->cpu = list_create();
     list_suplementarias->io = list_create();
+    list_suplementarias->ms= list_create();
     lista_bck_io = list_create();
     
 }
@@ -217,6 +224,7 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     
     list_destroy(list_suplementarias->cpu);
     list_destroy(list_suplementarias->io);
+    list_destroy(list_suplementarias->ms);
     list_destroy(lista_bck_io);
     
 }
@@ -734,6 +742,144 @@ void fin_proceso (int cliente_fd){ /*HACER*/
 
     
 
+}
+
+void recibir_nueva_memory_stick(int socket_km)
+{
+    int size;
+
+    void* buffer = recibir_buffer(&size, socket_km);
+
+
+    t_mem_stick* ms = malloc(sizeof(t_mem_stick));
+
+    int offset = 0;
+
+
+    // IP
+    ms->ip = strdup(buffer + offset);
+    offset += strlen(ms->ip) + 1;
+
+
+    // Puerto
+    ms->puerto = strdup(buffer + offset);
+    offset += strlen(ms->puerto) + 1;
+
+
+    // Base
+    memcpy(
+        &ms->base,
+        buffer + offset,
+        sizeof(uint32_t)
+    );
+
+    offset += sizeof(uint32_t);
+
+
+    // Tamaño
+    memcpy(
+        &ms->tamanio,
+        buffer + offset,
+        sizeof(uint32_t)
+    );
+
+
+    ms->socket = -1; // KS no se conecta
+
+    list_add(list_suplementarias->ms, ms);
+
+    free(buffer);
+
+
+    log_info(logger,
+        "Nueva Memory Stick recibida: IP=%s PUERTO=%s BASE=%u TAM=%u",
+        ms->ip,
+        ms->puerto,
+        ms->base,
+        ms->tamanio
+    );
+
+
+    enviar_memory_stick_a_cpus(ms);
+}
+
+void enviar_memory_stick_a_cpus(t_mem_stick* ms)
+{
+
+    for(int i = 0; i < list_size(list_suplementarias->cpu); i++)
+    {
+
+        t_CPU* cpu = list_get(list_suplementarias->cpu,i);
+
+
+        enviar_op_code(
+            NUEVA_MEMORY_STICK,
+            cpu->fd
+        );
+
+
+        t_paquete* paquete =
+            crear_paquete(NUEVA_MEMORY_STICK);
+
+
+
+        agregar_a_paquete(
+            paquete,
+            ms->ip,
+            strlen(ms->ip)+1
+        );
+
+
+        agregar_a_paquete(
+            paquete,
+            ms->puerto,
+            strlen(ms->puerto)+1
+        );
+
+
+        agregar_a_paquete(
+            paquete,
+            &ms->base,
+            sizeof(uint32_t)
+        );
+
+
+        agregar_a_paquete(
+            paquete,
+            &ms->tamanio,
+            sizeof(uint32_t)
+        );
+
+
+        enviar_paquete(
+            paquete,
+            cpu->fd
+        );
+
+
+        eliminar_paquete(paquete);
+
+
+        // CPU confirma recepción
+        op_code respuesta =
+            recibir_op_code(cpu->fd);
+
+
+        if(respuesta == OK)
+        {
+            log_info(logger,
+                "CPU %d recibió nueva Memory Stick",
+                cpu->identificador
+            );
+        }
+        else
+        {
+            log_error(logger,
+                "CPU %d no confirmó Memory Stick",
+                cpu->identificador
+            );
+        }
+    }
 }
 
 //DESALOJO,

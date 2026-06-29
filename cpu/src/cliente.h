@@ -8,9 +8,23 @@ typedef struct {
 } t_proceso_ejec;
 
 typedef struct {
+
     int conexion_kernel_memory;
     int conexion_kernel_scheduler;
-    int conexion_memory_stick;
+
+    t_list* memory_sticks;
+
+    char* ip_kernel_memory;
+    char* puerto_kernel_memory;
+
+    char* ip_kernel_scheduler;
+    char* puerto_kernel_scheduler;
+    char* puerto_kernel_scheduler_dispatch;
+    char* puerto_kernel_scheduler_interrupt;
+
+    char* ip_memory_stick;
+    char* puerto_memory_stick;
+
 } t_cpu_sockets;
 
 /*----- VARIABLES -----*/
@@ -40,6 +54,8 @@ extern char* identificador;
 
 extern int control_loop00;
 extern int control_loop;
+
+
 
 /*------ PROTOTIPOS DE FUNCIONES ------*/
 // Funciones Administrativas

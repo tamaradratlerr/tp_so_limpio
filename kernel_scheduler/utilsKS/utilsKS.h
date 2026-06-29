@@ -44,6 +44,7 @@ typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs co
     
     t_list* cpu;
     t_list* io;
+    t_list* ms;
 
 }t_listas_suplementarias;
 

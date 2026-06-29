@@ -1350,7 +1350,7 @@ void io_sleep(int socket_cpu) {
         enviar_op_code(NOTOK, socket_cpu);
     }
 
-    /*----- Mediano Plazo -----*/
+/*----- Mediano Plazo -----*/
     usleep(info_config.tiempo_suspencion);
 
     if (pcb->estado_pcb == BCK){ 
@@ -1726,6 +1726,7 @@ void mem_corrupt (int socket_cliente){ /*HACER*/
 
     mem_corrupt_value = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
+    //madnar a km el ok cuando se desalojó
 } 
 
 void desalojo (int socket_cliente){

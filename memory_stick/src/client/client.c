@@ -15,7 +15,7 @@ void arrancar_cliente_km(void) {
     }
     log_info(logger, "## Conectado a Kernel Memory");
 
-    t_paquete* p_handshake = crear_paquete(NUEVA_MEMORIA_ACUM); 
+    t_paquete* p_handshake = crear_paquete(NUEVA_MEMORY_STICK); 
     agregar_a_paquete(p_handshake, &(ms_globals.memory_size), sizeof(uint32_t));
     enviar_paquete(p_handshake, socket_km);
     eliminar_paquete(p_handshake);

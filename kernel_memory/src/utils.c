@@ -62,6 +62,7 @@ t_contexto* crear_contexto(int pid) {
     
     return ctx;
 }
+
 //MULTIHILO
 void agregar_contexto(int pid) {
 pthread_mutex_lock(&mutex_contextos); //Evitar que 2 hilos toquen la lista al mismo tiempo.
@@ -475,7 +476,7 @@ void conexion_memory_stick(int socket_ms, int socket_kernel_scheduler) {
 
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    t_paquete* paquete = crear_paquete(NUEVA_MEMORIA_ACUM); 
+    t_paquete* paquete = crear_paquete(NUEVA_MEMORY_STICK); 
     agregar_a_paquete(paquete, &memoria_total_sistema, sizeof(uint32_t));
     enviar_paquete(paquete, socket_kernel_scheduler);
     eliminar_paquete(paquete);

@@ -49,6 +49,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     NUEVA_CPU, //Se informa que hay una nueva CPU
     CPU_LIBRE, //Se informa que una CPU no tiene ningun PCB asociado
     NUEVA_MEMORY_STICK,
+    DESCONEXION_MS, //TAMI HACER -> km le manda ks y ks a cpu
 
     // Extras para CPU
     FIN_PROCESO, //Se informa que el proceso que estaba en la CPU finalizo

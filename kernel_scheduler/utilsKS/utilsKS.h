@@ -45,6 +45,7 @@ typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs co
     t_list* cpu;
     t_list* io;
     t_list* ms;
+    t_list* desalojo;
 
 }t_listas_suplementarias;
 
@@ -104,7 +105,9 @@ PCB* crearNuevoProceso_mock(char*, int prioridad, int);
 extern int contador_pid;
 extern t_log* logger;
 extern bool mock;
-extern int mem_corrupt_value;
+extern int* mem_corrupt_value;
+extern int* compactacion_value;
+extern int* scheduler_control_loop;
 
 extern Planificador_Colas_Multinivel* planificador;
 extern char* ip;
@@ -134,6 +137,7 @@ extern pthread_mutex_t sem_procesos_block;
 extern pthread_mutex_t sem_procesos_exit;
 extern pthread_mutex_t sem_procesos_s_block;
 extern pthread_mutex_t sem_procesos_s_ready;
+extern pthread_mutex_t sem_procesos_s_desalojo;
 
 extern pthread_mutex_t mutex_cpus;
 extern pthread_mutex_t mutex_ios;

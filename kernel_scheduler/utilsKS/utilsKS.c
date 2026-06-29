@@ -7,7 +7,9 @@ t_config* config;
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
 int inicio_todo = false;
-int mem_corrupt_value = 0;
+int* mem_corrupt_value = 0;
+int* compactacion_value = 0;
+int* scheduler_control_loop = 1;
 
 
 //ACA PUSE EL MOCK km
@@ -41,6 +43,7 @@ pthread_mutex_t sem_procesos_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_exit = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_s_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_s_ready = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sem_procesos_s_desalojo = PTHREAD_MUTEX_INITIALIZER;
 
 
 pthread_mutex_t mutex_cpus = PTHREAD_MUTEX_INITIALIZER;

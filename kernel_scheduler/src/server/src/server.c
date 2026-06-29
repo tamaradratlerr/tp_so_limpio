@@ -20,6 +20,9 @@ int main(int argc, char *argv[])
     int err = cliente_Kernel_Scheduler (argc, argv);
     if(err != 0){log_debug(logger, "ERROR al inciar cliente");}
     
+    iniciar_listas_suple();
+    Iniciar_listas_procesos();
+
     pthread_mutex_init(&mutex_cpus, NULL);
 
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
@@ -32,7 +35,7 @@ int main(int argc, char *argv[])
 
     log_info(logger, "Servidor listo para recibir clientes");
 
-    while (1) {
+    while (scheduler_control_loop = 1) {
         
         int cliente_fd = esperar_cliente(server_fd, logger);
         
@@ -116,6 +119,10 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 mem_corrupt(cliente_fd);
                 break;
 
+            case COMPACTACION:
+                compactacion(cliente_fd);
+                break;
+
             case gl_IO_SLEEP: {
                 io_sleep(cliente_fd); 
                 break;}
@@ -158,7 +165,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 rta_io_stdout(cliente_fd);
                 break;
             
-            case NUEVO_ESPACIO:
+            case NUEVO_ESPACIO: /*Cambiar*/
                 nuevo_espacio(cliente_fd);
                 break;
             
@@ -216,6 +223,7 @@ void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs 
     list_suplementarias->cpu = list_create();
     list_suplementarias->io = list_create();
     list_suplementarias->ms= list_create();
+    list_suplementarias->desalojo = list_create();
     lista_bck_io = list_create();
     
 }
@@ -225,6 +233,7 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     list_destroy(list_suplementarias->cpu);
     list_destroy(list_suplementarias->io);
     list_destroy(list_suplementarias->ms);
+    list_destroy(list_suplementarias->desalojo);
     list_destroy(lista_bck_io);
     
 }
@@ -448,7 +457,7 @@ espera_io* encontrar_pid_io_bck (int pid) {
 /*-----                     GESTION DE CPUs                     -----*/
 
 
-void mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
+void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
     
     
     pthread_mutex_lock(&mutex_cpus);
@@ -525,7 +534,9 @@ void* control_hilo_quantum(void* arg)
 
     if(pcb->estado_pcb == RNN)
     {
-        enviar_desalojo(pcb->fd_cpu);
+        pthread_mutex_lock(&sem_procesos_s_desalojo);
+        list_add(list_suplementarias->desalojo, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
         log_info(
             logger,
@@ -637,7 +648,9 @@ void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
 
         if(pcb_nuevo->data.prioridad < pcb_running->data.prioridad)
         {
-            enviar_desalojo_CMN(pcb_running->fd_cpu);
+            pthread_mutex_lock(&sem_procesos_s_desalojo);
+            list_add(list_suplementarias->desalojo, pcb_nuevo);
+            pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
             log_info(
                 logger,
@@ -692,16 +705,6 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
     return (io->fd == socket_buscado) && (io->enUso == false);
 }
 
-void enviar_desalojo_CMN(int socket_cliente)
-{
-    enviar_op_code(DESALOJO, socket_cliente);
-
-    log_info(
-        logger,
-        "Enviado DESALOJO a CPU socket %d",
-        socket_cliente
-    );
-}
 
 
 /*-----                     GESTION DE HILOS                     -----*/
@@ -734,6 +737,9 @@ void nueva_cpu (int cliente_fd) {
 //CPU_LIBRE,
 void cpu_libre (int cliente_fd){
 
+    while (compactacion_value == 1){
+        usleep(1000);
+    }
     mandar_proceso_cpu(cliente_fd);
 }
 
@@ -881,18 +887,6 @@ void enviar_memory_stick_a_cpus(t_mem_stick* ms)
         }
     }
 }
-
-//DESALOJO,
-void deslojarTodasCpus() {
-    
-    int cantidad = list_size(list_suplementarias->cpu);
-    
-    for(int i = 0; i < cantidad; i++) {
-        t_CPU cpu = *(t_CPU*)list_get(list_suplementarias->cpu, i); 
-        if (cpu.enUso) { enviar_op_code(DESALOJO, cpu.fd);} 
-    }
-}
-
 
 /*----syscalls de la CPU --- Descripcion de cada una esta en el TP-----*/
     
@@ -1722,31 +1716,65 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (int socket_cliente){ /*HACER*/
+void mem_corrupt (int socket_cliente){ 
 
     mem_corrupt_value = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
     //madnar a km el ok cuando se desalojó
 } 
 
+//COMPACTACION
+void compactacion (int socket_cliente){
+
+    compactacion_value = 1;
+
+}
+
+//DESALOJO
 void desalojo (int socket_cliente){
     
     int pid = recibir_pid(socket_cliente);
     char* cpu_id = recibir_mensaje(socket_cliente, logger);
+    int err;
     if(mem_corrupt_value == 1){
         
-        enviar_op_code(DESALOJO, socket_cliente);
+        enviar_op_code(mem_corrupt, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
 
     }
-    else if ( 1 == 0/*Analizar como hacer con herencia de prioridades*, capaz por pid*/){
+    else if (compactacion_value == 1) {
+        
+        enviar_op_code(COMPACTACION, socket_cliente);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
 
+        while (!list_is_empty(listasProcesos->rnn)){
+            usleep(1000);
+        }
+
+        enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
+        recibir_op_code(info_km.conexion_km);
+        if (err == COMPACTACION_FINALIZADA){
+            compactacion_value = 0;
+        }
+        else {
+            log_info(logger, "## error en resolver compactacion");
+            return;
+        }        
+    }
+    else if (existe_pcb_con_pid(list_suplementarias->desalojo,pid)){
+        
+        enviar_op_code(DESALOJO, socket_cliente);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
+        
+        pthread_mutex_lock(&sem_procesos_s_desalojo);
+        sacar_pcb_por_pid(list_suplementarias->desalojo,pid);
+        pthread_mutex_unlock(&sem_procesos_s_desalojo);
     }
     else {
         enviar_op_code(OK,socket_cliente);
     }
 
-    int err = recibir_op_code(socket_cliente);
+    err = recibir_op_code(socket_cliente);
     if (err == OK){
 
         PCB* pcb = buscar_pcb_por_pid(pid);
@@ -1755,6 +1783,16 @@ void desalojo (int socket_cliente){
         eliminar_proceso_Lista(pcb);
 
         log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
+    }
+
+    if(mem_corrupt == 1){
+        while (!list_is_empty(listasProcesos->rnn)){
+                usleep(1000);
+            }
+        
+        log_info(logger, "Blue Screen");  
+        scheduler_control_loop = 0; //Apaga el Kernel Scheduler
+        return;
     }
 }   
 
@@ -1871,3 +1909,21 @@ void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre 
 
 } 
 
+
+/*Auxiliar*/
+int pid_buscado;
+
+bool tiene_pid(void* elemento) {
+    PCB* pcb = (PCB*) elemento;
+    return pcb->data.PID == pid_buscado;
+}
+
+bool existe_pcb_con_pid(t_list* lista, int pid) {
+    pid_buscado = pid;
+    return list_any_satisfy(lista, tiene_pid);
+}
+
+PCB* sacar_pcb_por_pid(t_list* lista, int pid) {
+    pid_buscado = pid;
+    return list_remove_by_condition(lista, tiene_pid);
+}

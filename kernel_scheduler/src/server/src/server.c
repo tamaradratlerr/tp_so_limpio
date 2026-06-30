@@ -909,6 +909,14 @@ void mutex_create (int socket_cliente){
     
     list_add(lista_mutex, mutex);
 
+    /*Bloqueo y Desalojo*/
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    cambiar_estado_pcb(pcb,BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    list_add(list_suplementarias->desalojo, pcb);
+
     enviar_op_code(OK, socket_cliente);
         
 }
@@ -937,8 +945,6 @@ void mutex_lock (int socket_cliente){
         return;
         }
 
-
-
         pthread_mutex_lock(&mutex_simulados);
         list_add(mutex->cola_mutex, pid_guardado);
         if(mutex->dueño_actual != NULL)
@@ -947,7 +953,16 @@ void mutex_lock (int socket_cliente){
         }
         pthread_mutex_unlock(&mutex_simulados);
 
-        
+        /*Bloqueo y Desalojo*/
+        PCB* pcb = buscar_pcb_por_pid(pid);
+        cambiar_estado_pcb(pcb,BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        list_add(list_suplementarias->desalojo, pcb);
+
+        enviar_op_code(OK, socket_cliente);
+
         while (1)
     {
         pthread_mutex_lock(&mutex_simulados);
@@ -966,7 +981,7 @@ void mutex_lock (int socket_cliente){
                             "## PID:[%d] Toma el mutex:[%s]",
                             pid,
                             mutex_id);
-                PCB* pcb = buscar_pcb_por_pid(pid);
+                pcb = buscar_pcb_por_pid(pid);
 
                 mutex->dueño_actual = pcb;
 
@@ -996,8 +1011,11 @@ void mutex_lock (int socket_cliente){
         usleep(1000);
     }
 
-        free(mutex_id);
-        enviar_op_code(OK, socket_cliente); 
+        cambiar_estado_pcb(pcb,RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        free(mutex_id); 
 }
 
 //MUTEX_UNLOK,
@@ -1008,6 +1026,16 @@ void mutex_unlock (int socket_cliente){
         int pid = recibir_pid(socket_cliente);
         char* mutex_id = recibir_mensaje (socket_cliente, logger);
         log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
+
+        /*Bloqueo y Desalojo*/
+        PCB* pcb = buscar_pcb_por_pid(pid);
+        cambiar_estado_pcb(pcb,BCK);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        list_add(list_suplementarias->desalojo, pcb);
+
+        enviar_op_code(OK, socket_cliente);
 
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
@@ -1054,8 +1082,9 @@ void mutex_unlock (int socket_cliente){
             mutex->dueño_actual = NULL;
             log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
             
-            enviar_op_code(OK, socket_cliente);
-            
+            cambiar_estado_pcb(pcb,RDY);
+            agregar_proceso_lista(pcb);
+            eliminar_proceso_Lista(pcb);
 
         }
         else{
@@ -1082,8 +1111,17 @@ void mem_alloc (int socket_cliente){//Hacer
 
 
     int pid = recibir_pid(socket_cliente);
-    enviar_op_code(OK,socket_cliente);
-    
+   
+    /*Bloqueo y Desalojo*/
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    cambiar_estado_pcb(pcb,BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    list_add(list_suplementarias->desalojo, pcb);
+
+    enviar_op_code(OK, socket_cliente);
+
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
 
     /*Le envamos la DATA a la Kernel Memory*/
@@ -1108,6 +1146,10 @@ void mem_alloc (int socket_cliente){//Hacer
 
     int base = recibir_pid(info_km.conexion_km);
     enviar_pid(base, socket_cliente);
+
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
 
 }; 
 
@@ -1223,6 +1265,14 @@ void mem_free (int socket_cliente){// Hacer
     enviar_op_code(OK,socket_cliente);
 
     int pid = recibir_pid(socket_cliente);
+
+    /*Bloqueo y Desalojo*/
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    cambiar_estado_pcb(pcb,BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    list_add(list_suplementarias->desalojo, pcb);
     enviar_op_code(OK, socket_cliente); 
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
@@ -1243,6 +1293,9 @@ void mem_free (int socket_cliente){// Hacer
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);
     }
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
 } 
 //INIT PROC
 void init_proc(int socket_cliente){
@@ -1254,7 +1307,16 @@ void init_proc(int socket_cliente){
     int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
     log_info(logger, "## PID:[%d] Solicito Syscall: [Init Proc]", pid); /*Logger Obligatorio*/
 
-    
+    /*Bloqueo y Desalojo*/
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    cambiar_estado_pcb(pcb,BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    list_add(list_suplementarias->desalojo, pcb);
+
+    enviar_op_code(OK,socket_cliente);
+
     log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
 
     PCB* nuevo_pcb; 
@@ -1275,8 +1337,12 @@ void init_proc(int socket_cliente){
         agregar_proceso_lista (nuevo_pcb);    
     }
 
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
     list_destroy(lista);
-    enviar_op_code(OK,socket_cliente);
+    
                 
 }
 //EXIT
@@ -1285,6 +1351,15 @@ void exit_proceso(int socket_cpu){
     t_list* lista = recibir_paquete(socket_cpu);
     int pid_a_finalizar = *(int*)list_get(lista, 0);
     list_destroy(lista);
+
+    /*Bloqueo y Desalojo*/
+    PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
+    cambiar_estado_pcb(pcb,BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    list_add(list_suplementarias->desalojo, pcb);
+    enviar_op_code(OK, socket_cpu);
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Exit]", pid_a_finalizar); /*Logger Obligatorio*/
 
@@ -1301,7 +1376,10 @@ void exit_proceso(int socket_cpu){
     }
 
     log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
-    enviar_op_code(OK, socket_cpu);
+    
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
     
 }
 
@@ -1319,6 +1397,7 @@ void io_sleep(int socket_cpu) {
     log_info(logger, "## PID:[%d] Solicito Syscall: [Sleep]", pid_a_bloquear); /*Logger Obligatorio*/
 
     PCB* pcb = buscar_pcb_por_pid(pid_a_bloquear);
+
     
     if (pcb != NULL) {
         
@@ -1326,6 +1405,8 @@ void io_sleep(int socket_cpu) {
         cambiar_estado_pcb(pcb, BCK);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+
+        list_add(list_suplementarias->desalojo, pcb);
         
         /**/
         espera_io* io_pcb = malloc(sizeof(espera_io));
@@ -1439,6 +1520,8 @@ void io_stdin(int socket_cpu) {
         cambiar_estado_pcb(pcb, BCK);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+
+        list_add(list_suplementarias->desalojo, pcb);
         
         /**/
         espera_io* io_pcb = malloc(sizeof(espera_io));
@@ -1559,7 +1642,9 @@ void io_stdout(int cpu_socket) {
     cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
-    
+
+    list_add(list_suplementarias->desalojo, pcb);
+
     espera_io* io_pcb = NULL;
     if(!mock){
         /*Le solicitamos los Datos de la KM*/
@@ -1778,9 +1863,13 @@ void desalojo (int socket_cliente){
     if (err == OK){
 
         PCB* pcb = buscar_pcb_por_pid(pid);
-        cambiar_estado_pcb(pcb,RDY);
-        agregar_proceso_lista(pcb);
-        eliminar_proceso_Lista(pcb);
+        
+        if(pcb->estado_pcb == RNN){
+            cambiar_estado_pcb(pcb,RDY);
+            agregar_proceso_lista(pcb);
+            eliminar_proceso_Lista(pcb);
+        }
+        
 
         log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
     }

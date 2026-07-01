@@ -67,7 +67,7 @@ int main(int argc, char** argv)
 			}
 
 			enviar_pid(pid, fd_conexion);
-			list_destroy(lista);
+			list_destroy_and_destroy_elements(lista, free);
 			break;
     	}
 
@@ -83,8 +83,19 @@ int main(int argc, char** argv)
 
 			log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
 			
-			char* buffer_usuario = malloc(bytes_a_leer);
-			read(STDIN_FILENO, buffer_usuario, bytes_a_leer);
+			char* entrada = malloc(bytes_a_leer + 2);   // +2 por '\n' y '\0'
+			char* buffer_usuario = calloc(bytes_a_leer, 1); // queda lleno de '\0'
+
+			fgets(entrada, bytes_a_leer + 2, stdin);
+
+			// sacar el '\n' si quedó
+			entrada[strcspn(entrada, "\n")] = '\0';
+
+			// copiar solamente la cantidad solicitada
+			memcpy(buffer_usuario, entrada,
+			strlen(entrada) < bytes_a_leer ? strlen(entrada) : bytes_a_leer);
+
+			free(entrada);
 
 			enviar_op_code(IO_STDIN, fd_conexion);
 			if(recibir_op_code(fd_conexion) != OK){
@@ -101,7 +112,7 @@ int main(int argc, char** argv)
 			enviar_paquete(paquete_retorno, fd_conexion); 
 			
 			free(buffer_usuario);
-			list_destroy(lista);
+			list_destroy_and_destroy_elements(lista, free);
 			eliminar_paquete(paquete_retorno);
         	break;
     	}
@@ -117,8 +128,11 @@ int main(int argc, char** argv)
         void* datos_imprimir = list_get(lista, 2);
 
         log_info(logger, "## PID: %u - Operación STDOUT.", pid);
-        write(STDOUT_FILENO, datos_imprimir, tam);
-        printf("\n");
+
+		write(STDOUT_FILENO, datos_imprimir, tam);
+		printf("\n");
+
+		log_info(logger, "Contenido: %.*s", tam, (char*)datos_imprimir);
 
 		enviar_op_code(IO_STDIN, fd_conexion);
 		if(recibir_op_code(fd_conexion) != OK){
@@ -128,7 +142,7 @@ int main(int argc, char** argv)
 		
         enviar_pid(pid,fd_conexion);
         
-        list_destroy(lista);
+        list_destroy_and_destroy_elements(lista, free);
         break;
     }
 

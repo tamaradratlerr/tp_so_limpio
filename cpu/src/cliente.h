@@ -35,7 +35,7 @@ t_contexto* contexto_actual             = NULL;
 t_instruccion* instruccion_decodificada = NULL;
 t_cpu_sockets* sockets                  = NULL;
 t_proceso_ejec* proceso_en_ejecucion    = NULL;
-config_cpu* cpu_config = NULL;
+t_config_cpu* config_cpu = NULL;
 
 char* identificador                     = NULL; 
 
@@ -44,7 +44,7 @@ int control_loop                        = 0;
 
 
 /*----- EXTERN -----*/
-extern config_cpu* cpu_config;
+extern t_config_cpu* config_cpu;
 extern t_config* config; 
 extern t_log* logger;
 extern t_contexto* contexto_actual;
@@ -63,7 +63,7 @@ extern int control_loop;
 
 //--- Funciones Administrativas ---//
 t_log* iniciar_logger(t_log_level log_level);
-int iniciar_log_config (int archivo_config, char* identificador);
+int iniciar_log_config(char* archivo_config, char* identificador);
 void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets);
 
 //--- Conexiones ---//
@@ -74,7 +74,7 @@ int conexion_kernelS(t_config* config, t_log* logger, module_name module);
 char* fetch(t_cpu_sockets* sockets);
 int decode(char* instruccion_raw);
 void execute();
-int interrupt();
+void interrupt();
 
 //--- Funciones Complementarias para Ciclo de Instruccion ---//
 t_contexto* recibir_contexto(int socket_km);

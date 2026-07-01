@@ -66,7 +66,7 @@ void io_libre(int fd);
 void mem_corrupt(int fd);
 void compactacion (int socket_cliente);
 void recibir_nueva_memory_stick(int socket_km);
-
+void nuevo_espacio();
 /*----- HERENCIA -----*/
 
 void actualizar_herencia(mutex_cpu* mutex);

@@ -19,13 +19,13 @@ int main(int argc, char *argv[])
     /*---Iniciando Log y Config---*/
     char* archivo_config = argv[1];
     identificador = argv[2];
-    cpu_config = malloc(sizeof(config_cpu));
+    config_cpu = malloc(sizeof(config_cpu));
     
     iniciar_log_config(archivo_config, identificador);
-    cpu_config->tiempo_instruccion =
+    config_cpu->tiempo_instruccion =
     config_get_int_value(config, "TIEMPO_INSTRUCCION");
 
-    cpu_config->tam_max_segmento =
+    config_cpu->tam_max_segmento =
     config_get_int_value(config, "TAM_MAX_SEGMENTO");
 
     if (logger == NULL || config == NULL) {
@@ -145,8 +145,7 @@ t_log* iniciar_logger(t_log_level log_level)
     return nuevo_logger;
 }
 
-int iniciar_log_config (int archivo_config, char* identificador){
-    
+int iniciar_log_config(char* archivo_config, char* identificador){    
     sockets = malloc(sizeof(t_cpu_sockets));
     sockets->memory_sticks = list_create();
     proceso_en_ejecucion = malloc(sizeof(t_proceso_ejec));
@@ -393,7 +392,7 @@ void execute() {
     
 }
 
-int interrupt() { 
+void interrupt() { 
     enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
     enviar_pid (contexto_actual->pid,sockets->conexion_kernel_scheduler);
     enviar_mensaje (identificador, sockets->conexion_kernel_scheduler);
@@ -967,8 +966,7 @@ void ejecutar_mem_free (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
-    eliminar_segmento((int*)id_segmento);
-
+    eliminar_segmento(atoi(id_segmento));
 }
 
 void ejecutar_sleep(t_instruccion* instr) {
@@ -1117,7 +1115,7 @@ void crear_segmento(int id, int tamanio, int base){
 
 void eliminar_segmento(int id) {
 
-    id_buscado = id;
+    int id_buscado = id;
 
     t_segmento* segmento_a_eliminar = list_remove_by_condition(
         contexto_actual->tabla_segmentos,
@@ -1149,10 +1147,10 @@ t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica) {
 
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado)
 {
-    uint32_t id_segmento = dir_logica / tam_max_segmento;
-    uint32_t desplazamiento = dir_logica % tam_max_segmento;
+    uint32_t id_segmento = dir_logica / config_cpu -> tam_max_segmento;
+    uint32_t desplazamiento = dir_logica % config_cpu -> tam_max_segmento;
 
-    id_buscado = id_segmento;
+    int id_buscado = id_segmento;
 
     t_segmento* segmento =
         list_find(contexto_actual->tabla_segmentos, tiene_mismo_id);
@@ -1260,7 +1258,7 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
     return buffer_total;
 }
 
-int escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
+void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
 {
     int bytes_restantes = tamanio;
     uint32_t direccion_actual = dir_fisica;

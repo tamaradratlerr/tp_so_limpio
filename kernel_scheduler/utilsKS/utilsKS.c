@@ -7,9 +7,9 @@ t_config* config;
 int intervalo_tarea = 0;
 int tiempo_suspencion = 0;
 int inicio_todo = false;
-int* mem_corrupt_value = 0;
-int* compactacion_value = 0;
-int* scheduler_control_loop = 1;
+int mem_corrupt_value = 0;
+int compactacion_value = 0;
+int scheduler_control_loop = 1;
 
 
 //ACA PUSE EL MOCK km

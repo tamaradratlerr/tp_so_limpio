@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 
     log_info(logger, "Servidor listo para recibir clientes");
 
-    while (scheduler_control_loop = 1) {
+    while (scheduler_control_loop == 1) {
         
         int cliente_fd = esperar_cliente(server_fd, logger);
         
@@ -754,10 +754,10 @@ void desalojo (int socket_cliente){
     
     int pid = recibir_pid(socket_cliente);
     char* cpu_id = recibir_mensaje(socket_cliente, logger);
-    int err;
+    op_code err = OK;
     if(mem_corrupt_value == 1){
         
-        enviar_op_code(mem_corrupt, socket_cliente);
+        enviar_op_code(MEM_CORRUPT, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
 
     }
@@ -771,7 +771,7 @@ void desalojo (int socket_cliente){
         }
 
         enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
-        recibir_op_code(info_km.conexion_km);
+        err = recibir_op_code(info_km.conexion_km);
         if (err == COMPACTACION_FINALIZADA){
             compactacion_value = 0;
             nuevo_espacio();
@@ -809,7 +809,7 @@ void desalojo (int socket_cliente){
         log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
     }
 
-    if(mem_corrupt == 1){
+    if (mem_corrupt_value == 1){
         while (!list_is_empty(listasProcesos->rnn)){
                 usleep(1000);
             }
@@ -1691,8 +1691,8 @@ void exit_proceso(int socket_cpu){
 
     if(!mock){enviar_proceso_finalizar_KM(pid_a_finalizar);}
     else{enviar_proceso_finalizar_KM_mock(pid_a_finalizar);}
+ 
     
-    PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
     if (pcb != NULL) {
         cambiar_estado_pcb(pcb, EXT);
         agregar_proceso_lista (pcb);
@@ -1744,7 +1744,7 @@ void io_sleep(int socket_cpu) {
         enviar_op_code(NOTOK, socket_cpu);
     }
 
-    mediano_plazo(pcb);
+    mediano_plazo_rdy(pcb);
 }
 
 void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un SLEEP de un proceso

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <commons/string.h>
 #include <stdint.h>
 #include <commons/log.h>
 #include <errno.h>

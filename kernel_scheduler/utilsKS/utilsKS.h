@@ -105,9 +105,9 @@ PCB* crearNuevoProceso_mock(char*, int prioridad, int);
 extern int contador_pid;
 extern t_log* logger;
 extern bool mock;
-extern int* mem_corrupt_value;
-extern int* compactacion_value;
-extern int* scheduler_control_loop;
+extern int mem_corrupt_value;
+extern int compactacion_value;
+extern int scheduler_control_loop;
 
 extern Planificador_Colas_Multinivel* planificador;
 extern char* ip;

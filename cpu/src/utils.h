@@ -33,6 +33,6 @@ typedef struct {
     uint32_t tiempo_instruccion;
     uint32_t tam_max_segmento;
 
-} config_cpu;
+}t_config_cpu;
 
 #endif /* UTILS_H_ */

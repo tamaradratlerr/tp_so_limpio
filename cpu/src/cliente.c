@@ -19,9 +19,15 @@ int main(int argc, char *argv[])
     /*---Iniciando Log y Config---*/
     char* archivo_config = argv[1];
     identificador = argv[2];
-
+    cpu_config = malloc(sizeof(config_cpu));
+    
     iniciar_log_config(archivo_config, identificador);
-      
+    cpu_config->tiempo_instruccion =
+    config_get_int_value(config, "TIEMPO_INSTRUCCION");
+
+    cpu_config->tam_max_segmento =
+    config_get_int_value(config, "TAM_MAX_SEGMENTO");
+
     if (logger == NULL || config == NULL) {
         printf("Error al Inciar Logger o Config");
         return EXIT_FAILURE;
@@ -1141,42 +1147,34 @@ t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica) {
     return NULL;
 }
 
-uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado) {
-   
- int id_segmento = 0;
-   
-    if (dir_logica < 10){
-        id_segmento = (dir_logica / 1);
-   }
-   else if (dir_logica < 100){
-        id_segmento = (dir_logica / 10);
-   }
-   else if (dir_logica < 1000){
-        id_segmento = (dir_logica / 100);
-   }
-   else {
-        id_segmento = (dir_logica / 1000);
-   }
-    
-   id_buscado = id_segmento;
-   t_segmento* segmento = list_find(contexto_actual->tabla_segmentos,tiene_mismo_id);
-    
-    if(segmento == NULL){
-    log_error(logger,"Segmento inexistente");
-    return ERROR_SEGMENTATION_FAULT;
-    }
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado)
+{
+    uint32_t id_segmento = dir_logica / tam_max_segmento;
+    uint32_t desplazamiento = dir_logica % tam_max_segmento;
 
-    int desplazamiento = dir_logica % segmento->tamanio;
-    
-    if ((desplazamiento + tamanio_solicitado) >segmento->tamanio) {
-        log_error(logger, "SEG_FAULT: Acceso fuera de limites en PID %d", proceso_en_ejecucion->pid);
-        enviar_op_code(ERROR_SEGMENTATION_FAULT,sockets->conexion_kernel_scheduler);
+    id_buscado = id_segmento;
+
+    t_segmento* segmento =
+        list_find(contexto_actual->tabla_segmentos, tiene_mismo_id);
+
+    if(segmento == NULL){
+        log_error(logger, "Segmento inexistente");
         return ERROR_SEGMENTATION_FAULT;
     }
 
-    uint32_t dir_fisica = segmento->base + desplazamiento;
-    
-    return dir_fisica;
+    if(desplazamiento + tamanio_solicitado > segmento->tamanio){
+
+        log_error(logger,
+                  "SEG_FAULT: Acceso fuera de límites. PID: %u",
+                  proceso_en_ejecucion->pid);
+
+        enviar_op_code(ERROR_SEGMENTATION_FAULT,
+                       sockets->conexion_kernel_scheduler);
+
+        return ERROR_SEGMENTATION_FAULT;
+    }
+
+    return segmento->base + desplazamiento;
 }
 
 uint32_t obtener_direccion_del_registro(char* reg) {

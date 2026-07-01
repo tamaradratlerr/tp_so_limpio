@@ -35,6 +35,7 @@ t_contexto* contexto_actual             = NULL;
 t_instruccion* instruccion_decodificada = NULL;
 t_cpu_sockets* sockets                  = NULL;
 t_proceso_ejec* proceso_en_ejecucion    = NULL;
+config_cpu* cpu_config = NULL;
 
 char* identificador                     = NULL; 
 
@@ -43,6 +44,7 @@ int control_loop                        = 0;
 
 
 /*----- EXTERN -----*/
+extern config_cpu* cpu_config;
 extern t_config* config; 
 extern t_log* logger;
 extern t_contexto* contexto_actual;

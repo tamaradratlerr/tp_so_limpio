@@ -28,4 +28,11 @@ typedef struct {
     int cant_params;
 } t_instruccion;
 
+typedef struct {
+
+    uint32_t tiempo_instruccion;
+    uint32_t tam_max_segmento;
+
+} config_cpu;
+
 #endif /* UTILS_H_ */

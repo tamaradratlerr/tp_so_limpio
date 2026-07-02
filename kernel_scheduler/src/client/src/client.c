@@ -28,6 +28,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	info_config.tiempo_suspencion = config_get_int_value(config, "SUSPENSION_TIMEOUT");
 
 	logger = iniciar_logger(log_level);
+	log_info(logger, "Logger iniciado correctamente");
 
 
 	/* planificación */
@@ -102,12 +103,12 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	// Enviamos al servidor el valor de CLAVE como mensaje
 	if(mock)
 	{
-		crearNuevoProceso_mock(archivo_config, 1, info_km.conexion_km);
+		crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
 	}
 
 	else
 	{
-		crearNuevoProceso(archivo_config, 1, info_km.conexion_km);}
+		crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);}
 	
 	return 0;
 	

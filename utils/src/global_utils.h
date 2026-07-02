@@ -264,6 +264,8 @@ const char* getModuleName(module_name module);
 
 void enviar_mensaje(char* mensaje, int socket_cliente);
 
+void enviar_buffer(void *buffer, int size, int socket_cliente);
+
 void* serializar_paquete(t_paquete* paquete, int bytes);
 
 t_paquete* crear_paquete(op_code codigo);

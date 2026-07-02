@@ -38,6 +38,12 @@ int main(int argc, char** argv)
 	fd_conexion = crear_conexion(io_ip, io_port, logger, KERNEL_SCHEDULER);
 
 	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
+	enviar_op_code(NUEVA_IO,fd_conexion);
+	enviar_mensaje(io,fd_conexion);
+	int err = recibir_op_code(fd_conexion);
+	if(err != OK){
+		log_error(logger, "Error en HandShake con KS");
+	}
 	log_info(logger, "Esperando peticiones IO desde %s", getModuleName(KERNEL_SCHEDULER));
 	
 	while (1)
@@ -151,7 +157,7 @@ int main(int argc, char** argv)
 
 			log_error(logger, "El cliente se desconectó");
 			close(fd_conexion);
-			return NULL;
+			return EXIT_FAILURE;
 
 		default:
 			log_warning(logger,"IO desconocida.");
@@ -172,19 +178,6 @@ int main(int argc, char** argv)
  *	Funciones	*
  ****************
 */
-
-t_config* iniciar_config(char* path)
-{
-	t_config* nuevo_config;
-
-	nuevo_config = config_create(path);
-
-    if (nuevo_config == NULL) {
-        printf("¡No se pudo crear el config!\n");
-        abort();
-    }
-	return nuevo_config;
-}
 
 t_log* iniciar_logger(char *log_level, char* file, char* process_name, char* is_active_console) //Ingreso valor del t_log_level para configurar la salida del mismo
 {

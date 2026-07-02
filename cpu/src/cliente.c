@@ -44,18 +44,20 @@ int main(int argc, char *argv[])
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
     op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory);
     
-    if(handshake_km != 1){
-        log_error(logger, "Error en HandShake con Kernel Memory.");
+    if(handshake_km != OK){
+        log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
         return EXIT_FAILURE;
     }
     }
        
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
+    log_debug(logger, "Enviando OP_CODE [NUCA_CPU]");
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_scheduler);
+    enviar_mensaje(identificador,sockets->conexion_kernel_scheduler);
     op_code handshake_ks = recibir_op_code(sockets->conexion_kernel_scheduler);
     
-    if(handshake_ks != 1){
-        log_error(logger, "Error en HandShake con Kernel Scheduler.");
+    if(handshake_ks != OK){
+        log_error(logger, "Error en HandShake con Kernel Scheduler valor OP_CODE: [%d]",handshake_ks);
         return EXIT_FAILURE;
     }
 
@@ -82,6 +84,7 @@ int main(int argc, char *argv[])
     {
         int contexto_key = 0;
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
+        log_info(logger,"Enviado CPU LIBRE");
         proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
         contexto_key++;
 

@@ -325,11 +325,14 @@ t_list *recibir_paquete(int socket_cliente)
 
 void enviar_mensaje(char *mensaje, int socket_cliente)
 {
-    t_paquete *paquete = crear_paquete(MENSAJE);
-    // +1 para incluir el '\0'
-    agregar_a_paquete(paquete, mensaje, strlen(mensaje) + 1);
-    enviar_paquete(paquete, socket_cliente);
-    eliminar_paquete(paquete);
+    int size = strlen(mensaje) + 1;   // +1 para incluir el '\0'
+    enviar_buffer(mensaje, size, socket_cliente);
+}
+
+void enviar_buffer(void *buffer, int size, int socket_cliente)
+{
+    send(socket_cliente, &size, sizeof(int), MSG_WAITALL);
+    send(socket_cliente, buffer, size, MSG_WAITALL);
 }
 
 void enviar_op_code(op_code code_op, int socket_cliente)
@@ -342,8 +345,13 @@ char *recibir_mensaje(int socket_cliente, t_log *logger)
 {
     int size;
     char *buffer = recibir_buffer(&size, socket_cliente);
-    log_info(logger, "Me llego el mensaje %s", buffer);
 
+    if (buffer == NULL) {
+        log_warning(logger, "Se perdió la conexión al intentar recibir un mensaje");
+        return NULL;
+    }
+
+    log_info(logger, "Me llego el mensaje %s", buffer);
     return buffer;
 } // HAY QUE LIBERAR LA MEMORIA DSP DE LLAMAR A ESTA FUNCION
 

@@ -3,11 +3,6 @@
 #include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
 
-
-
-
-
-
 int main(int argc, char *argv[])
 {
 
@@ -16,25 +11,28 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-
-    int err = cliente_Kernel_Scheduler (argc, argv);
-    if(err != 0){log_debug(logger, "ERROR al inciar cliente");}
+    printf("Iniciando Cliente\n");
+    int err = cliente_Kernel_Scheduler(argc, argv);
+    if(err != 0){log_error(logger, "ERROR al inciar cliente");}
     
     
 
     iniciar_listas_suple();
+    log_info(logger, "Listas Suplementarias Iniciadas");
     Iniciar_listas_procesos();
+    log_info(logger,"Listas de Procesos Iniciadas");
 
     pthread_mutex_init(&mutex_cpus, NULL);
 
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
+    /*
     if(mock)
     {
-        prueba_mediano_plazo();
+        prueba_mediano_plazo_mock();
     }
-    //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
+    */
 
     int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
 
@@ -88,8 +86,9 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
         
         int op_code = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
+        log_info(logger,"Se recibio el OP_CODE: [%d]", op_code);
         if(op_code == -1){
-            log_info(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
+            log_error(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
             control_loop = 0;
             return NULL ;
         }
@@ -685,46 +684,6 @@ bool usa_quantum (PCB* pcb)
 
    /*----- Mediano Plazo -----*/
 
-void prueba_mediano_plazo()
-{
-    log_info(logger, "===== PRUEBA MEDIANO PLAZO =====");
-
-    PCB* pcb = iniciar_pcb(0, 1);
-
-    log_info(logger, "PCB creado. PID: %d", pcb->data.PID);
-
-    // Simulamos que el proceso entra en BLOCK
-    cambiar_estado_pcb(pcb, BCK);
-    agregar_proceso_lista(pcb);
-
-    log_info(logger, "Proceso agregado a BLOCK");
-
-    pthread_t hilo;
-
-    if (pthread_create(&hilo, NULL, (void*)mediano_plazo_bck, pcb) != 0)
-    {
-        log_error(logger, "Error al crear hilo de mediano plazo");
-        return;
-    }
-
-    log_info(logger, "Hilo de mediano plazo creado");
-
-    pthread_join(hilo, NULL);
-
-    log_info(logger, "Hilo finalizado");
-
-    // Simulamos que terminó la IO
-    mediano_plazo_rdy(pcb);
-
-    log_info(logger, "Proceso pasó a SUSP_READY");
-
-    // Simulamos que apareció memoria disponible
-    nuevo_espacio();
-
-    log_info(logger, "Fin prueba mediano plazo");
-}
-
-
 void mediano_plazo_bck(PCB* pcb){
  
     if(pcb->estado_pcb != BCK){return;}
@@ -809,10 +768,13 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
 //NUEVA_CPU,
 void nueva_cpu (int cliente_fd) {
 
+    
         t_CPU* info_cpu = malloc(sizeof(t_CPU));
 
         info_cpu->fd = cliente_fd;         
-        info_cpu->enUso = false;    
+        info_cpu->enUso = false;   
+        info_cpu->identificador = (int*)recibir_mensaje(cliente_fd, logger);
+         
                     
         pthread_mutex_lock(&mutex_cpus);
         list_add(list_suplementarias->cpu, info_cpu);
@@ -1471,6 +1433,45 @@ void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre 
     io_pcb->iostdout.info = "5555";
 
 } 
+
+void prueba_mediano_plazo_mock()
+{
+    log_info(logger, "===== PRUEBA MEDIANO PLAZO =====");
+
+    PCB* pcb = iniciar_pcb(0, 1);
+
+    log_info(logger, "PCB creado. PID: %d", pcb->data.PID);
+
+    // Simulamos que el proceso entra en BLOCK
+    cambiar_estado_pcb(pcb, BCK);
+    agregar_proceso_lista(pcb);
+
+    log_info(logger, "Proceso agregado a BLOCK");
+
+    pthread_t hilo;
+
+    if (pthread_create(&hilo, NULL, (void*)mediano_plazo_bck, pcb) != 0)
+    {
+        log_error(logger, "Error al crear hilo de mediano plazo");
+        return;
+    }
+
+    log_info(logger, "Hilo de mediano plazo creado");
+
+    pthread_join(hilo, NULL);
+
+    log_info(logger, "Hilo finalizado");
+
+    // Simulamos que terminó la IO
+    mediano_plazo_rdy(pcb);
+
+    log_info(logger, "Proceso pasó a SUSP_READY");
+
+    // Simulamos que apareció memoria disponible
+    nuevo_espacio();
+
+    log_info(logger, "Fin prueba mediano plazo");
+}
 
 
 /*-----     Syscalls CPU     -----*/

@@ -100,8 +100,14 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
-	if(mock){crearNuevoProceso_mock(archivo_config, 1, info_km.conexion_km);}
-	else{crearNuevoProceso(archivo_config, 1, info_km.conexion_km);}
+	if(mock)
+	{
+		crearNuevoProceso_mock(archivo_config, 1, info_km.conexion_km);
+	}
+
+	else
+	{
+		crearNuevoProceso(archivo_config, 1, info_km.conexion_km);}
 	
 	return 0;
 	

@@ -174,6 +174,7 @@ PCB* crearNuevoProceso_mock(char*, int prioridad, int){
 
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default) {
     planificador = malloc(sizeof(Planificador_Colas_Multinivel));
+    
     planificador->cantidad_niveles = total_colas;
     planificador->preemption = info_config.preemption;
     planificador->niveles = malloc(sizeof(ColaPrioridad) * total_colas);

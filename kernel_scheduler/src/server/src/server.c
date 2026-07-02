@@ -20,6 +20,8 @@ int main(int argc, char *argv[])
     int err = cliente_Kernel_Scheduler (argc, argv);
     if(err != 0){log_debug(logger, "ERROR al inciar cliente");}
     
+    
+
     iniciar_listas_suple();
     Iniciar_listas_procesos();
 
@@ -28,7 +30,10 @@ int main(int argc, char *argv[])
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
-
+    if(mock)
+    {
+        prueba_mediano_plazo();
+    }
     //no hay logger aca porque cliente y servidor lo comparten (esta en cliente)
 
     int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
@@ -375,20 +380,26 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
     return OK; 
 }
 
-int agregar_lista_ready(PCB* pcb){ /*Funcion que AGREGA un PCB a la lista de READYS a partir de un ALGORITMO de PLANIFICACION*/
-
+int agregar_lista_ready(PCB* pcb)
+{
     int posicion;
-    
-    if (strcmp(planificacion_algoritmo, "FIFO") == 0 || strcmp(planificacion_algoritmo, "RR") == 0) {
+
+    if (strcmp(info_config.planificacion_algoritmo, "FIFO") == 0 ||
+        strcmp(info_config.planificacion_algoritmo, "RR") == 0)
+    {
         posicion = ready_FIFO(pcb);
-    } 
-    else if (strcmp(planificacion_algoritmo, "CMN") == 0) {
+    }
+    else if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
+    {
         posicion = ready_CMN(pcb);
     }
-    else {
-        log_error (logger, "Error al identificar algoritmo de planificacion (funcion agregar_lista_ready)");
-    return -1;
+    else
+    {
+        log_error(logger,
+                  "Error al identificar algoritmo de planificación");
+        return -1;
     }
+
     return posicion;
 }
 
@@ -671,11 +682,54 @@ bool usa_quantum (PCB* pcb)
     return false;
 }
 
+
+   /*----- Mediano Plazo -----*/
+
+void prueba_mediano_plazo()
+{
+    log_info(logger, "===== PRUEBA MEDIANO PLAZO =====");
+
+    PCB* pcb = iniciar_pcb(0, 1);
+
+    log_info(logger, "PCB creado. PID: %d", pcb->data.PID);
+
+    // Simulamos que el proceso entra en BLOCK
+    cambiar_estado_pcb(pcb, BCK);
+    agregar_proceso_lista(pcb);
+
+    log_info(logger, "Proceso agregado a BLOCK");
+
+    pthread_t hilo;
+
+    if (pthread_create(&hilo, NULL, (void*)mediano_plazo_bck, pcb) != 0)
+    {
+        log_error(logger, "Error al crear hilo de mediano plazo");
+        return;
+    }
+
+    log_info(logger, "Hilo de mediano plazo creado");
+
+    pthread_join(hilo, NULL);
+
+    log_info(logger, "Hilo finalizado");
+
+    // Simulamos que terminó la IO
+    mediano_plazo_rdy(pcb);
+
+    log_info(logger, "Proceso pasó a SUSP_READY");
+
+    // Simulamos que apareció memoria disponible
+    nuevo_espacio();
+
+    log_info(logger, "Fin prueba mediano plazo");
+}
+
+
 void mediano_plazo_bck(PCB* pcb){
-    /*----- Mediano Plazo -----*/
+ 
     if(pcb->estado_pcb != BCK){return;}
 
-    usleep(info_config.tiempo_suspencion);
+    usleep(info_config.tiempo_suspencion * 1000);
 
     if (pcb->estado_pcb == BCK){ 
         
@@ -690,6 +744,11 @@ void mediano_plazo_bck(PCB* pcb){
             enviar_pid(pcb->data.PID, info_km.conexion_km);
             int err = recibir_op_code(info_km.conexion_km);
             if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+        }
+        else{
+            log_info(logger,
+            "[MOCK] KM suspendió el proceso PID [%d]",
+            pcb->data.PID);
         }
     }
 
@@ -712,6 +771,26 @@ void mediano_plazo_rdy (PCB* pcb){
 
 
 /*-----                     GESTION DE IOs                     -----*/
+void mock_cpu(PCB* pcb)
+{
+    log_info(logger, "========== CPU MOCK ==========");
+
+    // Simulamos que la CPU ejecutó y se bloqueó por IO
+    cambiar_estado_pcb(pcb, BCK);
+
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    pthread_t hilo;
+
+    pthread_create(
+        &hilo,
+        NULL,
+        (void*) mediano_plazo_bck,
+        pcb);
+
+    pthread_detach(hilo);
+}
 
 bool es_la_io_buscada (void* elemento, void* contexto) {
     
@@ -795,7 +874,7 @@ void desalojo (int socket_cliente){
             cambiar_estado_pcb(pcb,RDY);
 
             if (compactacion_value == 1){
-                if (strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
+                if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0){
                     actualizar_prioridad_pcb(pcb,0);
                 }
                 
@@ -942,15 +1021,23 @@ void compactacion (int socket_cliente){
         }
 
         enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
-        err = recibir_op_code(info_km.conexion_km);
-        if (err == COMPACTACION_FINALIZADA){
-            compactacion_value = 0;
-            nuevo_espacio();
+        
+        if(mock)
+        {
+            err = COMPACTACION_FINALIZADA;
         }
-        else {
-            log_info(logger, "## error en resolver compactacion");
-            return;
-        }  
+        else if(!mock){
+        
+            err = recibir_op_code(info_km.conexion_km);
+            if (err == COMPACTACION_FINALIZADA){
+                compactacion_value = 0;
+                nuevo_espacio();
+            }
+            else {
+                log_info(logger, "## error en resolver compactacion");
+                return;
+            }  
+        }
 }
 
 //NUEVA_MEMORY_STICK
@@ -1017,12 +1104,13 @@ void recibir_nueva_memory_stick(int socket_km)
 //NUEVO_ESPACIO
 void nuevo_espacio()
 {
+    
     while (!list_is_empty(listasProcesos->s_rdy))
     {
         PCB* pcb = NULL;
         int indice = -1;
 
-        if (strcmp(info_config.planificacion_algoritmo, "CNM") == 0)
+        if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
         {
             for (int prioridad = 1;
                  prioridad <= planificador->cantidad_niveles && pcb == NULL;
@@ -1054,11 +1142,33 @@ void nuevo_espacio()
             return;
         }
 
+        int respuesta;
 
-        enviar_op_code(NUEVO_ESPACIO, info_km.conexion_km);
-        enviar_pid(pcb->data.PID, info_km.conexion_km);
+        if(mock)
+        {
+            log_info(logger, "[MOCK] Simulando espacio disponible");
 
-        int respuesta = recibir_op_code(info_km.conexion_km);
+            if(list_is_empty(listasProcesos->s_rdy))
+                return;
+
+            PCB* pcb = list_remove(listasProcesos->s_rdy, 0);
+
+            cambiar_estado_pcb(pcb, RDY);
+            agregar_proceso_lista(pcb);
+
+            log_info(logger,
+                    "[MOCK] PID [%d] pasó a READY",
+                    pcb->data.PID);
+            return;
+
+        }
+        else
+        {
+            enviar_op_code(NUEVO_ESPACIO, info_km.conexion_km);
+            enviar_pid(pcb->data.PID, info_km.conexion_km);
+
+            respuesta = recibir_op_code(info_km.conexion_km);
+        }
 
         if (respuesta == OK)
         {
@@ -1081,8 +1191,6 @@ void nuevo_espacio()
             log_info(logger,
                 "No hay espacio para PID [%d]. Continúa suspendido.",
                 pcb->data.PID);
-
-            
         }
     }
 }

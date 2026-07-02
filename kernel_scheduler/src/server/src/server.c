@@ -1015,70 +1015,76 @@ void recibir_nueva_memory_stick(int socket_km)
 } 
 
 //NUEVO_ESPACIO
-void nuevo_espacio(){/*HACER y Pensar mejor*/
-
-    PCB* pcb = NULL;
-
-   while(1){ 
-
-    if(list_is_empty(listasProcesos->s_rdy)){
-        
-        log_info(logger, "La lista de s_rdy esta vacia");
-        return;
-    }
-
-    if(strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
-
-        for(int prioridad = 1; prioridad <= planificador->cantidad_niveles && pcb == NULL; prioridad++)
+void nuevo_espacio()
+{
+    while (!list_is_empty(listasProcesos->s_rdy))
     {
-        for(int i = 0; i < list_size(listasProcesos->s_rdy); i++)
-        {
-            PCB* aux = list_get(listasProcesos->s_rdy, i);
+        PCB* pcb = NULL;
+        int indice = -1;
 
-            if(aux->data.prioridad == prioridad)
+        if (strcmp(info_config.planificacion_algoritmo, "CNM") == 0)
+        {
+            for (int prioridad = 1;
+                 prioridad <= planificador->cantidad_niveles && pcb == NULL;
+                 prioridad++)
             {
-                pthread_mutex_lock(&sem_procesos_s_ready);
-                pcb = (PCB*) list_remove(listasProcesos->s_rdy, i);
-                pthread_mutex_unlock(&sem_procesos_s_ready);
-                break;
+                for (int i = 0; i < list_size(listasProcesos->s_rdy); i++)
+                {
+                    PCB* aux = list_get(listasProcesos->s_rdy, i);
+
+                    if (aux->data.prioridad == prioridad)
+                    {
+                        pcb = aux;
+                        indice = i;
+                        break;
+                    }
+                }
             }
         }
+        else
+        {
+            pcb = list_get(listasProcesos->s_rdy, 0);
+            indice = 0;
+        }
+
+        if (pcb == NULL)
+        {
+            log_warning(logger,
+                "No se encontró ningún proceso en SUSP_READY");
+            return;
+        }
+
+
+        enviar_op_code(NUEVO_ESPACIO, info_km.conexion_km);
+        enviar_pid(pcb->data.PID, info_km.conexion_km);
+
+        int respuesta = recibir_op_code(info_km.conexion_km);
+
+        if (respuesta == OK)
+        {
+            pthread_mutex_lock(&sem_procesos_s_ready);
+
+            list_remove(listasProcesos->s_rdy, indice);
+
+            pthread_mutex_unlock(&sem_procesos_s_ready);
+
+            cambiar_estado_pcb(pcb, RDY);
+
+            agregar_proceso_lista(pcb);
+
+            log_info(logger,
+                "## PID [%d] desuspendido correctamente",
+                pcb->data.PID);
+        }
+        else
+        {
+            log_info(logger,
+                "No hay espacio para PID [%d]. Continúa suspendido.",
+                pcb->data.PID);
+
+            
+        }
     }
-    }
-    
-    else{
-
-        pthread_mutex_lock(&sem_procesos_s_ready);
-        pcb = (PCB*)list_remove(listasProcesos->s_rdy,0);
-        pthread_mutex_unlock(&sem_procesos_s_ready);
-
-    }
-
-    if(pcb == NULL) {   
-        log_info(logger,"Error a encontrar en s_rdy PID:[%d]",pcb->data.PID);
-        return;
-    }
-
-    enviar_op_code(NUEVO_ESPACIO,info_km.conexion_km);
-    enviar_pid(pcb->data.PID, info_km.conexion_km);
-
-    int err = recibir_op_code(info_km.conexion_km);
-    if(err != OK){
-        log_info(logger,"Espacio Insuficiente para PID:[%d]",pcb->data.PID);
-        return; 
-    }
-
-    log_info(logger, "Exito al Desuspeder proceso PID: [%d]", pcb->data.PID);
-
-    cambiar_estado_pcb(pcb, RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
-    }
-
-    
-    
-
-    return;
 }
 
 

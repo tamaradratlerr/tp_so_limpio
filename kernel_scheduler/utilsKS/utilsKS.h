@@ -107,6 +107,7 @@ extern t_log* logger;
 extern bool mock;
 extern int mem_corrupt_value;
 extern int compactacion_value;
+extern int control_compac;
 extern int scheduler_control_loop;
 
 extern Planificador_Colas_Multinivel* planificador;

@@ -766,20 +766,7 @@ void desalojo (int socket_cliente){
         enviar_op_code(COMPACTACION, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
 
-        while (!list_is_empty(listasProcesos->rnn)){
-            usleep(1000);
-        }
-
-        enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
-        err = recibir_op_code(info_km.conexion_km);
-        if (err == COMPACTACION_FINALIZADA){
-            compactacion_value = 0;
-            nuevo_espacio();
-        }
-        else {
-            log_info(logger, "## error en resolver compactacion");
-            return;
-        }        
+              
     }
     else if (existe_pcb_con_pid(list_suplementarias->desalojo,pid)){
         
@@ -800,8 +787,22 @@ void desalojo (int socket_cliente){
         PCB* pcb = buscar_pcb_por_pid(pid);
         
         if(pcb->estado_pcb == RNN){
+
             cambiar_estado_pcb(pcb,RDY);
-            agregar_proceso_lista(pcb);
+
+            if (compactacion_value == 1){
+                if (strcmp(info_config.planificacion_algoritmo, "CNM") == 0){
+                    actualizar_prioridad_pcb(pcb,0);
+                }
+                
+                pthread_mutex_lock(&mutex_ready);
+                list_add_in_index(listasProcesos->rdy, 0, pcb);
+                pthread_mutex_lock(&mutex_ready);
+            }
+            else {
+                agregar_proceso_lista(pcb);
+            }
+        
             eliminar_proceso_Lista(pcb);
         }
         
@@ -809,15 +810,7 @@ void desalojo (int socket_cliente){
         log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
     }
 
-    if (mem_corrupt_value == 1){
-        while (!list_is_empty(listasProcesos->rnn)){
-                usleep(1000);
-            }
-        
-        log_info(logger, "Blue Screen");  
-        scheduler_control_loop = 0; //Apaga el Kernel Scheduler
-        return;
-    }
+    
 }  
 
  
@@ -921,13 +914,39 @@ void mem_corrupt (int socket_cliente){
     mem_corrupt_value = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
     //madnar a km el ok cuando se desalojó
+    if (mem_corrupt_value == 1){
+        while (!list_is_empty(listasProcesos->rnn)){
+                usleep(1000);
+            }
+        
+        log_info(logger, "Blue Screen");  
+        scheduler_control_loop = 0; //Apaga el Kernel Scheduler
+        return;
+    }
+
 } 
 
 //COMPACTACION
 void compactacion (int socket_cliente){
-
+    int err = 0;
     compactacion_value = 1;
+    control_compac = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Compactacion");
+
+    while (!list_is_empty(listasProcesos->rnn)){
+            usleep(1000);
+        }
+
+        enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
+        err = recibir_op_code(info_km.conexion_km);
+        if (err == COMPACTACION_FINALIZADA){
+            compactacion_value = 0;
+            nuevo_espacio();
+        }
+        else {
+            log_info(logger, "## error en resolver compactacion");
+            return;
+        }  
 }
 
 //NUEVA_MEMORY_STICK

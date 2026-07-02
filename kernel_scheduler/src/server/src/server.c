@@ -190,6 +190,8 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
 t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas las listas de los Procesos*/
 
+    listasProcesos = malloc(sizeof(t_listas_procesos));
+
 	listasProcesos->new   = list_create();
 	listasProcesos->rnn   = list_create();
 	listasProcesos->bck   = list_create();
@@ -214,14 +216,16 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
 
 }
 
-void iniciar_listas_suple (){ /*Funcion que inicializa las listas de CPUs y IOs (Suplementarias)*/
-    
+void iniciar_listas_suple()
+{
+    list_suplementarias = malloc(sizeof(t_listas_suplementarias));
+
     list_suplementarias->cpu = list_create();
     list_suplementarias->io = list_create();
-    list_suplementarias->ms= list_create();
+    list_suplementarias->ms = list_create();
     list_suplementarias->desalojo = list_create();
+
     lista_bck_io = list_create();
-    
 }
 
 void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/

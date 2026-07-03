@@ -89,7 +89,7 @@ PCB* sacar_pcb_por_pid(t_list* lista, int pid) ;
 void enviar_proceso_finalizar_KM_mock (int pid);
 void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam);
 void prueba_mediano_plazo_mock();
-
+void prueba_compactacion_mock(void);
 /*----- SYSCALLs CPU -----*/
 
 void mutex_create(int socket_cliente);

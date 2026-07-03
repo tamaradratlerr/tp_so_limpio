@@ -284,9 +284,9 @@ op_code recibir_op_code(int socket_cliente)
 
 int recibir_pid(int socket_cliente)
 {
-
     int pid;
     recv(socket_cliente, &pid, sizeof(int), MSG_WAITALL);
+    log_debug(logger, "PID: [%d] fue recibido",pid);
     return pid;
 }
 
@@ -351,7 +351,7 @@ char *recibir_mensaje(int socket_cliente, t_log *logger)
         return NULL;
     }
 
-    log_info(logger, "Me llego el mensaje %s", buffer);
+    log_info(logger, "Mensaje [%s] Recibido", buffer);
     return buffer;
 } // HAY QUE LIBERAR LA MEMORIA DSP DE LLAMAR A ESTA FUNCION
 
@@ -366,6 +366,179 @@ int enviar_pid(int PCB_ID, int socket_cliente)
 {
 
     send(socket_cliente, &PCB_ID, sizeof(int), 0);
+    log_debug(logger, "PID: [%d] fue enviado",PCB_ID);
 
     return 1;
+}
+
+#include <commons/log.h>
+
+void log_opcode(t_log* logger, op_code codigo)
+{
+    switch (codigo)
+    {
+        case OK:
+            log_info(logger, "OP_CODE: OK");
+            break;
+        case NOTOK:
+            log_info(logger, "OP_CODE: NOTOK");
+            break;
+        case MENSAJE:
+            log_info(logger, "OP_CODE: MENSAJE");
+            break;
+        case PAQUETE:
+            log_info(logger, "OP_CODE: PAQUETE");
+            break;
+        case NUEVA_CPU:
+            log_info(logger, "OP_CODE: NUEVA_CPU");
+            break;
+        case CPU_LIBRE:
+            log_info(logger, "OP_CODE: CPU_LIBRE");
+            break;
+        case NUEVA_MEMORY_STICK:
+            log_info(logger, "OP_CODE: NUEVA_MEMORY_STICK");
+            break;
+        case DESCONEXION_MS:
+            log_info(logger, "OP_CODE: DESCONEXION_MS");
+            break;
+        case FIN_PROCESO:
+            log_info(logger, "OP_CODE: FIN_PROCESO");
+            break;
+        case DESALOJO:
+            log_info(logger, "OP_CODE: DESALOJO");
+            break;
+        case PCB_DATA:
+            log_info(logger, "OP_CODE: PCB_DATA");
+            break;
+        case TRADUCIR_DIRECCION:
+            log_info(logger, "OP_CODE: TRADUCIR_DIRECCION");
+            break;
+        case ERROR_MMU:
+            log_info(logger, "OP_CODE: ERROR_MMU");
+            break;
+        case ERROR_SEGMENTATION_FAULT:
+            log_info(logger, "OP_CODE: ERROR_SEGMENTATION_FAULT");
+            break;
+        case gl_MUTEX_CREATE:
+            log_info(logger, "OP_CODE: gl_MUTEX_CREATE");
+            break;
+        case gl_MUTEX_LOCK:
+            log_info(logger, "OP_CODE: gl_MUTEX_LOCK");
+            break;
+        case gl_MUTEX_UNLOCK:
+            log_info(logger, "OP_CODE: gl_MUTEX_UNLOCK");
+            break;
+        case gl_MEM_ALLOC:
+            log_info(logger, "OP_CODE: gl_MEM_ALLOC");
+            break;
+        case gl_MEM_FREE:
+            log_info(logger, "OP_CODE: gl_MEM_FREE");
+            break;
+        case gl_IO_SLEEP:
+            log_info(logger, "OP_CODE: gl_IO_SLEEP");
+            break;
+        case gl_IO_STDOUT:
+            log_info(logger, "OP_CODE: gl_IO_STDOUT");
+            break;
+        case gl_IO_STDIN:
+            log_info(logger, "OP_CODE: gl_IO_STDIN");
+            break;
+        case gl_INIT_PROC:
+            log_info(logger, "OP_CODE: gl_INIT_PROC");
+            break;
+        case gl_EXIT:
+            log_info(logger, "OP_CODE: gl_EXIT");
+            break;
+        case FETCH_INSTRUCCION:
+            log_info(logger, "OP_CODE: FETCH_INSTRUCCION");
+            break;
+        case LLEGO_INSTRUCCION:
+            log_info(logger, "OP_CODE: LLEGO_INSTRUCCION");
+            break;
+        case FETCH:
+            log_info(logger, "OP_CODE: FETCH");
+            break;
+        case LEER_MEMORIA:
+            log_info(logger, "OP_CODE: LEER_MEMORIA");
+            break;
+        case ESCRIBIR_MEMORIA:
+            log_info(logger, "OP_CODE: ESCRIBIR_MEMORIA");
+            break;
+        case CONTEXTO:
+            log_info(logger, "OP_CODE: CONTEXTO");
+            break;
+        case MEM_CORRUPT:
+            log_info(logger, "OP_CODE: MEM_CORRUPT");
+            break;
+        case ENVIAR_PROCESO:
+            log_info(logger, "OP_CODE: ENVIAR_PROCESO");
+            break;
+        case km_IO_STDOUT:
+            log_info(logger, "OP_CODE: km_IO_STDOUT");
+            break;
+        case km_IO_STDIN:
+            log_info(logger, "OP_CODE: km_IO_STDIN");
+            break;
+        case SOLICITUD_INSTRUCCION:
+            log_info(logger, "OP_CODE: SOLICITUD_INSTRUCCION");
+            break;
+        case km_GUARDAR_CONTEXTO:
+            log_info(logger, "OP_CODE: km_GUARDAR_CONTEXTO");
+            break;
+        case ks_INIT_PROC:
+            log_info(logger, "OP_CODE: ks_INIT_PROC");
+            break;
+        case ks_EXIT:
+            log_info(logger, "OP_CODE: ks_EXIT");
+            break;
+        case NUEVO_KERNEL:
+            log_info(logger, "OP_CODE: NUEVO_KERNEL");
+            break;
+        case OK_ESCRITURA:
+            log_info(logger, "OP_CODE: OK_ESCRITURA");
+            break;
+        case NUEVO_ESPACIO:
+            log_info(logger, "OP_CODE: NUEVO_ESPACIO");
+            break;
+        case SUSPENDIDO:
+            log_info(logger, "OP_CODE: SUSPENDIDO");
+            break;
+        case NUEVA_IO:
+            log_info(logger, "OP_CODE: NUEVA_IO");
+            break;
+        case IO_LIBRE:
+            log_info(logger, "OP_CODE: IO_LIBRE");
+            break;
+        case IO_STDIN:
+            log_info(logger, "OP_CODE: IO_STDIN");
+            break;
+        case IO_STDOUT:
+            log_info(logger, "OP_CODE: IO_STDOUT");
+            break;
+        case IO_SLEEP:
+            log_info(logger, "OP_CODE: IO_SLEEP");
+            break;
+        case IO_STDOUT_RETORNO:
+            log_info(logger, "OP_CODE: IO_STDOUT_RETORNO");
+            break;
+        case IO_STDIN_RETORNO:
+            log_info(logger, "OP_CODE: IO_STDIN_RETORNO");
+            break;
+        case CPUS_DESALOJADAS_OK:
+            log_info(logger, "OP_CODE: CPUS_DESALOJADAS_OK");
+            break;
+        case COMPACTACION:
+            log_info(logger, "OP_CODE: COMPACTACION");
+            break;
+        case COMPACTACION_FINALIZADA:
+            log_info(logger, "OP_CODE: COMPACTACION_FINALIZADA");
+            break;
+        case NUEVA_MEMORIA_ACUM:
+            log_info(logger, "OP_CODE: NUEVA_MEMORIA_ACUM");
+            break;
+
+        default:
+            log_info(logger, "OP_CODE: DESCONOCIDO (%d)", codigo);
+            break;
+    }
 }

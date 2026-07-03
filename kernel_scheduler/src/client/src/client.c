@@ -30,6 +30,11 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	logger = iniciar_logger(log_level);
 	log_info(logger, "Logger iniciado correctamente");
 
+	iniciar_listas_suple();
+    log_info(logger, "Listas Suplementarias Iniciadas");
+    Iniciar_listas_procesos();
+    log_info(logger,"Listas de Procesos Iniciadas");
+
 
 	/* planificación */
 
@@ -103,12 +108,16 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	// Enviamos al servidor el valor de CLAVE como mensaje
 	if(mock)
 	{
-		crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
-	}
+		
+		PCB* pcb = crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
+		agregar_proceso_lista(pcb);
+	}	
 
 	else
 	{
-		crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);}
+		PCB* pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);
+		agregar_proceso_lista(pcb);
+	}	
 	
 	return 0;
 	

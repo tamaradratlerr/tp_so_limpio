@@ -100,6 +100,19 @@ void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
 PCB* crearNuevoProceso_mock(char*, int prioridad, int);
 
+/*----- CREACION Y DESTRUCCION DE LISTAS -----*/
+
+t_listas_procesos* Iniciar_listas_procesos(void);
+void terminar_listas_procesos(void);
+void iniciar_listas_suple(void);
+void eliminar_listas_suple(void);
+
+/*----- GESTION DE LISTAS -----*/
+
+int agregar_proceso_lista(PCB* pcb);
+op_code eliminar_proceso_Lista(PCB* pcb);
+int agregar_lista_ready(PCB* pcb);
+
 /*----- Vars Extern -----*/
 
 extern int contador_pid;

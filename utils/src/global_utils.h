@@ -208,7 +208,7 @@ typedef struct
 //Estructura de dato que identifica CPUs
 typedef struct{
     int fd;
-    int identificador; 
+    char* identificador; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }t_CPU;
 typedef struct {
@@ -295,5 +295,7 @@ int iniciar_servidor(char* puerto, t_log* logger);
 int recibir_pid(int socket_cliente);
 
 int enviar_pid(int PCB_ID, int socket_cliente);
+
+void log_opcode(t_log* logger, op_code codigo);
 
 #endif /* GLOBAL_UTILS_H_ */

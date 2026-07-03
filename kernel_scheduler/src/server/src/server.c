@@ -17,22 +17,18 @@ int main(int argc, char *argv[])
     
     
 
-    iniciar_listas_suple();
-    log_info(logger, "Listas Suplementarias Iniciadas");
-    Iniciar_listas_procesos();
-    log_info(logger,"Listas de Procesos Iniciadas");
-
     pthread_mutex_init(&mutex_cpus, NULL);
 
     //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
     //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
-    /*
+    
     if(mock)
     {
-        prueba_mediano_plazo_mock();
+       //prueba_mediano_plazo_mock();
+       //prueba_lago_plazo_mock();
     }
-    */
+    
 
     int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
 
@@ -189,220 +185,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     return NULL;
 }
 
-
-/*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
-
-t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas las listas de los Procesos*/
-
-    listasProcesos = malloc(sizeof(t_listas_procesos));
-
-	listasProcesos->new   = list_create();
-	listasProcesos->rnn   = list_create();
-	listasProcesos->bck   = list_create();
-	listasProcesos->ext   = list_create();
-	listasProcesos->rdy   = list_create();
-    listasProcesos->s_bck = list_create();
-    listasProcesos->s_rdy = list_create();
-
-	return listasProcesos;
-};
-
-void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Procesos*/
-
-	list_destroy(listasProcesos->new);
-	list_destroy(listasProcesos->rnn);
-	list_destroy(listasProcesos->bck);
-	list_destroy(listasProcesos->ext);
-	list_destroy(listasProcesos->rdy);
-    list_destroy(listasProcesos->s_bck);
-    list_destroy(listasProcesos->s_rdy);
-
-
-}
-
-void iniciar_listas_suple()
-{
-    list_suplementarias = malloc(sizeof(t_listas_suplementarias));
-
-    list_suplementarias->cpu = list_create();
-    list_suplementarias->io = list_create();
-    list_suplementarias->ms = list_create();
-    list_suplementarias->desalojo = list_create();
-
-    lista_bck_io = list_create();
-}
-
-void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/
-    
-    list_destroy(list_suplementarias->cpu);
-    list_destroy(list_suplementarias->io);
-    list_destroy(list_suplementarias->ms);
-    list_destroy(list_suplementarias->desalojo);
-    list_destroy(lista_bck_io);
-    
-}
-
-
-/*-----                     GESTION DE LISTAS DE PCBs                    -----*/
-
-int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista correspondiente segun PCB->ESTADO_ACTUAL.*/
-	
-    int posicion;
-
-    switch (pcb->estado_pcb){
-	case NEW: //NEW
-        
-        pthread_mutex_lock(&sem_procesos_new);
-		posicion = list_add(listasProcesos->new, pcb);
-        pthread_mutex_unlock(&sem_procesos_new);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-
-	case RNN: //RUNNING
-
-        pthread_mutex_lock(&sem_procesos_running);    
-		posicion = list_add(listasProcesos->rnn, pcb);
-        pthread_mutex_unlock(&sem_procesos_running);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-
-	case BCK: //BLOCK
-
-        pthread_mutex_lock(&sem_procesos_block);
-		posicion = list_add(listasProcesos->bck, pcb);
-        pthread_mutex_unlock(&sem_procesos_block);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-    
-    case S_BCK: //BLOCK
-
-        pthread_mutex_lock(&sem_procesos_s_block);
-		posicion = list_add(listasProcesos->s_bck, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_block);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-
-    case S_RDY: //BLOCK
-
-        pthread_mutex_lock(&sem_procesos_s_ready);
-		posicion = list_add(listasProcesos->s_rdy, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_ready);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-
-	case EXT: //EXIT
-
-        pthread_mutex_lock(&sem_procesos_exit);    
-		posicion = list_add(listasProcesos->ext, pcb);
-        pthread_mutex_unlock(&sem_procesos_exit);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-
-	case RDY: //RDY
-
-		posicion = agregar_lista_ready(pcb);
-        return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
-
-        break;
-	
-	default:
-        log_error(logger, "Erro al identificar estado de un pcb (funcion agregar proceso a lista)");
-        return -1;
-		break;
-
-	}
-
-}
- 
-op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp de agregar_proceso_lista (PCB* pcb)*/
-    bool removed = false; // Inicializamos
-
-    switch (pcb->estado_anterior) {
-        case NEW:
-            pthread_mutex_lock(&sem_procesos_new);
-            removed = list_remove_element(listasProcesos->new, pcb);
-            pthread_mutex_unlock(&sem_procesos_new);
-            break;
-            
-        case RNN:
-            pthread_mutex_lock(&sem_procesos_running);
-            removed = list_remove_element(listasProcesos->rnn, pcb);
-            pthread_mutex_unlock(&sem_procesos_running);
-            break;
-
-        case BCK:
-            pthread_mutex_lock(&sem_procesos_block);
-            removed = list_remove_element(listasProcesos->bck, pcb); // Asegura que el nombre coincida con tu struct
-            pthread_mutex_unlock(&sem_procesos_block);
-            break;
-
-        case EXT:
-            pthread_mutex_lock(&sem_procesos_exit);
-            removed = list_remove_element(listasProcesos->ext, pcb);
-            pthread_mutex_unlock(&sem_procesos_exit);
-            break;
-        
-        case S_BCK:
-            pthread_mutex_lock(&sem_procesos_s_block);
-            removed = list_remove_element(listasProcesos->s_bck, pcb);
-            pthread_mutex_unlock(&sem_procesos_s_block);
-            break;
-        
-        case S_RDY:
-            pthread_mutex_lock(&sem_procesos_s_ready);
-            removed = list_remove_element(listasProcesos->s_rdy, pcb);
-            pthread_mutex_unlock(&sem_procesos_s_ready);
-            break;
-
-        case RDY:
-            pthread_mutex_lock(&sem_procesos_ready);
-            removed = list_remove_element(listasProcesos->rdy, pcb);
-            pthread_mutex_unlock(&sem_procesos_ready);
-            break;
-    
-        default:
-            log_error(logger, "Error: Estado anterior desconocido.");
-            return NOTOK; 
-    }
-
-    if (!removed) {
-        log_error(logger, "Error al remover PCB de lista");
-        return NOTOK;
-    }
-
-    return OK; 
-}
-
-int agregar_lista_ready(PCB* pcb)
-{
-    int posicion;
-
-    if (strcmp(info_config.planificacion_algoritmo, "FIFO") == 0 ||
-        strcmp(info_config.planificacion_algoritmo, "RR") == 0)
-    {
-        posicion = ready_FIFO(pcb);
-    }
-    else if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
-    {
-        posicion = ready_CMN(pcb);
-    }
-    else
-    {
-        log_error(logger,
-                  "Error al identificar algoritmo de planificación");
-        return -1;
-    }
-
-    return posicion;
-}
-
-
 /*-----                     GESTION DE PCBs                     -----*/
 
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el estado de un PCB*/
@@ -466,7 +248,7 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
 
 void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
     
-    
+    log_opcode(logger, CPU_LIBRE);
     pthread_mutex_lock(&mutex_cpus);
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
@@ -496,9 +278,12 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
         
+        loguear_lista(listasProcesos->rnn,logger);
         
 
         int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
+        log_warning(logger, "KS envio el PID[%d] a CPU ID: [%s]",pcb_a_ejecutar->data.PID,cpu_libre->identificador);
+
         if (err != 1) {
             log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error
             cpu_libre->enUso = false;        
@@ -596,44 +381,6 @@ PCB* obtener_siguiente_proceso() {
     pthread_mutex_unlock(&mutex_ready);
 
     return pcb;
-}
-
-int ready_FIFO(PCB* pcb_nuevo) { /*Funcion que a partir del ALGORITMO FIFO agrega un PCB a LISTA DE READYS ordenando por PRIORIDAD*/
-    
-    int posicion;
-
-    pthread_mutex_lock(&mutex_ready);
-    
-    posicion = list_add(listasProcesos -> rdy, pcb_nuevo); // Lo pones al final de la lista
-    
-    pthread_mutex_unlock(&mutex_ready);
-    
-    return posicion;
-}
-
-int ready_CMN(PCB* pcb_nuevo ){
-    int nivel = pcb_nuevo->data.prioridad;
-
-    if(nivel < 0 || nivel >= planificador->cantidad_niveles)
-    {
-        log_error(logger, "Prioridad invalida: %d", nivel);
-        return -1;
-    }
-
-    ColaPrioridad* cola_apuntada = &planificador->niveles[nivel];
-
-    pthread_mutex_lock(&mutex_ready);
-    list_add(cola_apuntada->cola, pcb_nuevo);
-    pthread_mutex_unlock(&mutex_ready);
-
-
-
-    if(planificador->preemption)
-    {
-        verificar_desalojo_por_prioridad(pcb_nuevo);
-    }
-
-    return nivel;
 }
 
 void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
@@ -768,12 +515,12 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
 //NUEVA_CPU,
 void nueva_cpu (int cliente_fd) {
 
-    
+        log_opcode(logger,NUEVA_CPU);
         t_CPU* info_cpu = malloc(sizeof(t_CPU));
 
         info_cpu->fd = cliente_fd;         
         info_cpu->enUso = false;   
-        info_cpu->identificador = (int*)recibir_mensaje(cliente_fd, logger);
+        info_cpu->identificador = recibir_mensaje(cliente_fd, logger);
          
                     
         pthread_mutex_lock(&mutex_cpus);
@@ -782,7 +529,7 @@ void nueva_cpu (int cliente_fd) {
         
         enviar_op_code (OK, cliente_fd);
 
-        log_info(logger, "## CPU ID: [%d] Conectada", cliente_fd); /*Logger Obligatorio*/
+        log_info(logger, "## CPU ID: [%s] Conectada", info_cpu->identificador); /*Logger Obligatorio*/
         }
 
 //CPU_LIBRE,
@@ -1329,14 +1076,14 @@ void enviar_memory_stick_a_cpus(t_mem_stick* ms)
         if(respuesta == OK)
         {
             log_info(logger,
-                "CPU %d recibió nueva Memory Stick",
+                "CPU %s recibió nueva Memory Stick",
                 cpu->identificador
             );
         }
         else
         {
             log_error(logger,
-                "CPU %d no confirmó Memory Stick",
+                "CPU %s no confirmó Memory Stick",
                 cpu->identificador
             );
         }
@@ -1471,6 +1218,53 @@ void prueba_mediano_plazo_mock()
     nuevo_espacio();
 
     log_info(logger, "Fin prueba mediano plazo");
+}
+
+void loguear_lista(t_list* lista, t_log* logger)
+{
+    if(list_is_empty(lista)){
+        log_info(logger, "Lista Vacia");
+        return;
+    }
+    
+    for (int i = 0; i < list_size(lista); i++){
+        PCB* pcb = list_get(lista, i);
+        log_info(logger, "PID: [%d] Estado: [%d]", pcb->data.PID, pcb->estado_pcb);
+    }
+}
+
+void prueba_lago_plazo_mock() {
+
+    log_debug(logger, "=== Iniciando MOCK largo Plazo ===");
+
+    log_info(logger, "Procesos Actuales y su Estado => Deberia ser Solo el PID 0");
+
+    log_info(logger, "=== Lista NEW ===");    
+    loguear_lista(listasProcesos->new, logger);
+    log_info(logger, "=== Lista RDY ==="); 
+    loguear_lista(listasProcesos->rdy, logger);
+    log_info(logger, "=== Lista RNN ==="); 
+    loguear_lista(listasProcesos->rnn, logger);
+    log_info(logger, "=== Lista EXT ==="); 
+    loguear_lista(listasProcesos->ext, logger);
+    log_info(logger, "=== Lista BCK ==="); 
+    loguear_lista(listasProcesos->bck, logger);
+    log_info(logger, "=== Lista S RDY ==="); 
+    loguear_lista(listasProcesos->s_rdy, logger);
+    log_info(logger, "=== Lista S BCK ==="); 
+    loguear_lista(listasProcesos->s_bck, logger);
+
+    init_proc(1);
+
+    loguear_lista(listasProcesos->new, logger);
+    loguear_lista(listasProcesos->rdy, logger);
+
+    exit_proceso(1);
+
+    loguear_lista(listasProcesos->rdy, logger);
+    loguear_lista(listasProcesos->rnn, logger);
+    loguear_lista(listasProcesos->ext, logger);
+   
 }
 
 

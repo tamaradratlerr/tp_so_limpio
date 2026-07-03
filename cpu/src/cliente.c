@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
         log_info(logger,"Enviado CPU LIBRE");
         proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
         contexto_key++;
+        log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
         control_loop = 1;
         while (control_loop == 1){
@@ -1421,9 +1422,27 @@ bool tiene_mismo_id(void* elemento) {
 
 char* instruccion[] = {
     "NOOP",
-    "SET AX 01",
-    "SET BX 01",
-    "SUM AX BX"
+    "NOOP",
+    "NOOP",
+    "SET AX 10",
+    "SET BX 10",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "SUM AX BX",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "EXIT_PROC"
+
 };
 
 t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cambiar algo del contexto inicial*/
@@ -1454,6 +1473,8 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
 
     list_add(nuevo_contexto->tabla_segmentos, seg);
 
+    log_debug(logger, "Conetexto MOCK Realizado");
+
     return nuevo_contexto;
 
 }/*HACER*/
@@ -1462,14 +1483,8 @@ char* fetch_mock(t_cpu_sockets* sockets){
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u [MOCK]", 
              contexto_actual->pid, contexto_actual->pc);
-    int tamanio = 0;
-
-    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc, tamanio);
     
-    if (dir_fisica == ERROR_MMU) {
-        log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
-        return NULL;
-    }
+             int tamanio = 0;
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 

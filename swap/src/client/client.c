@@ -76,7 +76,7 @@ if(tamano_swap % tamano_bloque != 0) {
 	return 0;
 }
 
-// --- Tus funciones de soporte (ajustadas solo los nombres) ---
+// funciones de soporte
 
 t_log* iniciar_logger(void)
 {
@@ -84,9 +84,9 @@ t_log* iniciar_logger(void)
 	return log_create("swap.log", "SWAP", true, LOG_LEVEL_INFO);
 }
 
-t_config* iniciar_config(void)
+t_config* iniciar_config(char* path_config)
 {
-	t_config* nuevo_config = config_create("client.config");
+	t_config* nuevo_config = config_create(path_config);
 	if (nuevo_config == NULL) {
 		perror("No se pudo leer el config");
 		exit(1);

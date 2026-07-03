@@ -324,7 +324,8 @@ void atender_kernel(int socket_km)
 {
     while(1)
     {
-        op_code cod_op = recibir_operacion(socket_km);
+        //op_code cod_op = recibir_operacion(socket_km);
+        int cod_op = recibir_operacion(socket_km);
 
         switch(cod_op)
         {

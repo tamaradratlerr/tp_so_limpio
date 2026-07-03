@@ -1,16 +1,24 @@
 #include "client.h"
 
-int main(void)
+int main(int argc, char* argv[]) //./bin/swap [Archivo Config]
+//significa que el programa tiene que recibir el path del config por argumento argv[1]
 {
 	int conexion;
 	t_log* logger;
 	t_config* config;
 
+// confirmacion
+	if(argc != 2) {
+		printf("Uso: %s [Archivo Config]\n", argv[0]);
+		return 1;
+	}
+
 	// 1. LOGGER
 	logger = iniciar_logger();
 
 	// 2. CONFIG
-	config = iniciar_config(); // Lee "client.config" 
+	// 2. CONFIG
+    config = iniciar_config(argv[1]); // Lee el config recibido por argumento // Lee "client.config" 
 
 	// 3. LEER VALORES ESPECÍFICOS DE SWAP
 	// Mantenemos tipos de datos simples (int y char*)

@@ -285,8 +285,15 @@ op_code recibir_op_code(int socket_cliente)
 int recibir_pid(int socket_cliente)
 {
     int pid;
-    recv(socket_cliente, &pid, sizeof(int), MSG_WAITALL);
-    log_debug(logger, "PID: [%d] fue recibido",pid);
+    ssize_t bytes_leidos = recv(socket_cliente, &pid, sizeof(int), MSG_WAITALL);
+
+    if (bytes_leidos <= 0)
+    {
+        log_error(logger, "Error al recibir PID: la conexion se cerro o hubo un error de socket");
+        return -1;
+    }
+
+    log_debug(logger, "PID: [%d] fue recibido", pid);
     return pid;
 }
 

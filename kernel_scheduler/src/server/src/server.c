@@ -361,13 +361,13 @@ PCB* obtener_siguiente_proceso() {
 
     pthread_mutex_lock(&mutex_ready);
 
-    if(strcmp(planificacion_algoritmo, "FIFO") == 0){
+    if(strcmp(info_config.planificacion_algoritmo, "FIFO") == 0){
         pcb = list_remove(listasProcesos->rdy, 0);
     }
-    else if(strcmp(planificacion_algoritmo, "RR") == 0){
+    else if(strcmp(info_config.planificacion_algoritmo, "RR") == 0){
         pcb = list_remove(listasProcesos->rdy, 0);
     }
-    else if(strcmp(planificacion_algoritmo, "CMN") == 0){
+    else if(strcmp(info_config.planificacion_algoritmo, "CMN") == 0){
         for(int i = 0; i < planificador->cantidad_niveles; i++)
         {
             if(!list_is_empty(planificador->niveles[i].cola))

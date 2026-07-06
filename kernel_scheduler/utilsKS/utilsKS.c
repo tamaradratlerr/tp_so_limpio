@@ -316,6 +316,8 @@ PCB* iniciar_pcb (int PID, int prioridad){
     nuevo_pcb->data.prioridad = prioridad;
     nuevo_pcb -> mutex_tomados = list_create();
 
+    agregar_proceso_lista(nuevo_pcb);
+
 	return nuevo_pcb;
 }
 
@@ -361,6 +363,34 @@ void terminar_pcb (PCB* pcb){
 	free(pcb);
     //para liberar el espacio --> no es de lógica
 	
+}
+
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el estado de un PCB*/
+    
+    //Se le podria agregar semaforos pero antes y dsp de llamar a la funcion
+    
+    pcb -> estado_anterior = (pcb ->estado_pcb);
+    pcb ->estado_pcb = nuevoEstado;
+    
+    log_info (logger, "## PID:[%d] pasa del estado [%s] al estado [%s]",pcb->data.PID,nombre_estado(pcb->estado_anterior),nombre_estado(pcb->estado_pcb));
+}
+
+char* nombre_estado (estado sto){
+
+    switch (sto)
+    {
+    case NEW: return "NEW"; break;
+    case RDY: return "READY"; break;
+    case RNN: return "RUNNING"; break;
+    case BCK: return "BLOCK"; break;
+    case S_BCK: return "SUSPENDED BLOCK"; break;
+    case S_RDY: return "SUSPENDED READY"; break;
+    case EXT: return "EXIT"; break;
+    case NO_ESTADO: return "NO ESTADO"; break;
+    default:
+        return "NO SE PUDO IDENTIFICAR";
+        break;
+    }
 }
 
 /*-----     IO      -----*/

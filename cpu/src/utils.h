@@ -19,7 +19,7 @@ typedef enum {
     NOOP, SET, SUM, SUB, JNZ, COPY_MEM, MOV_IN, MOV_OUT,
     MUTEX_CREATE, MUTEX_LOCK, MUTEX_UNLOCK, 
     MEM_ALLOC, MEM_FREE, SLEEP, 
-    STDOUT, STDIN, INIT_PROC, EXIT
+    STDOUT, STDIN, INIT_PROC, EXIT_PROC
 } t_instruccion_code;
 
 typedef struct {

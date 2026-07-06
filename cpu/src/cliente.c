@@ -385,7 +385,7 @@ void execute() {
             ejecutar_init_proc(instr);
             break;
 
-        case EXIT:
+        case EXIT_PROC:
             ejecutar_exit();
             break;
 
@@ -410,6 +410,10 @@ void interrupt() {
     }
     else if(cod_op == NUEVA_MEMORY_STICK){
         recibir_memory_stick(sockets->conexion_kernel_scheduler);
+    }
+    else {
+        
+        enviar_op_code(OK, sockets->conexion_kernel_scheduler);
     }
 }
 
@@ -586,7 +590,7 @@ t_instruccion_code identificar_codigo(char* token) {
     if (strcmp(token, "STDOUT") == 0)        return STDOUT;
     if (strcmp(token, "STDIN") == 0)         return STDIN;
     if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
-    if (strcmp(token, "EXIT") == 0)          return EXIT;
+    if (strcmp(token, "EXIT_PROC") == 0)          return EXIT_PROC;
 
     // caso por defecto si no reconoce el comando
     if (token == NULL) return EXIT_FAILURE;
@@ -651,7 +655,7 @@ void ejecutar_set (t_instruccion* instr){
         *dest = valor;
 
         log_info (logger, "## PID:[%d] - Ejecutando [SET] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
-        log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
+        log_info(logger, "[EXEC] SET 8b: %s = %u", reg_dest_nombre, *dest);
     }
 
 }
@@ -1421,27 +1425,10 @@ bool tiene_mismo_id(void* elemento) {
 /*---- Fucnones MOCKS ----*/
 
 char* instruccion[] = {
-    "NOOP",
-    "NOOP",
-    "NOOP",
     "SET AX 10",
-    "SET BX 10",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
+    "SET BX 10"
     "SUM AX BX",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "EXIT_PROC"
+    "EXIT_PROC",
 
 };
 

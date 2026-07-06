@@ -32,8 +32,6 @@ int main(int argc, char *argv[])
 
     int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
 
-    log_info(logger, "Servidor listo para recibir clientes");
-
     while (scheduler_control_loop == 1) {
         
         int cliente_fd = esperar_cliente(server_fd, logger);
@@ -81,9 +79,11 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     int control_loop = 1;
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
         
-        int op_code = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
-        log_info(logger,"Se recibio el OP_CODE: [%d]", op_code);
-        if(op_code == -1){
+        log_info(logger,"Esperando por Nevas Solicitudes de Sistema...");
+
+        op_code opcode = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
+        log_info(logger,"Se recibio el OP_CODE: [%s]", opcode_to_string(opcode));
+        if(opcode == -1){
             log_error(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
             control_loop = 0;
             return NULL ;
@@ -91,7 +91,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
         
 
-        switch (op_code) {
+        switch (opcode) {
             case NUEVA_CPU:
                 nueva_cpu(cliente_fd);
                 break;
@@ -101,10 +101,8 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 break;
 
             case NUEVA_MEMORY_STICK:
-
-            recibir_nueva_memory_stick(cliente_fd);
-
-            break;
+                recibir_nueva_memory_stick(cliente_fd);
+                break;
 
             case NUEVA_IO:
                 // Se conecta una interfaz de IO al Kernel por primera vez
@@ -186,16 +184,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 }
 
 /*-----                     GESTION DE PCBs                     -----*/
-
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el estado de un PCB*/
-    
-    //Se le podria agregar semaforos pero antes y dsp de llamar a la funcion
-    
-    pcb -> estado_anterior = (pcb ->estado_pcb);
-    pcb ->estado_pcb = nuevoEstado;
-    
-    log_info (logger, "## PID:[%d] pasa del estado [%d] al estado [%d]",pcb->data.PID,pcb->estado_anterior,pcb->estado_pcb);
-}
 
 PCB* buscar_pcb_por_pid(int pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
     
@@ -515,7 +503,6 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
 //NUEVA_CPU,
 void nueva_cpu (int cliente_fd) {
 
-        log_opcode(logger,NUEVA_CPU);
         t_CPU* info_cpu = malloc(sizeof(t_CPU));
 
         info_cpu->fd = cliente_fd;         
@@ -547,60 +534,81 @@ void desalojo (int socket_cliente){
     int pid = recibir_pid(socket_cliente);
     char* cpu_id = recibir_mensaje(socket_cliente, logger);
     op_code err = OK;
+    int desalojado = 0;
+
     if(mem_corrupt_value == 1){
         
+        log_debug(logger, "MEM CORRUPT");
         enviar_op_code(MEM_CORRUPT, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
+        desalojado = 1;
 
     }
     else if (compactacion_value == 1) {
         
+        log_debug(logger, "COMPACTACION");
         enviar_op_code(COMPACTACION, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
-
+        desalojado = 1;
               
     }
     else if (existe_pcb_con_pid(list_suplementarias->desalojo,pid)){
         
+        log_debug(logger, "DESALOJO POR LISTA");
         enviar_op_code(DESALOJO, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
         
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         sacar_pcb_por_pid(list_suplementarias->desalojo,pid);
         pthread_mutex_unlock(&sem_procesos_s_desalojo);
+        desalojado = 1;
+
     }
     else {
+
+        log_debug(logger, "NO HAY DESAOLOJO");
         enviar_op_code(OK,socket_cliente);
+        desalojado = 0;
     }
 
     err = recibir_op_code(socket_cliente);
     if (err == OK){
 
-        PCB* pcb = buscar_pcb_por_pid(pid);
+        if(desalojado == 1){
+            
+            log_debug(logger, "Entro a IF de DESALOJADO");
+            PCB* pcb = buscar_pcb_por_pid(pid);
         
-        if(pcb->estado_pcb == RNN){
+            if(pcb->estado_pcb == RNN){
 
-            cambiar_estado_pcb(pcb,RDY);
+                cambiar_estado_pcb(pcb,RDY);
 
-            if (compactacion_value == 1){
-                if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0){
-                    actualizar_prioridad_pcb(pcb,0);
-                }
-                
-                pthread_mutex_lock(&mutex_ready);
-                list_add_in_index(listasProcesos->rdy, 0, pcb);
-                pthread_mutex_lock(&mutex_ready);
+                if (compactacion_value == 1){
+                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0){
+                        actualizar_prioridad_pcb(pcb,0);
+                    }
+                    
+                    pthread_mutex_lock(&mutex_ready);
+                    list_add_in_index(listasProcesos->rdy, 0, pcb);
+                    pthread_mutex_lock(&mutex_ready);
             }
             else {
                 agregar_proceso_lista(pcb);
             }
         
-            eliminar_proceso_Lista(pcb);
-        }
+                eliminar_proceso_Lista(pcb);
+            }
         
 
-        log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
+            log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
+
+        }
+
+        
     }
+    else log_error(logger, "Error de condinacion en la comunicacion [desalojo]");
+
+    return;
 
     
 }  
@@ -1222,6 +1230,8 @@ void prueba_mediano_plazo_mock()
 
 void loguear_lista(t_list* lista, t_log* logger)
 {
+    log_info(logger, "Resivando Informacion dentro de lista [loguear_lista]");
+
     if(list_is_empty(lista)){
         log_info(logger, "Lista Vacia");
         return;
@@ -1229,7 +1239,7 @@ void loguear_lista(t_list* lista, t_log* logger)
     
     for (int i = 0; i < list_size(lista); i++){
         PCB* pcb = list_get(lista, i);
-        log_info(logger, "PID: [%d] Estado: [%d]", pcb->data.PID, pcb->estado_pcb);
+        log_info(logger, "PID: [%d] Estado: [%s]", pcb->data.PID, nombre_estado(pcb->estado_pcb));
     }
 }
 
@@ -1478,7 +1488,7 @@ void mutex_unlock (int socket_cliente){
 
     }
 
-//MEM_ALLOC,
+//MEM_ALLOC,k
 void mem_alloc (int socket_cliente){
     
     enviar_op_code(OK,socket_cliente); //HandShake

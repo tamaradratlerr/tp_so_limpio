@@ -19,6 +19,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	info_km.ip_km = config_get_string_value(config, "IP_KM");
 	info_km.puerto_km = config_get_string_value(config, "PUERTO_KM");
 	info_config.planificacion_algoritmo = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
+	planificacion_algoritmo = info_config.planificacion_algoritmo; 
 	info_config.listas_algortimo = config_get_string_value(config, "QUEUES_ALGORITHMS");
 	info_config.intervalo_tarea = config_get_int_value(config, "RR_QUANTUM");
 	
@@ -84,7 +85,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 
 
 	// Creamos una conexión hacia el servidor
-	printf("Intentando conectar al Kernel Memory (Servidor)\n");
+	log_info(logger,"Intentando conectar al Kernel Memory (Servidor)");
 	
 	if(!mock){
 		
@@ -104,21 +105,22 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 		}	
 
 	
+	PCB* nuevo_pcb;
 
 	// Enviamos al servidor el valor de CLAVE como mensaje
 	if(mock)
-	{
-		
-		PCB* pcb = crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
-		agregar_proceso_lista(pcb);
+	{	
+		nuevo_pcb = crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
 	}	
 
 	else
 	{
-		PCB* pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);
-		agregar_proceso_lista(pcb);
+		nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);
 	}	
 	
+	cambiar_estado_pcb(nuevo_pcb, RDY);
+	agregar_proceso_lista(nuevo_pcb);
+	eliminar_proceso_Lista(nuevo_pcb);
 	return 0;
 	
 

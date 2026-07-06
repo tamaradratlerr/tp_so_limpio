@@ -99,6 +99,7 @@ void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
 PCB* crearNuevoProceso_mock(char*, int prioridad, int);
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
 
 /*----- CREACION Y DESTRUCCION DE LISTAS -----*/
 
@@ -112,6 +113,7 @@ void eliminar_listas_suple(void);
 int agregar_proceso_lista(PCB* pcb);
 op_code eliminar_proceso_Lista(PCB* pcb);
 int agregar_lista_ready(PCB* pcb);
+char* nombre_estado (estado sto);
 
 /*----- Vars Extern -----*/
 

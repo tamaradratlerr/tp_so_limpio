@@ -273,6 +273,22 @@ op_code recibir_op_code(int socket_cliente)
     op_code cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(op_code), MSG_WAITALL) > 0)
     {
+        log_debug(logger, "OPCODE: [%s] fue recibido", opcode_to_string(cod_op));
+        return cod_op;
+    }
+    else
+    {
+        close(socket_cliente);
+        return -1;
+    }
+}
+
+int recibir_int(int socket_cliente)
+{
+
+    int cod_op;
+    if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
+    {
         return cod_op;
     }
     else
@@ -344,8 +360,16 @@ void enviar_buffer(void *buffer, int size, int socket_cliente)
 
 void enviar_op_code(op_code code_op, int socket_cliente)
 {
+    
+    log_debug(logger, "Se envia el OP_CODE [%s]",opcode_to_string(code_op));
     // Solo enviamos el código, no hace falta crear un paquete complejo si solo es el op_code
     send(socket_cliente, &code_op, sizeof(op_code), 0);
+}
+
+void enviar_int(int code_op, int socket_cliente)
+{
+    // Solo enviamos el código, no hace falta crear un paquete complejo si solo es el op_code
+    send(socket_cliente, &code_op, sizeof(int), 0);
 }
 
 char *recibir_mensaje(int socket_cliente, t_log *logger)
@@ -358,7 +382,7 @@ char *recibir_mensaje(int socket_cliente, t_log *logger)
         return NULL;
     }
 
-    log_info(logger, "Mensaje [%s] Recibido", buffer);
+    log_debug(logger, "Mensaje [%s] Recibido", buffer);
     return buffer;
 } // HAY QUE LIBERAR LA MEMORIA DSP DE LLAMAR A ESTA FUNCION
 
@@ -547,5 +571,68 @@ void log_opcode(t_log* logger, op_code codigo)
         default:
             log_info(logger, "OP_CODE: DESCONOCIDO (%d)", codigo);
             break;
+    }
+}
+
+char* opcode_to_string(op_code codigo)
+{
+    switch (codigo)
+    {
+        case OK: return "OP_CODE: OK";
+        case NOTOK: return "OP_CODE: NOTOK";
+        case MENSAJE: return "OP_CODE: MENSAJE";
+        case PAQUETE: return "OP_CODE: PAQUETE";
+        case NUEVA_CPU: return "OP_CODE: NUEVA_CPU";
+        case CPU_LIBRE: return "OP_CODE: CPU_LIBRE";
+        case NUEVA_MEMORY_STICK: return "OP_CODE: NUEVA_MEMORY_STICK";
+        case DESCONEXION_MS: return "OP_CODE: DESCONEXION_MS";
+        case FIN_PROCESO: return "OP_CODE: FIN_PROCESO";
+        case DESALOJO: return "OP_CODE: DESALOJO";
+        case PCB_DATA: return "OP_CODE: PCB_DATA";
+        case TRADUCIR_DIRECCION: return "OP_CODE: TRADUCIR_DIRECCION";
+        case ERROR_MMU: return "OP_CODE: ERROR_MMU";
+        case ERROR_SEGMENTATION_FAULT: return "OP_CODE: ERROR_SEGMENTATION_FAULT";
+        case gl_MUTEX_CREATE: return "OP_CODE: gl_MUTEX_CREATE";
+        case gl_MUTEX_LOCK: return "OP_CODE: gl_MUTEX_LOCK";
+        case gl_MUTEX_UNLOCK: return "OP_CODE: gl_MUTEX_UNLOCK";
+        case gl_MEM_ALLOC: return "OP_CODE: gl_MEM_ALLOC";
+        case gl_MEM_FREE: return "OP_CODE: gl_MEM_FREE";
+        case gl_IO_SLEEP: return "OP_CODE: gl_IO_SLEEP";
+        case gl_IO_STDOUT: return "OP_CODE: gl_IO_STDOUT";
+        case gl_IO_STDIN: return "OP_CODE: gl_IO_STDIN";
+        case gl_INIT_PROC: return "OP_CODE: gl_INIT_PROC";
+        case gl_EXIT: return "OP_CODE: gl_EXIT";
+        case FETCH_INSTRUCCION: return "OP_CODE: FETCH_INSTRUCCION";
+        case LLEGO_INSTRUCCION: return "OP_CODE: LLEGO_INSTRUCCION";
+        case FETCH: return "OP_CODE: FETCH";
+        case LEER_MEMORIA: return "OP_CODE: LEER_MEMORIA";
+        case ESCRIBIR_MEMORIA: return "OP_CODE: ESCRIBIR_MEMORIA";
+        case CONTEXTO: return "OP_CODE: CONTEXTO";
+        case MEM_CORRUPT: return "OP_CODE: MEM_CORRUPT";
+        case ENVIAR_PROCESO: return "OP_CODE: ENVIAR_PROCESO";
+        case km_IO_STDOUT: return "OP_CODE: km_IO_STDOUT";
+        case km_IO_STDIN: return "OP_CODE: km_IO_STDIN";
+        case SOLICITUD_INSTRUCCION: return "OP_CODE: SOLICITUD_INSTRUCCION";
+        case km_GUARDAR_CONTEXTO: return "OP_CODE: km_GUARDAR_CONTEXTO";
+        case ks_INIT_PROC: return "OP_CODE: ks_INIT_PROC";
+        case ks_EXIT: return "OP_CODE: ks_EXIT";
+        case NUEVO_KERNEL: return "OP_CODE: NUEVO_KERNEL";
+        case OK_ESCRITURA: return "OP_CODE: OK_ESCRITURA";
+        case NUEVO_ESPACIO: return "OP_CODE: NUEVO_ESPACIO";
+        case SUSPENDIDO: return "OP_CODE: SUSPENDIDO";
+        case NUEVA_IO: return "OP_CODE: NUEVA_IO";
+        case IO_LIBRE: return "OP_CODE: IO_LIBRE";
+        case IO_STDIN: return "OP_CODE: IO_STDIN";
+        case IO_STDOUT: return "OP_CODE: IO_STDOUT";
+        case IO_SLEEP: return "OP_CODE: IO_SLEEP";
+        case IO_STDOUT_RETORNO: return "OP_CODE: IO_STDOUT_RETORNO";
+        case IO_STDIN_RETORNO: return "OP_CODE: IO_STDIN_RETORNO";
+        case CPUS_DESALOJADAS_OK: return "OP_CODE: CPUS_DESALOJADAS_OK";
+        case COMPACTACION: return "OP_CODE: COMPACTACION";
+        case COMPACTACION_FINALIZADA: return "OP_CODE: COMPACTACION_FINALIZADA";
+        case NUEVA_MEMORIA_ACUM: return "OP_CODE: NUEVA_MEMORIA_ACUM";
+
+        default:
+            return "OP_CODE: DESCONOCIDO";
     }
 }

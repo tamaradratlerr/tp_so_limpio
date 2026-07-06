@@ -12,7 +12,6 @@ void* atender_nuevo_cliente(void* fd);
 
 
 /*----- GESTION DE PCBs -----*/
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
 PCB* buscar_pcb_por_pid(int pid_recibido);
 PCB* encontrar_pcb_rnn_por_pid(int pid);
 

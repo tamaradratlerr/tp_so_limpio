@@ -241,6 +241,17 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+    
+    if(compactacion_value)
+    {
+        if(mock)
+        {
+            log_info(logger,
+                "[MOCK] No se envia ningun proceso porque Memory esta compactando");
+        }
+
+        return;
+    }
 
     if (cpu_libre != NULL) {
         cpu_libre->enUso = true;}
@@ -256,6 +267,13 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         
         PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
+        if(mock && pcb_a_ejecutar)
+        {
+            log_info(logger,
+                "[MOCK] Scheduler selecciono PID %d",
+                pcb_a_ejecutar->data.PID);
+        }
+
         if(pcb_a_ejecutar == NULL){
             log_error(logger, "No se pudo obtener PCB READY");
             cpu_libre->enUso = false;
@@ -375,22 +393,48 @@ void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
 {
     pthread_mutex_lock(&sem_procesos_running);
 
-    for(int i = 0; i < list_size(listasProcesos->rnn); i++)
+    int size = list_size(listasProcesos->rnn);
+
+    for(int i = 0; i < size; i++)
     {
         PCB* pcb_running = list_get(listasProcesos->rnn, i);
+
+        if(pcb_running == NULL)
+            continue;
 
         if(pcb_nuevo->data.prioridad < pcb_running->data.prioridad)
         {
             pthread_mutex_lock(&sem_procesos_s_desalojo);
-            list_add(list_suplementarias->desalojo, pcb_nuevo);
+
+            // Evitar duplicados por PID (NO por puntero)
+            bool existe = false;
+
+            for(int j = 0; j < list_size(list_suplementarias->desalojo); j++)
+            {
+                PCB* pcb_aux = list_get(list_suplementarias->desalojo, j);
+
+                if(pcb_aux != NULL &&
+                   pcb_aux->data.PID == pcb_running->data.PID)
+                {
+                    existe = true;
+                    break;
+                }
+            }
+
+            if(!existe)
+            {
+                list_add(list_suplementarias->desalojo, pcb_running);
+            }
+
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
-            log_info(
-                logger,
+            log_info(logger,
                 "PID %d desalojado por ingreso de PID %d con mayor prioridad",
                 pcb_running->data.PID,
                 pcb_nuevo->data.PID
             );
+
+            break;
         }
     }
 
@@ -527,10 +571,9 @@ void cpu_libre (int cliente_fd){
     }
     mandar_proceso_cpu(cliente_fd);
 }
-
 //DESALOJO
-void desalojo (int socket_cliente){
-    
+void desalojo(int socket_cliente)
+{
     int pid = recibir_pid(socket_cliente);
     char* cpu_id = recibir_mensaje(socket_cliente, logger);
     op_code err = OK;
@@ -543,6 +586,10 @@ void desalojo (int socket_cliente){
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
         desalojado = 1;
 
+        log_info(logger,
+            "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",
+            pid,
+            cpu_id);
     }
     else if (compactacion_value == 1) {
         
@@ -572,7 +619,6 @@ void desalojo (int socket_cliente){
     }
 
     err = recibir_op_code(socket_cliente);
-    if (err == OK){
 
         if(desalojado == 1){
             
@@ -592,7 +638,8 @@ void desalojo (int socket_cliente){
                     list_add_in_index(listasProcesos->rdy, 0, pcb);
                     pthread_mutex_lock(&mutex_ready);
             }
-            else {
+            else
+            {
                 agregar_proceso_lista(pcb);
             }
         
@@ -709,53 +756,124 @@ void io_libre(int io_socket){ //Copia de atender CPU
 /*-----Con el Kernel Memory-----*/
 
 //MEM_CORRUPT
-void mem_corrupt (int socket_cliente){ 
-
+void mem_corrupt(int socket_cliente)
+{
     mem_corrupt_value = 1;
-    log_info(logger,"## Se Desalojaran todas las CPUs por Mem Corrupt");
-    //madnar a km el ok cuando se desalojó
-    if (mem_corrupt_value == 1){
-        while (!list_is_empty(listasProcesos->rnn)){
-                usleep(1000);
-            }
-        
-        log_info(logger, "Blue Screen");  
-        scheduler_control_loop = 0; //Apaga el Kernel Scheduler
-        return;
+
+    log_info(logger,
+            "## Se Desalojaran todas las CPUs por Mem Corrupt");
+
+    if(mock)
+{
+    log_info(logger, "========== MOCK MEM CORRUPT ==========");
+
+    while(!list_is_empty(listasProcesos->rnn))
+    {
+        PCB* pcb = list_remove(listasProcesos->rnn, 0);
+
+        log_info(logger,
+                 "[MOCK] PID [%d] desalojado",
+                 pcb->data.PID);
     }
 
-} 
+    log_info(logger, "[MOCK] Todas las CPUs fueron desalojadas");
+    log_info(logger, "[MOCK] Blue Screen");
 
-//COMPACTACION
+    scheduler_control_loop = 0;
+
+    return;
+}
+else
+{
+    while(!list_is_empty(listasProcesos->rnn))
+    {
+        usleep(1000);
+    }
+
+    enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
+
+    log_info(logger, "Blue Screen");
+
+    scheduler_control_loop = 0;
+}
+}
+
 void compactacion (int socket_cliente){
     int err = 0;
     compactacion_value = 1;
     control_compac = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Compactacion");
 
-    while (!list_is_empty(listasProcesos->rnn)){
+     if(mock)
+    {
+        log_info(logger, "========== MOCK COMPACTACION ==========");
+
+        while(!list_is_empty(listasProcesos->rnn))
+        {
+            PCB* pcb = list_remove(listasProcesos->rnn, 0);
+
+            cambiar_estado_pcb(pcb, RDY);
+
+            if(strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
+            {
+                pcb->data.prioridad = 0;
+
+                pthread_mutex_lock(&mutex_ready);
+
+                list_add_in_index(
+                    planificador->niveles[0].cola,
+                    0,
+                    pcb);
+
+                pthread_mutex_unlock(&mutex_ready);
+            }
+            else
+            {
+                pthread_mutex_lock(&mutex_ready);
+
+                list_add_in_index(
+                    listasProcesos->rdy,
+                    0,
+                    pcb);
+
+                pthread_mutex_unlock(&mutex_ready);
+            }
+            log_info(logger,
+                    "[MOCK] PID [%d] agregado al principio de READY",
+                    pcb->data.PID);
+        }
+
+        log_info(logger, "[MOCK] Todas las CPUs fueron desalojadas");
+
+        log_info(logger, "[MOCK] Memory compactando...");
+
+        sleep(1);
+
+        err = COMPACTACION_FINALIZADA;
+    }
+    else
+    {
+        while (!list_is_empty(listasProcesos->rnn)){
             usleep(1000);
         }
 
-        enviar_op_code(CPUS_DESALOJADAS_OK,info_km.conexion_km);
-        
-        if(mock)
-        {
-            err = COMPACTACION_FINALIZADA;
-        }
-        else if(!mock){
-        
-            err = recibir_op_code(info_km.conexion_km);
-            if (err == COMPACTACION_FINALIZADA){
-                compactacion_value = 0;
-                nuevo_espacio();
-            }
-            else {
-                log_info(logger, "## error en resolver compactacion");
-                return;
-            }  
-        }
+        enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
+
+        err = recibir_op_code(info_km.conexion_km);
+    }
+
+    if (err == COMPACTACION_FINALIZADA){
+        compactacion_value = 0;
+
+        log_info(logger,"## Compactacion finalizada");
+
+        nuevo_espacio();
+    }
+    else{
+        log_info(logger, "## error en resolver compactacion");
+    }
 }
+
 
 //NUEVA_MEMORY_STICK
 void recibir_nueva_memory_stick(int socket_km)
@@ -769,6 +887,12 @@ void recibir_nueva_memory_stick(int socket_km)
 
     int offset = 0;
 
+    if(mock)
+    {
+        log_info(logger,
+            "========== MOCK MEMORY STICK ==========");
+    }
+    else{
 
     // IP
     ms->ip = strdup(buffer + offset);
@@ -816,7 +940,9 @@ void recibir_nueva_memory_stick(int socket_km)
 
     enviar_memory_stick_a_cpus(ms);
     nuevo_espacio();
-} 
+    
+    } 
+}
 
 //NUEVO_ESPACIO
 void nuevo_espacio()
@@ -1166,9 +1292,18 @@ bool existe_pcb_con_pid(t_list* lista, int pid) {
     return list_any_satisfy(lista, tiene_pid);
 }
 
-PCB* sacar_pcb_por_pid(t_list* lista, int pid) {
-    pid_buscado = pid;
-    return list_remove_by_condition(lista, tiene_pid);
+PCB* sacar_pcb_por_pid(t_list* lista, int pid)
+{
+    for(int i = 0; i < list_size(lista); i++)
+    {
+        PCB* pcb = list_get(lista, i);
+
+        if(pcb->data.PID == pid)
+        {
+            return list_remove(lista, i);
+        }
+    }
+    return NULL;
 }
 
 

@@ -79,6 +79,7 @@ void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam);
 void prueba_mediano_plazo_mock();
 void prueba_largo_plazo_mock();
 
+void prueba_compactacion_mock(void);
 /*----- SYSCALLs CPU -----*/
 
 void mutex_create(int socket_cliente);

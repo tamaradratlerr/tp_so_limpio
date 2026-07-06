@@ -427,6 +427,9 @@ void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 	log_destroy(logger);
 	config_destroy(config);
 
+    terminar_listas_procesos();
+    eliminar_listas_suple();
+
     liberar_conexion (info_km.conexion_km);
 	
 }

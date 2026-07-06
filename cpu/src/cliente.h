@@ -41,6 +41,7 @@ char* identificador                     = NULL;
 
 int control_loop00                      = 0;
 int control_loop                        = 0;
+int exit_control                        = 0;
 
 
 /*----- EXTERN -----*/
@@ -56,6 +57,7 @@ extern char* identificador;
 
 extern int control_loop00;
 extern int control_loop;
+extern int exit_control;
 
 
 

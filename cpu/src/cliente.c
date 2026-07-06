@@ -85,7 +85,13 @@ int main(int argc, char *argv[])
         int contexto_key = 0;
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
         log_info(logger,"Enviado CPU LIBRE");
-        proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
+        if((proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler)) == -1){
+
+            log_error(logger, "Error en Conexion");
+            return;
+        }
+        
+        
         contexto_key++;
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
@@ -397,6 +403,12 @@ void execute() {
 }
 
 void interrupt() { 
+    
+    if(exit_control == 1) {
+        exit_control = 0;
+        return;
+    }
+
     enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
     enviar_pid (contexto_actual->pid,sockets->conexion_kernel_scheduler);
     enviar_mensaje (identificador, sockets->conexion_kernel_scheduler);
@@ -1092,18 +1104,15 @@ void ejecutar_init_proc(t_instruccion* instr) {
 
 void ejecutar_exit() {
     
-    log_info(logger, "PID: %d - Ejecutando EXIT", contexto_actual->pid);
     log_info (logger, "## PID:[%d] - Ejecutando [EXIT]",contexto_actual->pid);/*Logger Obligatorio*/
 
     enviar_op_code(gl_EXIT, sockets->conexion_kernel_scheduler);
 
-    t_paquete* paquete = crear_paquete(gl_EXIT);
-    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
 
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
+        exit_control = 1;
         limpiar_contexto_actual();
         control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
     }

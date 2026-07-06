@@ -59,6 +59,8 @@ int main(int argc, char *argv[])
         // el cliente_fd: Lo que le pasamos como argumento
         
     }
+    
+    
 
     terminar_programa (logger, config, info_km);
 }
@@ -120,18 +122,18 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 compactacion(cliente_fd);
                 break;
 
-            case gl_IO_SLEEP: {
+            case gl_IO_SLEEP:
                 io_sleep(cliente_fd); 
-                break;}
+                break;
 
-            case gl_IO_STDIN: {
+            case gl_IO_STDIN: 
                 io_stdin(cliente_fd); 
-                break;}
+                break;
 
-            case gl_IO_STDOUT: {
+            case gl_IO_STDOUT:
                 io_stdout(cliente_fd); 
                 break;
-            }
+    
             case IO_LIBRE: 
                 // viene de la io
                 // La interfaz de IO nos manda este opcode cuando termina de operar
@@ -253,10 +255,10 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         return;
     }
 
-    if (cpu_libre != NULL) {
+    if (cpu_libre != NULL && cpu_libre->enUso == false) {
         cpu_libre->enUso = true;}
     else {
-        log_error (logger, "No se encontro a la CPU buscada (funcion: mandar_proceso_cpu)");
+        log_error (logger, "No se encontro a la CPU buscada o la misma esta en uso(funcion: mandar_proceso_cpu)");
         pthread_mutex_unlock(&mutex_cpus);
         return;
     }
@@ -264,6 +266,13 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
 
     /*Mandamos el PCB a la CPU*/
     if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
+        
+        while (list_is_empty(listasProcesos->rdy)){
+
+            log_warning(logger, "Sin elemntos en RDY. reitentando en 2 Segundos...");
+            usleep(2000000);
+
+        }
         
         PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
@@ -283,6 +292,7 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
         pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        eliminar_proceso_Lista(pcb_a_ejecutar);
         
         loguear_lista(listasProcesos->rnn,logger);
         
@@ -291,8 +301,14 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         log_warning(logger, "KS envio el PID[%d] a CPU ID: [%s]",pcb_a_ejecutar->data.PID,cpu_libre->identificador);
 
         if (err != 1) {
-            log_error (logger, "Error al enviar pcb a cpu libre (funcion: mandar_proceso_cpu)"); // Completar log de error
-            cpu_libre->enUso = false;        
+            log_error (logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)"); // Completar log de error
+            cpu_libre->enUso = false; 
+            
+            
+            cambiar_estado_pcb(pcb_a_ejecutar, RDY);
+            pcb_a_ejecutar->fd_cpu = 0;
+            agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+            eliminar_proceso_Lista(pcb_a_ejecutar);
             return;}
 
         log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->data.PID, cpu_libre->fd);
@@ -329,7 +345,7 @@ bool es_la_cpu_buscada (void* elemento, void* contexto) {
         // Casteamos el contexto de vuelta a un puntero de int para sacar el socket
      int socket_buscado = *(int*) contexto; 
     
-    return (cpu->fd == socket_buscado) && (cpu->enUso == false);
+    return (cpu->fd == socket_buscado);
 }
 
 
@@ -619,6 +635,7 @@ void desalojo(int socket_cliente)
     }
 
     err = recibir_op_code(socket_cliente);
+    if(err == OK){
 
         if(desalojado == 1){
             
@@ -637,24 +654,27 @@ void desalojo(int socket_cliente)
                     pthread_mutex_lock(&mutex_ready);
                     list_add_in_index(listasProcesos->rdy, 0, pcb);
                     pthread_mutex_lock(&mutex_ready);
-            }
-            else
-            {
-                agregar_proceso_lista(pcb);
-            }
-        
-                eliminar_proceso_Lista(pcb);
+                }
+            
+                else
+                {
+                    agregar_proceso_lista(pcb);
+                }
+            
+                    eliminar_proceso_Lista(pcb);
+                    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+                    cpu_libre->enUso = false;
             }
         
 
             log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
 
         }
-
-        
     }
-    else log_error(logger, "Error de condinacion en la comunicacion [desalojo]");
-
+    else {
+            log_error(logger, "Error de condinacion en la comunicacion [desalojo]");
+        }
+    
     return;
 
     
@@ -1749,9 +1769,9 @@ void init_proc(int socket_cliente){
 //EXIT
 void exit_proceso(int socket_cpu){
 
-    t_list* lista = recibir_paquete(socket_cpu);
-    int pid_a_finalizar = *(int*)list_get(lista, 0);
-    list_destroy(lista);
+    log_debug(logger, "Iniciando EXIT Proceso");
+    
+    int pid_a_finalizar = recibir_pid(socket_cpu);
 
     /*Bloqueo y Desalojo*/
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
@@ -1775,6 +1795,18 @@ void exit_proceso(int socket_cpu){
         agregar_proceso_lista (pcb);
         eliminar_proceso_Lista(pcb);
     }
+    else{
+        log_error(logger, "PCB = NULL en EXIT_PROCESO");
+    }
+
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
+    
+    if(cpu_libre == NULL){
+        log_error(logger,"Error al encontrar CPU en la lista");
+        return;
+    }
+
+    cpu_libre->enUso = false;
 
     log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
     

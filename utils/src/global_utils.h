@@ -177,8 +177,8 @@ typedef struct {
 typedef enum 
 {
     NEW,
-    RNN,
     RDY,
+    RNN,
     BCK,
     S_BCK,
     S_RDY,
@@ -208,7 +208,7 @@ typedef struct
 //Estructura de dato que identifica CPUs
 typedef struct{
     int fd;
-    int identificador; 
+    char* identificador; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
 }t_CPU;
 typedef struct {
@@ -295,5 +295,14 @@ int iniciar_servidor(char* puerto, t_log* logger);
 int recibir_pid(int socket_cliente);
 
 int enviar_pid(int PCB_ID, int socket_cliente);
+
+void log_opcode(t_log* logger, op_code codigo);
+
+char* opcode_to_string(op_code codigo);
+
+void enviar_int(int code_op, int socket_cliente);
+
+int recibir_int(int socket_cliente);
+
 
 #endif /* GLOBAL_UTILS_H_ */

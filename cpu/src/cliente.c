@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
         log_info(logger,"Enviado CPU LIBRE");
         proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler);
         contexto_key++;
+        log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
         control_loop = 1;
         while (control_loop == 1){
@@ -384,7 +385,7 @@ void execute() {
             ejecutar_init_proc(instr);
             break;
 
-        case EXIT:
+        case EXIT_PROC:
             ejecutar_exit();
             break;
 
@@ -409,6 +410,10 @@ void interrupt() {
     }
     else if(cod_op == NUEVA_MEMORY_STICK){
         recibir_memory_stick(sockets->conexion_kernel_scheduler);
+    }
+    else {
+        
+        enviar_op_code(OK, sockets->conexion_kernel_scheduler);
     }
 }
 
@@ -585,7 +590,7 @@ t_instruccion_code identificar_codigo(char* token) {
     if (strcmp(token, "STDOUT") == 0)        return STDOUT;
     if (strcmp(token, "STDIN") == 0)         return STDIN;
     if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
-    if (strcmp(token, "EXIT") == 0)          return EXIT;
+    if (strcmp(token, "EXIT_PROC") == 0)          return EXIT_PROC;
 
     // caso por defecto si no reconoce el comando
     if (token == NULL) return EXIT_FAILURE;
@@ -650,7 +655,7 @@ void ejecutar_set (t_instruccion* instr){
         *dest = valor;
 
         log_info (logger, "## PID:[%d] - Ejecutando [SET] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
-        log_info(logger, "[EXEC] SUM 8b: %s = %u", reg_dest_nombre, *dest);
+        log_info(logger, "[EXEC] SET 8b: %s = %u", reg_dest_nombre, *dest);
     }
 
 }
@@ -1420,10 +1425,11 @@ bool tiene_mismo_id(void* elemento) {
 /*---- Fucnones MOCKS ----*/
 
 char* instruccion[] = {
-    "NOOP",
-    "SET AX 01",
-    "SET BX 01",
-    "SUM AX BX"
+    "SET AX 10",
+    "SET BX 10"
+    "SUM AX BX",
+    "EXIT_PROC",
+
 };
 
 t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cambiar algo del contexto inicial*/
@@ -1454,6 +1460,8 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
 
     list_add(nuevo_contexto->tabla_segmentos, seg);
 
+    log_debug(logger, "Conetexto MOCK Realizado");
+
     return nuevo_contexto;
 
 }/*HACER*/
@@ -1462,14 +1470,8 @@ char* fetch_mock(t_cpu_sockets* sockets){
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u [MOCK]", 
              contexto_actual->pid, contexto_actual->pc);
-    int tamanio = 0;
-
-    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc, tamanio);
     
-    if (dir_fisica == ERROR_MMU) {
-        log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
-        return NULL;
-    }
+             int tamanio = 0;
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 

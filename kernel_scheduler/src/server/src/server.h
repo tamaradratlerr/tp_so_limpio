@@ -10,21 +10,8 @@ pthread_t hilo_quantum;
 
 void* atender_nuevo_cliente(void* fd);
 
-/*----- CREACION Y DESTRUCCION DE LISTAS -----*/
-
-t_listas_procesos* Iniciar_listas_procesos(void);
-void terminar_listas_procesos(void);
-void iniciar_listas_suple(void);
-void eliminar_listas_suple(void);
-
-/*----- GESTION DE LISTAS -----*/
-
-int agregar_proceso_lista(PCB* pcb);
-op_code eliminar_proceso_Lista(PCB* pcb);
-int agregar_lista_ready(PCB* pcb);
 
 /*----- GESTION DE PCBs -----*/
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
 PCB* buscar_pcb_por_pid(int pid_recibido);
 PCB* encontrar_pcb_rnn_por_pid(int pid);
 
@@ -83,12 +70,15 @@ espera_io* encontrar_pid_io_bck (int pid);
 bool tiene_pid(void* elemento);
 bool existe_pcb_con_pid(t_list* lista, int pid);
 PCB* sacar_pcb_por_pid(t_list* lista, int pid) ;
+void loguear_lista(t_list* lista, t_log* logger);
 
 /*----- MOCKs -----*/
 
 void enviar_proceso_finalizar_KM_mock (int pid);
 void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam);
 void prueba_mediano_plazo_mock();
+void prueba_largo_plazo_mock();
+
 void prueba_compactacion_mock(void);
 /*----- SYSCALLs CPU -----*/
 

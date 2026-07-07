@@ -162,5 +162,12 @@ extern pthread_mutex_t mutex_ready;
 extern pthread_mutex_t mutex_simulados; 
 extern pthread_mutex_t mutex_cola_exec;
 
+extern sem_t sem_hay_ready;
+extern sem_t sem_hay_s_ready;
+extern sem_t sem_compactacion;
+extern sem_t sem_rnn_vacio;
+
+
+
 
 #endif

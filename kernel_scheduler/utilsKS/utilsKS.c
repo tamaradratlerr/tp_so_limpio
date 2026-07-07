@@ -52,7 +52,12 @@ pthread_mutex_t mutex_ios = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_simulados = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
-//FALTA PONER LAS DEMAS MUTEX?
+
+sem_t sem_hay_ready;
+sem_t sem_hay_s_ready;
+sem_t sem_compactacion;
+sem_t sem_rnn_vacio;
+
 
 /*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
 
@@ -68,6 +73,11 @@ t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas la
     listasProcesos->s_bck = list_create();
     listasProcesos->s_rdy = list_create();
 
+    sem_init(&sem_hay_ready, 0, 0);
+    sem_init(&sem_hay_s_ready, 0, 0);
+    sem_init(&sem_compactacion, 0, 1);
+    sem_init(&sem_rnn_vacio, 0, 0);
+
 	return listasProcesos;
 };
 
@@ -81,7 +91,10 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
     list_destroy(listasProcesos->s_bck);
     list_destroy(listasProcesos->s_rdy);
 
-
+    sem_destroy(&sem_hay_ready);
+    sem_destroy(&sem_hay_s_ready);
+    sem_destroy(&sem_compactacion);
+    sem_destroy(&sem_rnn_vacio);
 }
 
 void iniciar_listas_suple()
@@ -154,6 +167,9 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
         pthread_mutex_lock(&sem_procesos_s_ready);
 		posicion = list_add(listasProcesos->s_rdy, pcb);
         pthread_mutex_unlock(&sem_procesos_s_ready);
+
+        sem_post(&sem_hay_s_ready);
+
         return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
 
         break;
@@ -170,6 +186,8 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
 	case RDY: //RDY
 
 		posicion = agregar_lista_ready(pcb);
+        sem_post(&sem_hay_ready);
+
         return posicion; //Devuelve la posicion por si nos sirve para algo en un futuro (no lo hace en agregar lista ready, se podria hacer)
 
         break;
@@ -196,7 +214,15 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
         case RNN:
             pthread_mutex_lock(&sem_procesos_running);
             removed = list_remove_element(listasProcesos->rnn, pcb);
+
+            bool rnn_quedo_vacio = list_is_empty(listasProcesos->rnn);
             pthread_mutex_unlock(&sem_procesos_running);
+
+            if (rnn_quedo_vacio)
+            {
+                sem_post(&sem_rnn_vacio);
+            }
+
             break;
 
         case BCK:
@@ -221,12 +247,18 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
             pthread_mutex_lock(&sem_procesos_s_ready);
             removed = list_remove_element(listasProcesos->s_rdy, pcb);
             pthread_mutex_unlock(&sem_procesos_s_ready);
+
+            sem_wait(&sem_hay_s_ready);
+
             break;
 
         case RDY:
             pthread_mutex_lock(&sem_procesos_ready);
             removed = list_remove_element(listasProcesos->rdy, pcb);
             pthread_mutex_unlock(&sem_procesos_ready);
+
+            sem_wait(&sem_hay_ready);
+
             break;
     
         default:

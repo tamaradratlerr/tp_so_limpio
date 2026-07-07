@@ -15,12 +15,7 @@ int main(int argc, char *argv[])
     int err = cliente_Kernel_Scheduler(argc, argv);
     if(err != 0){log_error(logger, "ERROR al inciar cliente");}
     
-    
 
-    pthread_mutex_init(&mutex_cpus, NULL);
-
-    //FALTA PONER LOS MUTEX_INIT DE TODOS LOS MUTEX DE LOS ESTADOS
-    //PONER EN UNA FUNCION EL DISTROY DE LA LISTA DE CPUS_COENCTADAS
 
     
     if(mock)
@@ -135,8 +130,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
                 break;
     
             case IO_LIBRE: 
-                // viene de la io
-                // La interfaz de IO nos manda este opcode cuando termina de operar
                 io_libre(cliente_fd); 
                 break;
 
@@ -267,12 +260,7 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
     /*Mandamos el PCB a la CPU*/
     if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
         
-        while (list_is_empty(listasProcesos->rdy)){
-
-            log_warning(logger, "Sin elemntos en RDY. reitentando en 2 Segundos...");
-            usleep(2000000);
-
-        }
+        sem_wait(&sem_hay_ready); // Verifica que no se entre si la lista esta vacia
         
         PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
@@ -401,6 +389,8 @@ PCB* obtener_siguiente_proceso() {
     }
 
     pthread_mutex_unlock(&mutex_ready);
+
+    sem_post(&sem_hay_ready);
 
     return pcb;
 }
@@ -582,10 +572,11 @@ void nueva_cpu (int cliente_fd) {
 //CPU_LIBRE,
 void cpu_libre (int cliente_fd){
 
-    while (compactacion_value == 1){
-        usleep(1000);
-    }
+    sem_wair(&sem_compactacion);
+
     mandar_proceso_cpu(cliente_fd);
+
+    sem_post(&sem_compactacion);
 }
 //DESALOJO
 void desalojo(int socket_cliente)
@@ -654,6 +645,8 @@ void desalojo(int socket_cliente)
                     pthread_mutex_lock(&mutex_ready);
                     list_add_in_index(listasProcesos->rdy, 0, pcb);
                     pthread_mutex_lock(&mutex_ready);
+
+                    sem_post(&sem_hay_ready);
                 }
             
                 else
@@ -716,7 +709,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
         log_error (logger, "No se encontro a la IO buscada (funcion: io_libre)");
         return;
     }
-    pthread_mutex_unlock(&mutex_cpus);
+    pthread_mutex_unlock(&mutex_ios);
 
     /*Mandamos el PCB a la IO*/
     if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) { 
@@ -789,7 +782,20 @@ void mem_corrupt(int socket_cliente)
 
     while(!list_is_empty(listasProcesos->rnn))
     {
+        sem_wait(&sem_hay_ready);
+        pthread_mutex_lock(&sem_procesos_running);
+
         PCB* pcb = list_remove(listasProcesos->rnn, 0);
+
+        bool rnn_quedo_vacio = list_is_empty(listasProcesos->rnn);
+
+        pthread_mutex_unlock(&sem_procesos_running);
+
+        if (rnn_quedo_vacio)
+        {
+            sem_post(&sem_rnn_vacio);
+        }
+
 
         log_info(logger,
                  "[MOCK] PID [%d] desalojado",
@@ -805,9 +811,13 @@ void mem_corrupt(int socket_cliente)
 }
 else
 {
-    while(!list_is_empty(listasProcesos->rnn))
+    pthread_mutex_lock(&sem_procesos_running);
+    bool rnn_vacio = list_is_empty(listasProcesos->rnn);
+    pthread_mutex_unlock(&sem_procesos_running);
+
+    if (!rnn_vacio)
     {
-        usleep(1000);
+        sem_wait(&sem_rnn_vacio);
     }
 
     enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
@@ -821,6 +831,7 @@ else
 void compactacion (int socket_cliente){
     int err = 0;
     compactacion_value = 1;
+    sem_wait(&sem_compactacion);
     control_compac = 1;
     log_info(logger,"## Se Desalojaran todas las CPUs por Compactacion");
 
@@ -873,8 +884,15 @@ void compactacion (int socket_cliente){
     }
     else
     {
-        while (!list_is_empty(listasProcesos->rnn)){
-            usleep(1000);
+        pthread_mutex_lock(&sem_procesos_running);
+
+        bool rnn_vacio = list_is_empty(listasProcesos->rnn);
+
+        pthread_mutex_unlock(&sem_procesos_running);
+
+        if (!rnn_vacio)
+        {
+            sem_wait(&sem_rnn_vacio);
         }
 
         enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
@@ -884,13 +902,15 @@ void compactacion (int socket_cliente){
 
     if (err == COMPACTACION_FINALIZADA){
         compactacion_value = 0;
+        sem_post(&sem_compactacion);
 
         log_info(logger,"## Compactacion finalizada");
 
         nuevo_espacio();
     }
     else{
-        log_info(logger, "## error en resolver compactacion");
+        log_error(logger, "## error en resolver compactacion");
+        sem_post(&sem_compactacion);
     }
 }
 
@@ -967,11 +987,17 @@ void recibir_nueva_memory_stick(int socket_km)
 //NUEVO_ESPACIO
 void nuevo_espacio()
 {
-    
-    while (!list_is_empty(listasProcesos->s_rdy))
+    while (1)
     {
         PCB* pcb = NULL;
-        int indice = -1;
+
+        pthread_mutex_lock(&sem_procesos_s_ready);
+
+        if (list_is_empty(listasProcesos->s_rdy))
+        {
+            pthread_mutex_unlock(&sem_procesos_s_ready);
+            return;
+        }
 
         if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
         {
@@ -986,7 +1012,6 @@ void nuevo_espacio()
                     if (aux->data.prioridad == prioridad)
                     {
                         pcb = aux;
-                        indice = i;
                         break;
                     }
                 }
@@ -995,8 +1020,9 @@ void nuevo_espacio()
         else
         {
             pcb = list_get(listasProcesos->s_rdy, 0);
-            indice = 0;
         }
+
+        pthread_mutex_unlock(&sem_procesos_s_ready);
 
         if (pcb == NULL)
         {
@@ -1007,23 +1033,10 @@ void nuevo_espacio()
 
         int respuesta;
 
-        if(mock)
+        if (mock)
         {
             log_info(logger, "[MOCK] Simulando espacio disponible");
-
-            if(list_is_empty(listasProcesos->s_rdy))
-                return;
-
-            PCB* pcb = list_remove(listasProcesos->s_rdy, 0);
-
-            cambiar_estado_pcb(pcb, RDY);
-            agregar_proceso_lista(pcb);
-
-            log_info(logger,
-                    "[MOCK] PID [%d] pasó a READY",
-                    pcb->data.PID);
-            return;
-
+            respuesta = OK;
         }
         else
         {
@@ -1033,28 +1046,35 @@ void nuevo_espacio()
             respuesta = recibir_op_code(info_km.conexion_km);
         }
 
-        if (respuesta == OK)
-        {
-            pthread_mutex_lock(&sem_procesos_s_ready);
-
-            list_remove(listasProcesos->s_rdy, indice);
-
-            pthread_mutex_unlock(&sem_procesos_s_ready);
-
-            cambiar_estado_pcb(pcb, RDY);
-
-            agregar_proceso_lista(pcb);
-
-            log_info(logger,
-                "## PID [%d] desuspendido correctamente",
-                pcb->data.PID);
-        }
-        else
+        if (respuesta != OK)
         {
             log_info(logger,
                 "No hay espacio para PID [%d]. Continúa suspendido.",
                 pcb->data.PID);
+
+            return;
         }
+
+        pthread_mutex_lock(&sem_procesos_s_ready);
+
+        bool removido = list_remove_element(listasProcesos->s_rdy, pcb);
+
+        pthread_mutex_unlock(&sem_procesos_s_ready);
+
+        if (!removido)
+        {
+            log_warning(logger,
+                "PID [%d] ya no estaba en SUSP_READY al intentar desuspender",
+                pcb->data.PID);
+            continue;
+        }
+
+        cambiar_estado_pcb(pcb, RDY);
+        agregar_proceso_lista(pcb);
+
+        log_info(logger,
+            "## PID [%d] desuspendido correctamente",
+            pcb->data.PID);
     }
 }
 
@@ -1746,7 +1766,8 @@ void init_proc(int socket_cliente){
         
         if (recibir_op_code(info_km.conexion_km) == OK) {
                 cambiar_estado_pcb(nuevo_pcb, RDY);
-                agregar_proceso_lista (nuevo_pcb);           
+                agregar_proceso_lista (nuevo_pcb);
+                eliminar_proceso_Lista(nuevo_pcb);           
         }
     
     }
@@ -1754,7 +1775,8 @@ void init_proc(int socket_cliente){
         
         nuevo_pcb = crearNuevoProceso_mock(path, prioridad, info_km.conexion_km);
         cambiar_estado_pcb(nuevo_pcb, RDY);
-        agregar_proceso_lista (nuevo_pcb);    
+        agregar_proceso_lista (nuevo_pcb);
+        eliminar_proceso_Lista(nuevo_pcb);   
     }
 
     cambiar_estado_pcb(pcb,RDY);

@@ -278,7 +278,7 @@ int conexion_kernelS(t_config* config, t_log* logger, module_name module) {
 
 char* fetch(t_cpu_sockets* sockets) {
 
-    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
+    log_info(logger, "## PID:[%d] - FETCH - Program Counter:[%d]", 
              contexto_actual->pid, contexto_actual->pc);
     
     
@@ -290,10 +290,6 @@ char* fetch(t_cpu_sockets* sockets) {
         log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
         return NULL;
     }
-
-    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
-             contexto_actual->pid, 
-             contexto_actual->pc);
 
     
     enviar_op_code(FETCH, sockets-> conexion_kernel_memory ); //Le informamos al KM que vamos a solicitarle una instruccion
@@ -663,14 +659,14 @@ bool es_registro_32bits(char* nombre) {
 
 /* ---------------- FUNCIONES DE EXECUTE POR INTRUCCION ---------------- */
 
-void ejecutar_noop (t_instruccion* instr){
+void ejecutar_noop (t_instruccion* instr){/*OK*/
 
     log_info (logger, "## PID:[%d] - Ejecutando [NOOP]",contexto_actual->pid);/*Logger Obligatorio*/
     //No hace nada
 
 }
 
-void ejecutar_set (t_instruccion* instr){
+void ejecutar_set (t_instruccion* instr){/*OK*/
 
     char* reg_dest_nombre = instr->params[0];
 
@@ -798,7 +794,7 @@ void ejecutar_mov_out(t_instruccion* instr){
     }
 }
 
-void ejecutar_sum(t_instruccion* instr) {
+void ejecutar_sum(t_instruccion* instr) {/*OK*/
     
     char* reg_dest_nombre = instr->params[0];
     char* reg_orig_nombre = instr->params[1];
@@ -822,7 +818,7 @@ void ejecutar_sum(t_instruccion* instr) {
     }
 }
 
-void ejecutar_sub(t_instruccion* instr) {
+void ejecutar_sub(t_instruccion* instr) {/*OK*/
     
     char* reg_dest_nombre = instr->params[0];
     char* reg_orig_nombre = instr->params[1];
@@ -894,7 +890,7 @@ void ejecutar_copy_mem(t_instruccion* instr) {
              tamanio, *dir_logica_origen, *dir_logica_destino);
 }
 
-void ejecutar_mutex_create(t_instruccion* instr){
+void ejecutar_mutex_create(t_instruccion* instr){/*OK*/
 
     char* mutex_id = instr->params[0];
     op_code err;
@@ -913,20 +909,20 @@ void ejecutar_mutex_create(t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
-    log_info(logger, "ok"); //Completar LOG
+    log_debug (logger, "Fin de Syscall"); 
 }
 
-void ejecutar_mutex_lock (t_instruccion* instr){
+void ejecutar_mutex_lock (t_instruccion* instr){/*OK*/
 
     char* mutex_id = instr->params[0];
     op_code err;
 
     log_info (logger, "## PID:[%d] - Ejecutando [MUTEX LOCK] - Valor [%s]",contexto_actual->pid, mutex_id);/*Logger Obligatorio*/
 
-    enviar_op_code (gl_MUTEX_LOCK, sockets->conexion_kernel_scheduler); //Envia la señal
+    enviar_op_code (gl_MUTEX_LOCK, sockets->conexion_kernel_scheduler);
 
-    err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
-    if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);//MARCAR ERROR
+    err = recibir_op_code (sockets->conexion_kernel_scheduler); 
+    if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);
 
     
     enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
@@ -935,10 +931,10 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
-    log_info (logger, "ok"); //Completar LOG
+    log_debug (logger, "Fin de Syscall"); 
 }
 
-void ejecutar_mutex_unlock (t_instruccion* instr){
+void ejecutar_mutex_unlock (t_instruccion* instr){/*OK*/
 
     char* mutex_id = instr->params[0];
     op_code err;
@@ -956,7 +952,7 @@ void ejecutar_mutex_unlock (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if (err != OK) log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
 
-    log_info (logger, "ok"); //Completar LOG
+    log_debug (logger, "Fin de Syscall"); 
 }
 
 void ejecutar_mem_alloc (t_instruccion* instr){
@@ -1301,6 +1297,8 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
         bytes_restantes -= bytes_a_leer;
     }
 
+    log_info(logger,"## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d] - Valor [%s]",contexto_actual->pid,dir_fisica,(char*)buffer_total);
+
     return buffer_total;
 }
 
@@ -1356,6 +1354,8 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
         offset_buffer += bytes_a_escribir;
         bytes_restantes -= bytes_a_escribir;
     }
+
+    log_info(logger,"## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d] - Valor [%s]",contexto_actual->pid,dir_fisica,(char*)buffer);
 }
 
 /* ------------------ MANEJO DE MEMORY STICK  ------------------*/
@@ -1472,16 +1472,18 @@ char* instruccion[] = {
     "SUB AX BX",
     "NOOP",
     "MUTEX_CREATE 99",
+    "NOOP",
     "MUTEX_LOCK 99",
-    "MUTEX_UNLOCK 99",
     "NOOP",
-    "JNZ 15"
-    "NOOP",
-    "NOOP",
+    "INIT_PROC proceso2.txt 1",
+    //"MUTEX_UNLOCK 99",
     "NOOP",
     "NOOP",
     "NOOP",
-    "MEM_ALLOC",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    //"MEM_ALLOC",
     "EXIT_PROC",
 
 };

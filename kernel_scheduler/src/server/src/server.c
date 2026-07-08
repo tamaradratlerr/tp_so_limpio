@@ -3,7 +3,7 @@
 #include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) /*OK*/
 {
 
     printf("=====     Iniciando Kernel Scheduler     =====\n");
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 
 /*-----                     GESTION DE NUEVOS CLIENTES                     -----*/
 
-void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los HILOS de cuando te conecta un NUEVO CLIENTE*/
+void* atender_nuevo_cliente(void* fd) { /*OK*/
 
     int cliente_fd = (int)(intptr_t)fd; // Recuperamos el FD del cliente
     
@@ -79,7 +79,7 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
         int opcode = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
         log_info(logger,"Fue Recibivo el %s", opcode_to_string(opcode));
         if(opcode == -1){
-            log_error(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
+            log_error(logger, "El cliente en el socket [%d] se desconectó.", cliente_fd);
             control_loop = 0;
             return NULL ;
         }
@@ -133,7 +133,15 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
             case gl_MUTEX_CREATE:
                 mutex_create(cliente_fd);
-                break;            
+                break;
+                
+            case gl_MUTEX_LOCK:
+                mutex_lock(cliente_fd);
+                break;
+
+            case gl_MUTEX_UNLOCK:
+                mutex_unlock(cliente_fd);
+                break;
            
             case gl_INIT_PROC:
                 init_proc(cliente_fd);
@@ -154,10 +162,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
             case IO_STDOUT:
                 rta_io_stdout(cliente_fd);
                 break;
-            
-            case NUEVO_ESPACIO: /*Cambiar*/
-                nuevo_espacio(cliente_fd);
-                break;
 
             default:
                 log_warning(logger, "Operación desconocida.");
@@ -172,7 +176,8 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
 
 /*-----                     GESTION DE PCBs                     -----*/
 
-PCB* buscar_pcb_por_pid(int pid_recibido) { // (Facu): Yo remplazaria esto por la funcion de las commons que permite buscar adentro de una lista
+PCB* buscar_pcb_por_pid(int pid_recibido) /*OK*/
+{ 
     
     t_list* listas_a_revisar[] = { 
         listasProcesos-> new, listasProcesos->rdy, 
@@ -199,7 +204,8 @@ PCB* buscar_pcb_por_pid(int pid_recibido) { // (Facu): Yo remplazaria esto por l
 
 }
 
-PCB* encontrar_pcb_rnn_por_pid(int pid) {
+PCB* encontrar_pcb_rnn_por_pid(int pid) /*OK*/
+{
     pthread_mutex_lock(&sem_procesos_exit); 
 
     PCB* pcb_buscado = NULL;
@@ -217,11 +223,10 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
 }
 
 
-
-
 /*-----                     GESTION DE CPUs                     -----*/
 
-void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
+void  mandar_proceso_cpu(int socket_cliente)/*OK*/
+{ 
     
     log_opcode(logger, CPU_LIBRE);
       
@@ -329,7 +334,8 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
     }
 }
 
-bool es_la_cpu_buscada (void* elemento, void* contexto) {
+bool es_la_cpu_buscada (void* elemento, void* contexto)/*OK*/
+{
     
         t_CPU* cpu = (t_CPU*) elemento;
     
@@ -358,7 +364,7 @@ void* control_hilo_quantum(void* arg)
 
         log_info(
             logger,
-            "## PID:[%d] - Desalojado por Fin de Quantum",
+            "## PID:[%d] - Desalojado por Fin de Quantum",/*Logger Obligatorio*/
             pcb->data.PID
         );
     }
@@ -437,9 +443,11 @@ void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
             log_info(logger,
-                "PID %d desalojado por ingreso de PID %d con mayor prioridad",
+                "## PID:[%d] Proprodad:[%d] Desalojado por cola mas prioritaria por el proceso PID:[%d] con Prioridad:[%d]",
                 pcb_running->data.PID,
-                pcb_nuevo->data.PID
+                pcb_running->data.prioridad,
+                pcb_nuevo->data.PID,
+                pcb_nuevo->data.prioridad
             );
 
             break;
@@ -517,26 +525,6 @@ void mediano_plazo_rdy (PCB* pcb){
 
 
 /*-----                     GESTION DE IOs                     -----*/
-void mock_cpu(PCB* pcb)
-{
-    log_info(logger, "========== CPU MOCK ==========");
-
-    // Simulamos que la CPU ejecutó y se bloqueó por IO
-    cambiar_estado_pcb(pcb, BCK);
-
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
-
-    pthread_t hilo;
-
-    pthread_create(
-        &hilo,
-        NULL,
-        (void*) mediano_plazo_bck,
-        pcb);
-
-    pthread_detach(hilo);
-}
 
 bool es_la_io_buscada (void* elemento, void* contexto) {
     
@@ -553,7 +541,7 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
 /*-----Con la CPU-----*/
 	
 //NUEVA_CPU,
-void nueva_cpu (int cliente_fd) 
+void nueva_cpu (int cliente_fd)/*OK*/ 
 {
 
         t_CPU* info_cpu = malloc(sizeof(t_CPU));
@@ -573,7 +561,8 @@ void nueva_cpu (int cliente_fd)
 }
 
 //CPU_LIBRE,
-void cpu_libre (int cliente_fd){
+void cpu_libre (int cliente_fd)/*OK*/
+{
 
     sem_wait(&sem_compactacion);
 
@@ -840,6 +829,7 @@ else
 }
 }
 
+//COMPACTACION
 void compactacion (int socket_cliente){
     int err = 0;
     compactacion_value = 1;
@@ -909,6 +899,8 @@ void compactacion (int socket_cliente){
 
         enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
 
+        log_info(logger,"## Inicio de Compactacion");/*Logger Obligatorio*/
+
         err = recibir_op_code(info_km.conexion_km);
     }
 
@@ -916,7 +908,7 @@ void compactacion (int socket_cliente){
         compactacion_value = 0;
         sem_post(&sem_compactacion);
 
-        log_info(logger,"## Compactacion finalizada");
+        log_info(logger,"## Compactacion finalizada");/*Logger Obligatorio*/
 
         nuevo_espacio();
     }
@@ -925,7 +917,6 @@ void compactacion (int socket_cliente){
         sem_post(&sem_compactacion);
     }
 }
-
 
 //NUEVA_MEMORY_STICK
 void recibir_nueva_memory_stick(int socket_km)
@@ -1158,7 +1149,9 @@ void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
         );
 
         pthread_mutex_unlock(&mutex_ready);
+
     }
+    log_info(logger,"## PID:[%d] Cambio de prioridad: [%d] => [%d]",pcb->data.PID,prioridad_vieja,nueva_prioridad);
 }
 
 void recalcular_prioridad(PCB* pcb)
@@ -1468,11 +1461,31 @@ void prueba_lago_plazo_mock() {
    
 }
 
+void mock_cpu(PCB* pcb)
+{
+    log_info(logger, "========== CPU MOCK ==========");
+
+    // Simulamos que la CPU ejecutó y se bloqueó por IO
+    cambiar_estado_pcb(pcb, BCK);
+
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    pthread_t hilo;
+
+    pthread_create(
+        &hilo,
+        NULL,
+        (void*) mediano_plazo_bck,
+        pcb);
+
+    pthread_detach(hilo);
+}
 
 /*-----     Syscalls CPU     -----*/
 
 //MUTEX_CREATE,
-void mutex_create (int socket_cliente){ /****OK**** */
+void mutex_create (int socket_cliente){ /*OK*/
 
     enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
 
@@ -1602,9 +1615,10 @@ void mutex_lock (int socket_cliente){
         usleep(1000);
     }
 
-        cambiar_estado_pcb(pcb,RDY);
-        agregar_proceso_lista(pcb);
-        eliminar_proceso_Lista(pcb);
+
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
 
         free(mutex_id); 
 }
@@ -1705,7 +1719,7 @@ void mem_alloc (int socket_cliente){
     int pid = recibir_pid(socket_cliente);
     enviar_op_code(OK, socket_cliente);
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc", pid); /*Logger Obligatorio*/
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc]", pid); /*Logger Obligatorio*/
 
     /*Le envamos la DATA a la Kernel Memory*/
 
@@ -1743,7 +1757,7 @@ void mem_free (int socket_cliente){
     int pid = recibir_pid(socket_cliente);
     enviar_op_code(OK, socket_cliente); 
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Free]", pid); /*Logger Obligatorio*/
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Free]", pid); /*Logger Obligatorio*/
 
     /*Le enviamos la DATA a la Kernel Memory*/
 
@@ -1816,7 +1830,7 @@ void init_proc(int socket_cliente){
 }
 
 //EXIT
-void exit_proceso(int socket_cpu){
+void exit_proceso(int socket_cpu){ /*OK*/
 
     log_debug(logger, "Iniciando EXIT Proceso");
     
@@ -1830,7 +1844,7 @@ void exit_proceso(int socket_cpu){
 
     }
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit]", pid_a_finalizar); /*Logger Obligatorio*/
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit Proc]", pid_a_finalizar); /*Logger Obligatorio*/
 
     cambiar_estado_pcb(pcb,BCK);
     agregar_proceso_lista(pcb);
@@ -1912,7 +1926,7 @@ void io_sleep(int socket_cpu) {
     mediano_plazo_rdy(pcb);
 }
 
-void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un SLEEP de un proceso
+void rta_io_sleep(int socket_io){ 
 
     enviar_op_code(OK, socket_io);
     int pid = recibir_pid(socket_io);
@@ -1930,7 +1944,7 @@ void rta_io_sleep(int socket_io){ //Funcion que recibe desde IO que finalizo un 
 
     mediano_plazo_rdy(pcb);
 
-    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
+    log_info (logger, "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready", pcb->data.PID);/*Logger Obligatorio*/
 
 
 }

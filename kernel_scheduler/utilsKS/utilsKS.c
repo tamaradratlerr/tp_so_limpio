@@ -356,7 +356,7 @@ PCB* iniciar_pcb (int PID, int prioridad){
 PCB* crearNuevoProceso(char* path, int prioridad, int fd_km) {
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
-    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW", contador_pid);
+    log_info (logger, "## Se crea el proceso PID [%d] - Estado NEW [MOCK]", contador_pid);
 
     enviarProcesoKM(nuevoPcb, path, fd_km);
 	contador_pid++;
@@ -389,6 +389,8 @@ void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	enviar_paquete(paquete, fd_km);
     eliminar_paquete(paquete);
 
+    log_info(logger, "Fue Enviado el Proceso PID [%d] a la Kernel Memory",pcb->data.PID);
+
 }
 
 void terminar_pcb (PCB* pcb){
@@ -404,7 +406,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el e
     pcb -> estado_anterior = (pcb ->estado_pcb);
     pcb ->estado_pcb = nuevoEstado;
     
-    log_info (logger, "## PID:[%d] pasa del estado [%s] al estado [%s]",pcb->data.PID,nombre_estado(pcb->estado_anterior),nombre_estado(pcb->estado_pcb));
+    log_info (logger, "## PID:[%d] Cambio de Estado: [%s ==> %s]",pcb->data.PID,nombre_estado(pcb->estado_anterior),nombre_estado(pcb->estado_pcb));
 }
 
 char* nombre_estado (estado sto){
@@ -470,10 +472,10 @@ void terminar_programa( t_log* logger, t_config* config, t_info_km info_km)
 PCB* crearNuevoProceso_mock(char*, int prioridad, int){
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
-    log_info (logger, "## PID [%d] Se crea el proceso - Estado NEW [MOCK]", contador_pid);
+    log_info (logger, "## Se crea el proceso PID [%d] - Estado NEW [MOCK]", contador_pid);
 
     /*Se evita Enviar el Contexto a la KM*/
-    log_info (logger, "Se le envia el Nuevo PCB a la KM [MOCK]");
+    log_info (logger, "Se le envia el Nuevo Proceso PID [%d] a la KM [MOCK]",contador_pid);
 	contador_pid++;
 
 	return nuevoPcb;

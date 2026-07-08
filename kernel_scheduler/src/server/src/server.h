@@ -95,6 +95,7 @@ void io_stdin(int socket_cpu);
 void rta_io_stdin (int socket_io);
 void io_stdout(int cpu_socket);
 void rta_io_stdout(int socket_io);
+void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
 
 
 #endif /* SERVER_H_ */

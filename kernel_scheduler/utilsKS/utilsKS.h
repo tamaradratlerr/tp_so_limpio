@@ -100,6 +100,8 @@ void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
 PCB* crearNuevoProceso_mock(char*, int prioridad, int);
 void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado);
+int ready_FIFO(PCB* pcb_nuevo);
+int ready_CMN(PCB* pcb_nuevo );
 
 /*----- CREACION Y DESTRUCCION DE LISTAS -----*/
 

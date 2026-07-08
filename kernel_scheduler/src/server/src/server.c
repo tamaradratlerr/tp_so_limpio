@@ -6,14 +6,17 @@
 int main(int argc, char *argv[])
 {
 
+    printf("=====     Iniciando Kernel Scheduler     =====\n");
+
     if(argc != 3){
         printf("Uso: ./bin/kernel_scheduler [archivo.config] [archivoProcesos]\n");
         return 1;
     }
 
-    printf("Iniciando Cliente\n");
+    printf("=====     Iniciando Cliente     =====\n");
+
     int err = cliente_Kernel_Scheduler(argc, argv);
-    if(err != 0){log_error(logger, "ERROR al inciar cliente");}
+    if(err != 0){log_error(logger, "Error al inciar cliente");}
     
 
 
@@ -36,7 +39,7 @@ int main(int argc, char *argv[])
             return -1; 
         }
 
-        log_info(logger, "Nuevo cliente. Creamos el hilo");
+        log_info(logger, "Iniciando Hilo para Nuevo CLiente");
 
 
         /* -------------CREACIÓN DEL HILO---------- */
@@ -45,16 +48,11 @@ int main(int argc, char *argv[])
         
         
         if (pthread_create(&hilo_id, NULL, atender_nuevo_cliente, (void*)(intptr_t)cliente_fd) != 0) {
-            log_error(logger, "no se pudo crear el hilo");
+            log_error(logger, "Error al crear el hilo");
             close(cliente_fd);
         }
-        // &hilo_id: donde se guarda el ID del hilo
-        // NULL: configuración por defecto que puso el profe
-        // atender_nuevo_cliente: funcion que atiende al cliente
-        // el cliente_fd: Lo que le pasamos como argumento
         
     }
-    
     
 
     terminar_programa (logger, config, info_km);
@@ -76,10 +74,10 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
     int control_loop = 1;
     while (control_loop) { //Este loop funciona de manera tal de que se mantiene CONSTANTEMENTE la comunicacion con el CLIENTE.
         
-        log_info(logger,"Esperando por Nevas Solicitudes de Sistema...");
+        log_info(logger,"[***ESPERA DE SOLICITUDES***]");
 
-        op_code opcode = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
-        log_info(logger,"Se recibio el OP_CODE: [%s]", opcode_to_string(opcode));
+        int opcode = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
+        log_info(logger,"Fue Recibivo el %s", opcode_to_string(opcode));
         if(opcode == -1){
             log_error(logger, "El cliente en el socket %d se desconectó.", cliente_fd);
             control_loop = 0;
@@ -160,12 +158,6 @@ void* atender_nuevo_cliente(void* fd) { /*Funcion que se encarga de atender los 
             case NUEVO_ESPACIO: /*Cambiar*/
                 nuevo_espacio(cliente_fd);
                 break;
-            
-            
-            case -1:
-                log_info(logger, "El cliente se desconectó.");
-                control_loop = 0;
-                break;
 
             default:
                 log_warning(logger, "Operación desconocida.");
@@ -232,7 +224,11 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) {
 void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de mayor priridad a una CPU es especial */
     
     log_opcode(logger, CPU_LIBRE);
+      
+   
+    sem_wait(&sem_hay_ready); // Verifica que no se entre si la lista esta vacia
     pthread_mutex_lock(&mutex_cpus);
+
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
@@ -241,26 +237,34 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
     {
         if(mock)
         {
+
+            pthread_mutex_unlock(&mutex_cpus);
             log_info(logger,
                 "[MOCK] No se envia ningun proceso porque Memory esta compactando");
+            
         }
 
         return;
     }
 
-    if (cpu_libre != NULL && cpu_libre->enUso == false) {
-        cpu_libre->enUso = true;}
-    else {
-        log_error (logger, "No se encontro a la CPU buscada o la misma esta en uso(funcion: mandar_proceso_cpu)");
+    if (cpu_libre != NULL && cpu_libre->enUso == false) 
+    {
+        
+        cpu_libre->enUso = true;
+    }
+    else 
+    {
+        log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
         pthread_mutex_unlock(&mutex_cpus);
         return;
     }
+       
         pthread_mutex_unlock(&mutex_cpus);
 
     /*Mandamos el PCB a la CPU*/
     if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
         
-        sem_wait(&sem_hay_ready); // Verifica que no se entre si la lista esta vacia
+        
         
         PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
         
@@ -280,15 +284,15 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
         pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
         agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
-        eliminar_proceso_Lista(pcb_a_ejecutar);
         
         loguear_lista(listasProcesos->rnn,logger);
         
 
         int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
-        log_warning(logger, "KS envio el PID[%d] a CPU ID: [%s]",pcb_a_ejecutar->data.PID,cpu_libre->identificador);
+        log_info(logger, "Kernel Shceduler envio PID[%d] a CPU ID: [%s] a Ejecutarse",pcb_a_ejecutar->data.PID,cpu_libre->identificador);
 
-        if (err != 1) {
+        if (err != 1) 
+        {
             log_error (logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)"); // Completar log de error
             cpu_libre->enUso = false; 
             
@@ -297,9 +301,8 @@ void  mandar_proceso_cpu(int socket_cliente){ /* Funcion que manda el PCB de may
             pcb_a_ejecutar->fd_cpu = 0;
             agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
             eliminar_proceso_Lista(pcb_a_ejecutar);
-            return;}
-
-        log_info(logger, "PID %d enviado a ejecutar en socket %d", pcb_a_ejecutar->data.PID, cpu_libre->fd);
+            return;
+        }
 
         if (usa_quantum(pcb_a_ejecutar))
         {
@@ -390,7 +393,6 @@ PCB* obtener_siguiente_proceso() {
 
     pthread_mutex_unlock(&mutex_ready);
 
-    sem_post(&sem_hay_ready);
 
     return pcb;
 }
@@ -551,7 +553,8 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
 /*-----Con la CPU-----*/
 	
 //NUEVA_CPU,
-void nueva_cpu (int cliente_fd) {
+void nueva_cpu (int cliente_fd) 
+{
 
         t_CPU* info_cpu = malloc(sizeof(t_CPU));
 
@@ -567,12 +570,12 @@ void nueva_cpu (int cliente_fd) {
         enviar_op_code (OK, cliente_fd);
 
         log_info(logger, "## CPU ID: [%s] Conectada", info_cpu->identificador); /*Logger Obligatorio*/
-        }
+}
 
 //CPU_LIBRE,
 void cpu_libre (int cliente_fd){
 
-    sem_wair(&sem_compactacion);
+    sem_wait(&sem_compactacion);
 
     mandar_proceso_cpu(cliente_fd);
 
@@ -620,6 +623,7 @@ void desalojo(int socket_cliente)
     }
     else {
 
+        log_info(logger, "No es Necesario Relizar Acciones");
         log_debug(logger, "NO HAY DESAOLOJO");
         enviar_op_code(OK,socket_cliente);
         desalojado = 0;
@@ -1405,38 +1409,42 @@ void prueba_mediano_plazo_mock()
 
 void loguear_lista(t_list* lista, t_log* logger)
 {
-    log_info(logger, "Resivando Informacion dentro de lista [loguear_lista]");
+    log_debug(logger, "Chequeo de contenido de lista [loguear_lista]");
+
+    log_debug(logger, "Iniciando Chequeo");
 
     if(list_is_empty(lista)){
-        log_info(logger, "Lista Vacia");
+        log_debug(logger, "Lista Vacia");
         return;
     }
     
     for (int i = 0; i < list_size(lista); i++){
         PCB* pcb = list_get(lista, i);
-        log_info(logger, "PID: [%d] Estado: [%s]", pcb->data.PID, nombre_estado(pcb->estado_pcb));
+        log_debug(logger, "PID: [%d] Estado: [%s]", pcb->data.PID, nombre_estado(pcb->estado_pcb));
     }
+
+    log_debug(logger, "Fin de Chequeo");
 }
 
 void prueba_lago_plazo_mock() {
 
     log_debug(logger, "=== Iniciando MOCK largo Plazo ===");
 
-    log_info(logger, "Procesos Actuales y su Estado => Deberia ser Solo el PID 0");
+    log_debug(logger, "Procesos Actuales y su Estado => Deberia ser Solo el PID 0");
 
-    log_info(logger, "=== Lista NEW ===");    
+    log_debug(logger, "=== Lista NEW ===");    
     loguear_lista(listasProcesos->new, logger);
-    log_info(logger, "=== Lista RDY ==="); 
+    log_debug(logger, "=== Lista RDY ==="); 
     loguear_lista(listasProcesos->rdy, logger);
-    log_info(logger, "=== Lista RNN ==="); 
+    log_debug(logger, "=== Lista RNN ==="); 
     loguear_lista(listasProcesos->rnn, logger);
-    log_info(logger, "=== Lista EXT ==="); 
+    log_debug(logger, "=== Lista EXT ==="); 
     loguear_lista(listasProcesos->ext, logger);
-    log_info(logger, "=== Lista BCK ==="); 
+    log_debug(logger, "=== Lista BCK ==="); 
     loguear_lista(listasProcesos->bck, logger);
-    log_info(logger, "=== Lista S RDY ==="); 
+    log_debug(logger, "=== Lista S RDY ==="); 
     loguear_lista(listasProcesos->s_rdy, logger);
-    log_info(logger, "=== Lista S BCK ==="); 
+    log_debug(logger, "=== Lista S BCK ==="); 
     loguear_lista(listasProcesos->s_bck, logger);
 
     init_proc(1);
@@ -1797,6 +1805,14 @@ void exit_proceso(int socket_cpu){
 
     /*Bloqueo y Desalojo*/
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
+
+    if (pcb == NULL){
+        log_error(logger, "PCB NULL en [Exit Proceso]");
+
+    }
+
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit]", pid_a_finalizar); /*Logger Obligatorio*/
+
     cambiar_estado_pcb(pcb,BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
@@ -1804,7 +1820,6 @@ void exit_proceso(int socket_cpu){
     list_add(list_suplementarias->desalojo, pcb);
     enviar_op_code(OK, socket_cpu);
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit]", pid_a_finalizar); /*Logger Obligatorio*/
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 

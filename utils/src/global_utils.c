@@ -219,7 +219,7 @@ int esperar_cliente(int socket_servidor, t_log *logger)
         return -1;
     }
 
-    log_info(logger, "Se conecto un Cliente!");
+    log_info(logger, "Nuevo Cliente Conectado");
 
     return socket_cliente;
 }
@@ -248,7 +248,8 @@ int iniciar_servidor(char *puerto, t_log *logger)
     listen(socket_servidor, SOMAXCONN);
 
     freeaddrinfo(servinfo);
-    log_info(logger, "Listo para escuchar Clientes");
+    log_info(logger, "Servidor Iniciado");
+    log_info(logger,"Esperando Por CLientes");
 
     return socket_servidor;
 }
@@ -273,7 +274,7 @@ op_code recibir_op_code(int socket_cliente)
     op_code cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(op_code), MSG_WAITALL) > 0)
     {
-        log_debug(logger, "OPCODE: [%s] fue recibido", opcode_to_string(cod_op));
+        log_debug(logger, "%s fue Recibido", opcode_to_string(cod_op));
         return cod_op;
     }
     else
@@ -361,7 +362,7 @@ void enviar_buffer(void *buffer, int size, int socket_cliente)
 void enviar_op_code(op_code code_op, int socket_cliente)
 {
     
-    log_debug(logger, "Se envia el OP_CODE [%s]",opcode_to_string(code_op));
+    log_debug(logger, "Se envia el [%s]",opcode_to_string(code_op));
     // Solo enviamos el código, no hace falta crear un paquete complejo si solo es el op_code
     send(socket_cliente, &code_op, sizeof(op_code), 0);
 }

@@ -33,88 +33,113 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    log_info(logger, "Modulo CPU iniciado");
-    if(mock){log_info(logger,"MOCK ACTIVADO");}
+    log_info(logger, "=====     Modulo CPU iniciado     =====");
+    if(mock){log_debug(logger,"MOCK ACTIVADO");}
 
     /* ---------------- CONEXIONES ---------------- */
 
-    if(!mock){ 
-
-    sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
-    enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
-    op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory);
-    
-    if(handshake_km != OK){
-        log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
-        return EXIT_FAILURE;
-    }
+    if(!mock)
+    { 
+        sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+        enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
+        op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory);
+        
+        if(handshake_km != OK)
+        {
+            log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
+            return EXIT_FAILURE;
+        }
     }
        
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
-    log_debug(logger, "Enviando OP_CODE [NUCA_CPU]");
+    
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_scheduler);
     enviar_mensaje(identificador,sockets->conexion_kernel_scheduler);
+    
     op_code handshake_ks = recibir_op_code(sockets->conexion_kernel_scheduler);
     
-    if(handshake_ks != OK){
+    if(handshake_ks != OK)
+    {
         log_error(logger, "Error en HandShake con Kernel Scheduler valor OP_CODE: [%d]",handshake_ks);
         return EXIT_FAILURE;
     }
 
-    if(!mock){
-    // Validacion de conexiones (Si falla una conexión crítica, cerramos)
-    if (sockets->conexion_kernel_memory < 0 || sockets->conexion_kernel_scheduler < 0 || sockets->memory_sticks == NULL) {
-        
-        log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
-        terminar_programa(logger, config, sockets);
-        return EXIT_FAILURE;
-    }}
-    else if (sockets->conexion_kernel_scheduler < 0){
+    if(!mock)
+    {
+        // Validacion de conexiones (Si falla una conexión crítica, cerramos)
+        if (sockets->conexion_kernel_memory < 0 || sockets->conexion_kernel_scheduler < 0 || sockets->memory_sticks == NULL) 
+        {
+            log_error(logger, "Error al establecer conexiones iniciales."); //Error en valor de los so
+            terminar_programa(logger, config, sockets);
+            return EXIT_FAILURE;
+        }
+    }
+    else if (sockets->conexion_kernel_scheduler < 0)
+    {
         log_error(logger, "Error al establecer conexiones iniciales."); 
         terminar_programa(logger, config, sockets);  
         return EXIT_FAILURE;
     }
 
-    log_info(logger, "Todas las conexiones fueron establecidas con éxito");
+    log_info(logger, "Todas las conexiones fueron establecidas con EXITO");
 
 
     /*----- SOLICITAMOS UN PROCESO -----*/
+    
     control_loop00 = 1;
+    
     while(control_loop00 == 1)
     {
         int contexto_key = 0;
         enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
-        log_info(logger,"Enviado CPU LIBRE");
+
+        log_info(logger, "Esperando Por Procesos");
+
         if((proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler)) == -1){
 
             log_error(logger, "Error en Conexion");
             return;
         }
         
-        
         contexto_key++;
+        log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
+
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
         control_loop = 1;
         while (control_loop == 1){
             
+            log_debug(logger,"Nuevo Ciclo de Instruccion");
+            log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
+            
             char* instruccion_raw;
 
-            if(!mock){
-                
-                if(contexto_key == 1){ /*Para que se solicite contexto solo cuando hay un proceso nuevo en la cpu*/
+            if(!mock)
+            {
+                if(contexto_key == 1)
+                { 
+                    log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
                     contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
                     contexto_key--;
                 }
                 
                 instruccion_raw = fetch(sockets); /* Fase Fetch */
             }
-            else {
-                contexto_actual = recibir_contexto_mock();
+            else 
+            {
+                if (contexto_key == 1)
+                {    
+                    log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
+                    contexto_actual = recibir_contexto_mock();
+                    contexto_key--;
+                }
+
                 instruccion_raw = fetch_mock(sockets); /* Fase Fetch */
+
             } 
             
-            if (instruccion_raw == NULL) {
+            if (instruccion_raw == NULL)
+            {
                 log_info(logger, "Error en Instruccion RAW post FETCH [== NULL]");
                 return EXIT_FAILURE;
             }
@@ -1435,7 +1460,7 @@ bool tiene_mismo_id(void* elemento) {
 
 char* instruccion[] = {
     "SET AX 10",
-    "SET BX 10"
+    "SET BX 10",
     "SUM AX BX",
     "EXIT_PROC",
 
@@ -1476,13 +1501,10 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
 }/*HACER*/
 
 char* fetch_mock(t_cpu_sockets* sockets){
+ 
+    int tamanio = 0;
 
     log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u [MOCK]", 
-             contexto_actual->pid, contexto_actual->pc);
-    
-             int tamanio = 0;
-
-    log_info(logger, "[FETCH] Solicitando instruccion para PID: %d, PC: %u", 
              contexto_actual->pid, 
              contexto_actual->pc);
 

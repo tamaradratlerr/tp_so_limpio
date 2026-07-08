@@ -906,6 +906,8 @@ void ejecutar_mutex_create(t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK) log_error(logger, "Error en operacion: %d", (int)err);
 
+    
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -926,6 +928,8 @@ void ejecutar_mutex_lock (t_instruccion* instr){
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err);//MARCAR ERROR
 
+    
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
     enviar_mensaje (mutex_id, sockets->conexion_kernel_scheduler); // Se manda el nombre del semaforo
 
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -1459,9 +1463,25 @@ bool tiene_mismo_id(void* elemento) {
 /*---- Fucnones MOCKS ----*/
 
 char* instruccion[] = {
+    
+    "NOOP",
     "SET AX 10",
     "SET BX 10",
     "SUM AX BX",
+    "NOOP",
+    "SUB AX BX",
+    "NOOP",
+    "MUTEX_CREATE 99",
+    "MUTEX_LOCK 99",
+    "MUTEX_UNLOCK 99",
+    "NOOP",
+    "JNZ 15"
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "NOOP",
+    "MEM_ALLOC",
     "EXIT_PROC",
 
 };
@@ -1515,9 +1535,6 @@ char* fetch_mock(t_cpu_sockets* sockets){
     char* instruccion_raw = instruccion[nro_instr];
 
     nro_instr++;
-
-    if(nro_instr >=4)
-        nro_instr=0;
     
     if (instruccion_raw == NULL) {
         log_error(logger, "Error en fetch");

@@ -106,6 +106,8 @@ void iniciar_listas_suple()
     list_suplementarias->ms = list_create();
     list_suplementarias->desalojo = list_create();
 
+    lista_mutex = list_create();
+
     lista_bck_io = list_create();
 }
 
@@ -115,8 +117,11 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     list_destroy(list_suplementarias->io);
     list_destroy(list_suplementarias->ms);
     list_destroy(list_suplementarias->desalojo);
-    list_destroy(lista_bck_io);
     
+    list_destroy(lista_mutex);
+    
+    list_destroy(lista_bck_io);
+
 }
 
 /*-----                     GESTION DE LISTAS DE PCBs                    -----*/

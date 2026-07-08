@@ -620,6 +620,8 @@ void desalojo(int socket_cliente)
         pthread_mutex_unlock(&sem_procesos_s_desalojo);
         desalojado = 1;
 
+        PCB* pcb = buscar_pcb_por_pid(pid);
+
     }
     else {
 
@@ -671,6 +673,12 @@ void desalojo(int socket_cliente)
     else {
             log_error(logger, "Error de condinacion en la comunicacion [desalojo]");
         }
+    
+    
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+
+    cpu_libre->enUso = false;
+    
     
     return;
 
@@ -1464,7 +1472,7 @@ void prueba_lago_plazo_mock() {
 /*-----     Syscalls CPU     -----*/
 
 //MUTEX_CREATE,
-void mutex_create (int socket_cliente){
+void mutex_create (int socket_cliente){ /****OK**** */
 
     enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
 
@@ -1488,9 +1496,17 @@ void mutex_create (int socket_cliente){
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
 
+    loguear_lista(listasProcesos->bck,logger);
+
     list_add(list_suplementarias->desalojo, pcb);
 
+    log_info(logger, "## PID:[%d] Creo el Mutex [%s]", pid, mutex->mutex_id); /*Logger Obligatorio*/
+
     enviar_op_code(OK, socket_cliente);
+
+    cambiar_estado_pcb(pcb,RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
         
 }
 
@@ -1513,9 +1529,11 @@ void mutex_lock (int socket_cliente){
         mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
         
 
-        if (mutex == NULL) {
-        log_error(logger, "Mutex no encontrado");
-        return;
+        if (mutex == NULL) 
+        {
+            log_error(logger, "Mutex no encontrado");
+            enviar_op_code(NOTOK,socket_cliente);    
+            return;
         }
 
         pthread_mutex_lock(&mutex_simulados);
@@ -1592,7 +1610,8 @@ void mutex_lock (int socket_cliente){
 }
 
 //MUTEX_UNLOK,
-void mutex_unlock (int socket_cliente){
+void mutex_unlock (int socket_cliente)
+{
 
         enviar_op_code(OK,socket_cliente);
 

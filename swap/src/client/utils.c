@@ -218,12 +218,14 @@ void enviar_respuesta_simple(int socket_km, op_code respuesta)
 
 //consigna: SWAP debe permitir leer bloques desde el archivo de swap.
 //recibe un paquete, lo convierte en lista y después lee cada dato por posición.
-void manejar_lectura_bloque(int socket_km)
+void manejar_lectura_bloque(int socket_km, t_log* logger)
 {
     t_list* paquete = recibir_paquete(socket_km);
 
     int numero_bloque = *(int*) list_get(paquete, 0);
     int cantidad_bloques = tamanio_total_swap / tamanio_bloque_swap;
+
+    log_info(logger, "## Lectura del bloque: %d", numero_bloque); //para registrar cada vez q la kernel pide leer un bloque
 
     if(numero_bloque < 0 || numero_bloque >= cantidad_bloques) {
         list_destroy_and_destroy_elements(paquete, free);
@@ -272,12 +274,14 @@ void manejar_lectura_bloque(int socket_km)
 //recibe numero de bloque y datos a guardar y escribe esos bytes en la posición correcta del archivo.
 //consigna: SWAP debe permitir escribir bloques en el archivo de swap.
 //recibe numero de bloque y datos a guardar, y los escribe en la posicion correcta del archivo.
-void manejar_escritura_bloque(int socket_km)
+void manejar_escritura_bloque(int socket_km, t_log* logger)
 {
     t_list* paquete = recibir_paquete(socket_km);
 
     int numero_bloque = *(int*) list_get(paquete, 0);
     void* datos = list_get(paquete, 1);
+
+    log_info(logger, "## Escritura del bloque: %d", numero_bloque);
 
     int tamanio_datos = tamanio_bloque_swap;
     int cantidad_bloques = tamanio_total_swap / tamanio_bloque_swap;
@@ -320,7 +324,7 @@ void manejar_escritura_bloque(int socket_km)
 
 //KERNEL MEMORY
 //swap se encuentra esperando recibir pedidos, si kernel se desconecta, debe cortar.
-void atender_kernel(int socket_km)
+void atender_kernel(int socket_km, t_log* logger)
 {
     while(1)
     {
@@ -329,13 +333,13 @@ void atender_kernel(int socket_km)
 
         switch(cod_op)
         {
-            case LECTURA_BLOQUE:
-                manejar_lectura_bloque(socket_km);
-                break;
+           case LECTURA_BLOQUE:
+                 manejar_lectura_bloque(socket_km, logger);
+                 break;
 
             case ESCRITURA_BLOQUE:
-                manejar_escritura_bloque(socket_km);
-                break;
+                 manejar_escritura_bloque(socket_km, logger);
+                 break;
 
             case -1:
                 close(socket_km);

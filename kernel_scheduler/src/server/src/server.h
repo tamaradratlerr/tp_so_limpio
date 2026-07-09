@@ -47,7 +47,7 @@ void desalojo (int socket_cliente);
 
 void nueva_io(int cliente_fd);
 void io_libre(int fd);
-
+void io_finalizada(int io_socket);
 /*--- KM ---*/
 
 void mem_corrupt(int fd);

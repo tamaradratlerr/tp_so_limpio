@@ -133,6 +133,13 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 io_libre(cliente_fd); 
                 break;
 
+            case IO_FINALIZADA:
+            {
+                io_finalizada(cliente_fd);
+
+                break;
+            }
+
             case gl_MUTEX_CREATE:
                 mutex_create(cliente_fd);
                 break;
@@ -238,7 +245,7 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
 
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
-    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_io_buscada, &socket_cliente);
     
     if(compactacion_value)
     {
@@ -730,7 +737,6 @@ void io_libre(int io_socket){ //Copia de atender CPU
         if(pcb_a_ejecutar->io_op_code == IO_SLEEP){
             enviar_op_code(gl_IO_SLEEP, io_socket);
             if(recibir_op_code(io_socket) != OK){
-                io_libre->enUso=false;
                 return;
             }
 
@@ -753,17 +759,13 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
                 if(recibir_op_code(io_socket) != IO_SLEEP){
                     log_error(logger, "IO no confirmó finalizacion del sleep");
-                    io_libre->enUso=false;
                     return;
                 }
-
-                enviar_op_code(OK, io_socket);
 
         }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
             enviar_op_code(gl_IO_STDIN, io_socket);
             if(recibir_op_code(io_socket) != OK){
-                io_libre->enUso=false;
                 return;
             }
 
@@ -779,7 +781,6 @@ void io_libre(int io_socket){ //Copia de atender CPU
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
             enviar_op_code(gl_IO_STDOUT, io_socket);
             if(recibir_op_code(io_socket) != OK){
-                io_libre->enUso=false;
                 return;
             }
 
@@ -797,19 +798,34 @@ void io_libre(int io_socket){ //Copia de atender CPU
             log_info(logger, "Error al identificar IO de PID:[%d] (funcion: io_libre)",pcb_a_ejecutar->pid);
         }
 
-        if(recibir_op_code(io_socket) != OK){
-            log_info (logger, "Error al enviar info sobre IO PID[%d] (funcion: io_libre)", pcb_a_ejecutar->pid);
-        }
 
-    pthread_mutex_lock(&mutex_ios);
-    io_libre->enUso = false;
-    pthread_mutex_unlock(&mutex_ios);
-    
     free(pcb_a_ejecutar);
 
     }
 }
 
+void io_finalizada(int io_socket)
+{
+    pthread_mutex_lock(&mutex_ios);
+
+    t_IO *io = list_find_with_context(
+        list_suplementarias->io,
+        es_la_io_buscada,
+        &io_socket
+    );
+
+    if(io != NULL){
+        io->enUso = false;
+        log_info(logger, "IO liberada");
+    }
+    else{
+        log_error(logger, "No se encontró IO finalizada");
+    }
+
+    pthread_mutex_unlock(&mutex_ios);
+
+    enviar_op_code(OK, io_socket);
+}
 
 /*-----Con el Kernel Memory-----*/
 
@@ -1986,24 +2002,31 @@ void io_sleep(int socket_cpu) {
 void rta_io_sleep(int socket_io){ 
 
     enviar_op_code(OK, socket_io);
+
     int pid = recibir_pid(socket_io);
 
     espera_io* io_pcb = encontrar_pid_io_bck(pid);
 
-    if(!list_remove_element(lista_bck_io,io_pcb)){
-        log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io sleep)");
+    if(io_pcb == NULL){
+        log_info(logger, "No se encontro el IO PCB en bloqueados");
         return;
     }
 
-    free(io_pcb);
+    if(!list_remove_element(lista_bck_io,io_pcb)){
+        log_info(logger, "Error al encontrar el io_pcb buscado en bloqueados (funcion: rta_io_sleep)");
+        return;
+    }
 
     PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
 
+    free(io_pcb);
+
     mediano_plazo_rdy(pcb);
 
-    log_info (logger, "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready", pcb->data.PID);/*Logger Obligatorio*/
-
-
+    log_info(logger,
+        "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready",
+        pcb->data.PID
+    );
 }
 
 // STDIN
@@ -2050,57 +2073,74 @@ void io_stdin(int socket_cpu) {
     mediano_plazo_bck(pcb);
 }    
 
-void rta_io_stdin (int socket_io){
+void rta_io_stdin(int socket_io){
 
     enviar_op_code(OK, socket_io);
-    
-    t_list* lista = recibir_paquete(socket_io);  
-    uint32_t direccion_logica = *(uint32_t*)list_get(lista, 0);
-    uint32_t tam_datos = *(uint32_t*)list_get(lista, 1);    
-    void* datos_recibidos = list_get(lista, 2);
+
+    t_list* lista = recibir_paquete(socket_io);
+
+    uint32_t direccion_logica = *(uint32_t*)list_get(lista,0);
+    uint32_t tam_datos = *(uint32_t*)list_get(lista,1);
+    void* datos_recibidos = list_get(lista,2);
     int pid = *(int*)list_get(lista,3);
 
-    free(lista);
 
     espera_io* io_pcb = encontrar_pid_io_bck(pid);
 
-    if(!list_remove_element(lista_bck_io,io_pcb)){
-        log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdin)");
+    if(io_pcb == NULL){
+        log_error(logger,"No se encontró IO PCB en bloqueados");
+        list_destroy_and_destroy_elements(lista,free);
         return;
     }
+
+
+    if(!list_remove_element(lista_bck_io,io_pcb)){
+        log_info(logger,"Error al encontrar io_pcb en bloqueados");
+        list_destroy_and_destroy_elements(lista,free);
+        return;
+    }
+
 
     free(io_pcb);
 
+
     if(!mock){
-        
+
         enviar_op_code(km_IO_STDIN, info_km.conexion_km);
 
-        if(recibir_op_code(info_km.conexion_km)!= OK){
-        log_info(logger, "Error al enviar STDIN a KM");
-        return;
+        if(recibir_op_code(info_km.conexion_km)!=OK){
+            log_error(logger,"Error al enviar STDIN a KM");
+            return;
         }
 
-        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
-        agregar_a_paquete(paquete_mem, &direccion_logica, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, &tam_datos, sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem, &datos_recibidos, sizeof(datos_recibidos));
-        agregar_a_paquete(paquete_mem, &pid, sizeof(int));
 
-        enviar_paquete(paquete_mem, info_km.conexion_km);
+        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
+
+        agregar_a_paquete(paquete_mem,&direccion_logica,sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem,&tam_datos,sizeof(uint32_t));
+        agregar_a_paquete(paquete_mem,datos_recibidos,tam_datos);
+        agregar_a_paquete(paquete_mem,&pid,sizeof(int));
+
+        enviar_paquete(paquete_mem,info_km.conexion_km);
 
         eliminar_paquete(paquete_mem);
-
     }
 
-    PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
+
+    PCB* pcb = buscar_pcb_por_pid(pid);
 
     mediano_plazo_rdy(pcb);
 
-    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
-    log_info (logger, "PID: [%d] Finalizo IO STDIN", pcb->data.PID);
-    
+    log_info(logger,
+        "PID:[%d] Finalizo IO STDIN",
+        pcb->data.PID
+    );
+
+
+    list_destroy_and_destroy_elements(lista,free);
 }
+
 
 // STDOUT
 void io_stdout(int cpu_socket) {
@@ -2160,24 +2200,35 @@ void io_stdout(int cpu_socket) {
 void rta_io_stdout(int socket_io){
 
     enviar_op_code(OK, socket_io);
+
     int pid = recibir_pid(socket_io);
 
     espera_io* io_pcb = encontrar_pid_io_bck(pid);
 
-    if(!list_remove_element(lista_bck_io,io_pcb)){
-        log_info(logger, "Error al encontar el io_pcb buscado e la lista de bloqueados (funcion: rta io stdout)");
+    if(io_pcb == NULL){
+        log_error(logger, "No se encontró el IO PCB en bloqueados");
         return;
     }
 
+
+    if(!list_remove_element(lista_bck_io,io_pcb)){
+        log_info(logger, "Error al encontrar el io_pcb buscado en la lista de bloqueados (funcion: rta_io_stdout)");
+        return;
+    }
+
+
     free(io_pcb);
 
-    PCB* pcb = buscar_pcb_por_pid(io_pcb->pid);
+
+    PCB* pcb = buscar_pcb_por_pid(pid);
 
     mediano_plazo_rdy(pcb);
-      
-    log_info (logger, "PID: [%d] Finalizo IO SLEEP", pcb->data.PID);
 
-    log_info (logger, "PID: [%d] Finalizo IO stdout", pcb->data.PID);
+
+    log_info(logger,
+        "PID: [%d] Finalizo IO STDOUT",
+        pcb->data.PID
+    );
 }
 
 

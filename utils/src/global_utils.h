@@ -104,7 +104,8 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     IO_SLEEP,
     IO_STDOUT_RETORNO, //Devolucion del IO STDOUT por parte de la IO
     IO_STDIN_RETORNO, //Devolucion del IO STDIN por parte de la IO
-
+    IO_FINALIZADA,
+    
     // COMPACTACION
     CPUS_DESALOJADAS_OK,// El Kernel le avisa a la Memoria que las CPUs están vacías
     COMPACTACION,       

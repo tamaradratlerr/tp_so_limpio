@@ -88,11 +88,11 @@ t_list* recibir_paquete(int socket_cliente);
 //"SWAP contará con un único archivo cuyo path y tamaño serán definidos por SWAP_FILE_PATH y SWAP_FILE_SIZE"
 void inicializar_swap(char* path, int tamanio_swap, int tamanio_bloque);
 
-void atender_kernel(int socket_km);
+void atender_kernel(int socket_km, t_log* logger);
 
-void manejar_lectura_bloque(int socket_km);
+void manejar_lectura_bloque(int socket_km, t_log* logger);
 
-void manejar_escritura_bloque(int socket_km);
+void manejar_escritura_bloque(int socket_km, t_log* logger);
 void enviar_respuesta_simple(int socket_km, op_code respuesta);
 
 #endif /* UTILS_H_ */

@@ -70,7 +70,7 @@ if(tamano_swap % tamano_bloque != 0) {
 	eliminar_paquete(p);
 
 	// 6. ATENDER (Bucle para que el módulo no muera)
-	atender_kernel(conexion);
+	atender_kernel(conexion, logger);
 
 	terminar_programa(conexion, logger, config);
 	return 0;

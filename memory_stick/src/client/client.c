@@ -5,10 +5,10 @@ extern t_config* config;
 extern t_memory_stick_globals ms_globals;
 
 void arrancar_cliente_km(void) {
-    char* ip_km = config_get_string_value(config, "IP_KM");
-    char* puerto_km = config_get_string_value(config, "PUERTO_KM");
+    char* ip_km = config_get_string_value(config, "IP_KERNEL_MEMORY");
+    char* puerto_km = config_get_string_value(config, "KERNEL_MEMORY_PORT");
 
-    int socket_km = crear_conexion(ip_km, puerto_km, logger, 0);
+    int socket_km = crear_conexion(ip_km, puerto_km, logger, KERNEL_MEMORY);
     if (socket_km < 0) {
         log_error(logger, "Error: No se pudo conectar a la Kernel Memory. Abortando.");
         exit(EXIT_FAILURE);

@@ -34,6 +34,7 @@ pthread_mutex_t mutex_procesos;
 
 t_list* lista_memory_sticks;
 pthread_mutex_t mutex_ms;
+uint32_t memoria_total_sistema = 0;
 
 // La función encierra TODO la creación de estructuras juntas
 void inicializar_utils(void) {
@@ -441,15 +442,19 @@ bool _ordenar_por_base(void* seg1, void* seg2) {
     return ((t_segmento_aux*)seg1)->direccion_base < ((t_segmento_aux*)seg2)->direccion_base; 
 }
 
-
-void conexion_memory_stick(int socket_ms, int socket_kernel_scheduler) {
+void conexion_memory_stick(int socket_ms) {
     uint32_t tamanio_recibido = 0;
 
-    if (recv(socket_ms, &tamanio_recibido, sizeof(uint32_t), MSG_WAITALL) <= 0) {
+    t_list* paquete = recibir_paquete(socket_ms);
+    if (paquete == NULL || list_size(paquete) < 1) {
         log_error(logger, "Error al recibir el tamaño del Memory Stick.");
         close(socket_ms);
+        if (paquete != NULL) list_destroy_and_destroy_elements(paquete, free);
         return;
     }
+
+    tamanio_recibido = *(uint32_t*) list_get(paquete, 0);
+    list_destroy_and_destroy_elements(paquete, free);
 
     t_memory_stick_nodo* nuevo_ms = malloc(sizeof(t_memory_stick_nodo));
     nuevo_ms->socket_fd = socket_ms;

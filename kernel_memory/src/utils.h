@@ -82,7 +82,7 @@ void enviar_contexto_cpu(int socket_cpu, int pid);
 void recibir_contexto_cpu(int socket_cpu);
 
 // Gestión de Memory Sticks, Segmentación y Compactación
-void conexion_memory_stick(int socket_ms, int socket_kernel_scheduler);
+void conexion_memory_stick(int socket_ms);
 t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global);
 void* leer_bytes_globales(uint32_t dir_global, uint32_t tamanio);
 void escribir_bytes_globales(uint32_t dir_global, uint32_t tamanio, void* datos);

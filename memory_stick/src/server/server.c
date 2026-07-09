@@ -6,6 +6,7 @@ extern pthread_mutex_t mutex_memoria;
 
 
 t_log* logger;
+t_config* config;
 t_memory_stick_globals ms_globals;
 int delay_memoria; 
 pthread_mutex_t mutex_memoria;
@@ -16,7 +17,7 @@ int main(int argc, char** argv)
 {
     validar_argumentos(argc, argv);
     
-    t_config* config    = config_create(argv[1]);
+    config = config_create(argv[1]);
     char* file          = config_get_string_value(config, "SERVER_LOG_NAME");
     char* process_name  = config_get_string_value(config, "PROCCES_NAME"); 
     char* server_port   = config_get_string_value(config, "MEMORY_STICK_PORT");

@@ -156,6 +156,11 @@ void* atender_cliente_inicial(void* arg) {
             atender_kernel(cliente_fd);
             break;
 
+        case NUEVA_MEMORY_STICK:
+            log_info(logger, "## Handshake recibido: MEMORY STICK detectada en socket %d. Registrando...", cliente_fd);
+            conexion_memory_stick(cliente_fd);
+        break;
+
         case -1:
             log_error(logger, "El cliente se desconectó en el intento de Handshake inicial.");
             close(cliente_fd);

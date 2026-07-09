@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 				agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
 				agregar_a_paquete(paquete_retorno, &pid, sizeof(u_int32_t));
 
-				enviar_paquete(paquete_retorno, fd_conexion);
+				enviar_solo_buffer(paquete_retorno->buffer, fd_conexion);
 				enviar_op_code(IO_FINALIZADA, fd_conexion);
 
 				if(recibir_op_code(fd_conexion) != OK)

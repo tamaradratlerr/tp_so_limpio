@@ -666,6 +666,7 @@ char* opcode_to_string(op_code codigo)
         case COMPACTACION: return "OP_CODE: COMPACTACION";
         case COMPACTACION_FINALIZADA: return "OP_CODE: COMPACTACION_FINALIZADA";
         case NUEVA_MEMORIA_ACUM: return "OP_CODE: NUEVA_MEMORIA_ACUM";
+        case IO_FINALIZADA: return "OP_CODE: IO_FINALIZADA";
 
         default:
             return "OP_CODE: DESCONOCIDO";

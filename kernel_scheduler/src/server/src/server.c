@@ -134,11 +134,8 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 break;
 
             case IO_FINALIZADA:
-            {
                 io_finalizada(cliente_fd);
-
                 break;
-            }
 
             case gl_MUTEX_CREATE:
                 mutex_create(cliente_fd);
@@ -783,7 +780,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
         printf("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
 
-        enviar_paquete(paquete_io, io_socket);
+        enviar_solo_buffer(paquete_io->buffer, io_socket);
         eliminar_paquete(paquete_io);
     }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
@@ -799,7 +796,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
             agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, strlen(pcb_a_ejecutar->iostdout.info)+1); // Los datos que vinieron de memoria
             
             
-            enviar_paquete(paquete_io, io_socket);
+            enviar_solo_buffer(paquete_io->buffer, io_socket);
             eliminar_paquete(paquete_io);
 
         }
@@ -1376,6 +1373,7 @@ bool es_el_mutex_buscado(void* elemento, void* contexto) {
 }
 
 espera_io* encontrar_pid_io_bck (int pid) {
+    
     pthread_mutex_lock(&mutex_ios); 
 
     espera_io* pcb_buscado = NULL;
@@ -1450,6 +1448,8 @@ void pruebas_io(){
     prueba->iostdin.input = NULL;
 
     list_add(lista_bck_io, prueba);
+
+    loguear_lista(lista_bck_io, logger);
 
     log_info(logger, "Prueba IO STDIN agregada.");
 }
@@ -2096,25 +2096,7 @@ void rta_io_stdin(int socket_io){
     void* datos_recibidos = list_get(lista,2);
     int pid = *(int*)list_get(lista,3);
 
-
-    espera_io* io_pcb = encontrar_pid_io_bck(pid);
-
-    if(io_pcb == NULL){
-        log_error(logger,"No se encontró IO PCB en bloqueados");
-        list_destroy_and_destroy_elements(lista,free);
-        return;
-    }
-
-
-    if(!list_remove_element(lista_bck_io,io_pcb)){
-        log_info(logger,"Error al encontrar io_pcb en bloqueados");
-        list_destroy_and_destroy_elements(lista,free);
-        return;
-    }
-
-
-    free(io_pcb);
-
+    log_debug(logger, "Texto Recibifo [%s]",(char*)datos_recibidos);
 
     if(!mock){
 

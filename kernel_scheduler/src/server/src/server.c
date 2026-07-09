@@ -25,6 +25,8 @@ int main(int argc, char *argv[]) /*OK*/
     {
        //prueba_mediano_plazo_mock();
        //prueba_lago_plazo_mock();
+        pruebas_io();
+
     }
     
 
@@ -704,34 +706,66 @@ void io_libre(int io_socket){ //Copia de atender CPU
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
     t_IO *io_libre = list_find_with_context(list_suplementarias->io, es_la_cpu_buscada, &io_socket);
 
-    if (io_libre != NULL) {
-        io_libre->enUso = true;}
-    else {
-        log_error (logger, "No se encontro a la IO buscada (funcion: io_libre)");
+    if(io_libre == NULL){
+        log_error(logger, "No se encontro a la IO buscada");
+        pthread_mutex_unlock(&mutex_ios);
         return;
     }
+
+
     pthread_mutex_unlock(&mutex_ios);
 
     /*Mandamos el PCB a la IO*/
     if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) { 
         
-        espera_io* pcb_a_ejecutar = list_get(lista_bck_io, 0);
+        if(!io_libre->enUso && !list_is_empty(lista_bck_io)){
+            io_libre->enUso = true;
+        }
+        else {
+            return;
+        }
 
+        espera_io* pcb_a_ejecutar = list_remove(lista_bck_io,0);
+        
         if(pcb_a_ejecutar->io_op_code == IO_SLEEP){
             enviar_op_code(gl_IO_SLEEP, io_socket);
-            if(recibir_op_code(io_socket) != OK) return;
+            if(recibir_op_code(io_socket) != OK){
+                io_libre->enUso=false;
+                return;
+            }
 
-                t_paquete* paquete_para_io = crear_paquete(gl_IO_SLEEP); 
+                t_paquete* paquete_para_io = crear_paquete(PAQUETE); 
                 agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
                 agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->sleep.time,sizeof(uint32_t));        
                 
-                enviar_paquete(paquete_para_io, io_socket);
-                free(paquete_para_io);
+                log_info(logger, "Enviando IO_SLEEP PID=%d TIME=%d",
+                pcb_a_ejecutar->pid,
+                pcb_a_ejecutar->sleep.time);
+                
+                log_info(logger, "Tamaño buffer enviado: %d", paquete_para_io->buffer->size);
+                printf("ENVIO BUFFER SIZE = %d\n", paquete_para_io->buffer->size);
+                
+                printf("sizeof(op_code) = %ld\n", sizeof(op_code));
+                printf("sizeof(uint32_t) = %ld\n", sizeof(uint32_t));
+                
+                enviar_solo_buffer(paquete_para_io->buffer, io_socket);
+                eliminar_paquete(paquete_para_io);
+
+                if(recibir_op_code(io_socket) != IO_SLEEP){
+                    log_error(logger, "IO no confirmó finalizacion del sleep");
+                    io_libre->enUso=false;
+                    return;
+                }
+
+                enviar_op_code(OK, io_socket);
 
         }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
             enviar_op_code(gl_IO_STDIN, io_socket);
-            if(recibir_op_code(io_socket) != OK) return;
+            if(recibir_op_code(io_socket) != OK){
+                io_libre->enUso=false;
+                return;
+            }
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
@@ -740,17 +774,20 @@ void io_libre(int io_socket){ //Copia de atender CPU
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
             
             enviar_paquete(paquete_io, io_socket);
-            free(paquete_io);
+            eliminar_paquete(paquete_io);
         }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
             enviar_op_code(gl_IO_STDOUT, io_socket);
-            if(recibir_op_code(io_socket) != OK) return;
+            if(recibir_op_code(io_socket) != OK){
+                io_libre->enUso=false;
+                return;
+            }
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
     
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.info, sizeof(pcb_a_ejecutar->iostdout.info)); // Los datos que vinieron de memoria
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, strlen(pcb_a_ejecutar->iostdout.info)+1); // Los datos que vinieron de memoria
             
             enviar_paquete(paquete_io, io_socket);
             eliminar_paquete(paquete_io);
@@ -763,8 +800,15 @@ void io_libre(int io_socket){ //Copia de atender CPU
         if(recibir_op_code(io_socket) != OK){
             log_info (logger, "Error al enviar info sobre IO PID[%d] (funcion: io_libre)", pcb_a_ejecutar->pid);
         }
+
+    pthread_mutex_lock(&mutex_ios);
+    io_libre->enUso = false;
+    pthread_mutex_unlock(&mutex_ios);
     
-}}
+    free(pcb_a_ejecutar);
+
+    }
+}
 
 
 /*-----Con el Kernel Memory-----*/
@@ -1368,6 +1412,19 @@ void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre 
     io_pcb->iostdout.info = "5555";
 
 } 
+
+void pruebas_io(){
+
+    espera_io* prueba = malloc(sizeof(espera_io));
+
+    prueba->pid = 1;
+    prueba->io_op_code = IO_SLEEP;
+    prueba->sleep.time = 5000;
+
+    list_add(lista_bck_io, prueba);
+
+    log_info(logger, "Prueba IO agregada.");
+}
 
 void prueba_mediano_plazo_mock()
 {

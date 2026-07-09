@@ -281,7 +281,7 @@ void eliminar_paquete(t_paquete* paquete);
 void liberar_conexion(int socket_cliente);
 
 void* recibir_buffer(int* size, int socket_cliente);
-
+void enviar_solo_buffer(t_buffer* buffer, int socket);
 op_code recibir_op_code (int socket_cliente);
 
 t_list* recibir_paquete(int);

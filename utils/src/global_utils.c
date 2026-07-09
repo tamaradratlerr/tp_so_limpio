@@ -50,6 +50,11 @@ void eliminar_paquete(t_paquete *paquete)
 
 void *serializar_paquete(t_paquete *paquete, int bytes)
 {
+
+    log_info(logger, "SERIALIZANDO:");
+    log_info(logger, "Codigo: %d", paquete->codigo_operacion);
+    log_info(logger, "Buffer size: %d", paquete->buffer->size);
+
     void *magic = malloc(bytes);
     int desplazamiento = 0;
 
@@ -261,6 +266,7 @@ void *recibir_buffer(int *size, int socket_cliente)
     void *buffer;
     if (recv(socket_cliente, size, sizeof(int), MSG_WAITALL) > 0)
     {
+        log_info(logger,"RECIBI SIZE: %d", *size);
         buffer = malloc(*size);
         recv(socket_cliente, buffer, *size, MSG_WAITALL);
         return buffer;
@@ -323,12 +329,32 @@ t_list *recibir_paquete(int socket_cliente)
     int tamanio;
 
     buffer = recibir_buffer(&size, socket_cliente);
+    if(buffer == NULL){
+        return NULL;
+    }
+    
+    log_info(logger,"Tamaño buffer recibido EN FUNCION GLOBAL: %d", size);
 
     while (desplazamiento < size)
     {
         // 1. Leemos el tamaño del próximo dato (casteando a char*)
         memcpy(&tamanio, (char *)buffer + desplazamiento, sizeof(int));
+        
+        log_info(logger,"Tamaño del campo recibido EN FUNCION GLOBAL: %d", tamanio);
+        
         desplazamiento += sizeof(int);
+
+        if(tamanio <= 0 || desplazamiento + tamanio > size)
+        {
+            log_error(logger, "Paquete corrupto. Tamaño campo=%d desplazamiento=%d size=%d",
+                      tamanio,
+                      desplazamiento,
+                      size);
+
+            list_destroy(valores);
+            free(buffer);
+            return NULL;
+        }
 
         // 2. Reservamos memoria para el dato
         char *valor = malloc(tamanio);
@@ -345,6 +371,11 @@ t_list *recibir_paquete(int socket_cliente)
     return valores;
 }
 
+void enviar_solo_buffer(t_buffer* buffer, int socket)
+{
+    send(socket, &(buffer->size), sizeof(uint32_t), 0);
+    send(socket, buffer->stream, buffer->size, 0);
+}
 /*-----     MANEJO DE MENSAJES     -----*/
 
 void enviar_mensaje(char *mensaje, int socket_cliente)

@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) /*OK*/
     {
        //prueba_mediano_plazo_mock();
        //prueba_lago_plazo_mock();
-        pruebas_io();
+       //pruebas_io();
 
     }
     
@@ -731,7 +731,7 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
         espera_io* pcb_a_ejecutar = list_remove(lista_bck_io,0);
         
-        if(pcb_a_ejecutar->io_op_code == IO_SLEEP)
+        if(pcb_a_ejecutar->io_op_code == gl_IO_SLEEP)
         {
             enviar_op_code(gl_IO_SLEEP, io_socket);
             
@@ -754,12 +754,6 @@ void io_libre(int io_socket){ //Copia de atender CPU
             enviar_solo_buffer(paquete_para_io->buffer, io_socket);
             eliminar_paquete(paquete_para_io);
 
-            if(recibir_op_code(io_socket) != IO_SLEEP)
-            {
-                log_error(logger, "IO no confirmó finalizacion del sleep");
-                return;
-            }
-
         }
         
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN)
@@ -770,15 +764,15 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
             t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
 
-            printf("PID: %u\n", pcb_a_ejecutar->pid);
-            printf("DIRECCION: %u\n", pcb_a_ejecutar->iostdin.direc);
-            printf("LENGTH: %u\n", pcb_a_ejecutar->iostdin.length);
+            log_debug("PID: %u\n", pcb_a_ejecutar->pid);
+            log_debug("DIRECCION: %u\n", pcb_a_ejecutar->iostdin.direc);
+            log_debug("LENGTH: %u\n", pcb_a_ejecutar->iostdin.length);
 
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
 
-            printf("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
+            log_debug("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
 
             enviar_solo_buffer(paquete_io->buffer, io_socket);
             eliminar_paquete(paquete_io);
@@ -1463,7 +1457,7 @@ void pruebas_io(){
 
     list_add(lista_bck_io, prueba);
 
-    loguear_lista(lista_bck_io, logger);
+    loguear_lista_suplementaria("BCK_IO", logger);
 
     log_info(logger, "Prueba IO STDIN agregada.");
 }
@@ -2210,14 +2204,17 @@ void exit_proceso(int socket_cpu){ /*OK*/
 
 //SLEEP
 void io_sleep(int socket_cpu) { 
-    /*Recibimos la info necesaria*/
-    t_list* lista = recibir_paquete(socket_cpu);
-    int pid_a_bloquear = *(int*)list_get(lista, 0);
-    char* tiempo_str = (char*)list_get(lista, 1);
-    int tiempo_ms = atoi(tiempo_str); // Si viene como string, convertimos
-    list_destroy(lista);
+    
+    int pid_a_bloquear = recibir_pid(socket_cpu);
+    char* tiempo_str = recibir_mensaje(socket_cpu,logger);
+    
+    int tiempo_ms = atoi(tiempo_str);
+    
+    
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Sleep]", pid_a_bloquear); /*Logger Obligatorio*/
+
+    enviar_op_code(OK,socket_cpu);
 
     PCB* pcb = buscar_pcb_por_pid(pid_a_bloquear);
 
@@ -2248,7 +2245,7 @@ void io_sleep(int socket_cpu) {
         enviar_op_code(NOTOK, socket_cpu);
     }
 
-    mediano_plazo_rdy(pcb);
+    mediano_plazo_bck(pcb);
 }
 
 void rta_io_sleep(int socket_io){ 
@@ -2296,6 +2293,8 @@ void io_stdin(int socket_cpu) {
     
     log_info(logger, "## PID:[%d] Solicito Syscall: [Stdin]", pid_a_bloquear); /*Logger Obligatorio*/
 
+    enviar_op_code(OK,socket_cpu);
+
     if (pcb != NULL) {
         
         /*Bloqueamos el Proceso*/
@@ -2316,6 +2315,8 @@ void io_stdin(int socket_cpu) {
         pthread_mutex_lock(&mutex_ios);
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
+
+        
         
     } else {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
@@ -2387,6 +2388,8 @@ void io_stdout(int cpu_socket) {
     uint32_t tam = *(uint32_t*)list_get(lista, 2);
    
     log_info(logger, "## PID:[%d] Solicito Syscall: [Stdout]", pid); /*Logger Obligatorio*/
+
+    enviar_op_code(OK,cpu_socket);
 
     
     PCB* pcb = buscar_pcb_por_pid(pid);

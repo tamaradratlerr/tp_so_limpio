@@ -1020,6 +1020,16 @@ void ejecutar_sleep(t_instruccion* instr) {
     
     log_info (logger, "## PID:[%d] - Ejecutando [Sleep] - Tiempo [%s]",contexto_actual->pid, tiempo);/*Logger Obligatorio*/  
 
+    enviar_op_code(gl_IO_SLEEP,sockets->conexion_kernel_scheduler);
+
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
+
+    enviar_mensaje(tiempo,sockets->conexion_kernel_scheduler);
+
+    
+
+
+
     if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
     }
@@ -1471,19 +1481,12 @@ char* instruccion[] = {
     "NOOP",
     "SUB AX BX",
     "NOOP",
-    "MUTEX_CREATE 99",
-    "NOOP",
-    "MUTEX_LOCK 99",
-    "NOOP",
-    "INIT_PROC proceso2.txt 1",
-    //"MUTEX_UNLOCK 99",
+    "SLEEP 25000",
     "NOOP",
     "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    "NOOP",
-    //"MEM_ALLOC",
+    "STDIN BX AX",
+    "SLEEP 25000",
+    "STDOUT BX AX",
     "EXIT_PROC",
 
 };

@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 
 	/* Conexion a servidor */
 	log_info(logger, "Iniciando conexión con el servidor...");
-	fd_conexion = crear_conexion(io_ip, io_port, logger, KERNEL_SCHEDULER);
+	fd_conexion = crear_conexion_reintentando(io_ip, io_port, logger, KERNEL_SCHEDULER);
 
 	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
 	enviar_op_code(NUEVA_IO,fd_conexion);

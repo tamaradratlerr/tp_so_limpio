@@ -764,31 +764,40 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
         }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
-            enviar_op_code(gl_IO_STDIN, io_socket);
-            if(recibir_op_code(io_socket) != OK){
-                return;
-            }
 
-            t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
+        enviar_op_code(gl_IO_STDIN, io_socket);
 
-            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
-            
-            enviar_paquete(paquete_io, io_socket);
-            eliminar_paquete(paquete_io);
+        if(recibir_op_code(io_socket) != OK){
+            return;
         }
+
+        t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
+
+        printf("PID: %u\n", pcb_a_ejecutar->pid);
+        printf("DIRECCION: %u\n", pcb_a_ejecutar->iostdin.direc);
+        printf("LENGTH: %u\n", pcb_a_ejecutar->iostdin.length);
+
+        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
+        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
+
+        printf("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
+
+        enviar_paquete(paquete_io, io_socket);
+        eliminar_paquete(paquete_io);
+    }
         else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
             enviar_op_code(gl_IO_STDOUT, io_socket);
             if(recibir_op_code(io_socket) != OK){
                 return;
             }
 
-            t_paquete* paquete_io = crear_paquete(gl_IO_STDOUT);
+            t_paquete* paquete_io = crear_paquete(PAQUETE);
     
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, strlen(pcb_a_ejecutar->iostdout.info)+1); // Los datos que vinieron de memoria
+            
             
             enviar_paquete(paquete_io, io_socket);
             eliminar_paquete(paquete_io);
@@ -1434,12 +1443,15 @@ void pruebas_io(){
     espera_io* prueba = malloc(sizeof(espera_io));
 
     prueba->pid = 1;
-    prueba->io_op_code = IO_SLEEP;
-    prueba->sleep.time = 5000;
+    prueba->io_op_code = gl_IO_STDIN;
+
+    prueba->iostdin.direc = 100;
+    prueba->iostdin.length = 10;
+    prueba->iostdin.input = NULL;
 
     list_add(lista_bck_io, prueba);
 
-    log_info(logger, "Prueba IO agregada.");
+    log_info(logger, "Prueba IO STDIN agregada.");
 }
 
 void prueba_mediano_plazo_mock()

@@ -33,10 +33,13 @@ t_paquete *crear_paquete(op_code codigo)
 
 void enviar_paquete(t_paquete *paquete, int socket_cliente)
 {
-    int bytes = paquete->buffer->size + sizeof(op_code) + sizeof(uint32_t);
-    void *a_enviar = serializar_paquete(paquete, bytes);
+    // Calculamos el tamaño exacto que va a ocupar el paquete en el buffer
+    // Esto debe coincidir EXACTAMENTE con lo que copia serializar_paquete
+    int total_bytes = sizeof(op_code) + sizeof(uint32_t) + paquete->buffer->size;
+    
+    void *a_enviar = serializar_paquete(paquete, total_bytes);
 
-    send(socket_cliente, a_enviar, bytes, 0);
+    send(socket_cliente, a_enviar, total_bytes, 0);
 
     free(a_enviar);
 }

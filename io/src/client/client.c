@@ -107,14 +107,7 @@ int main(int argc, char **argv)
 				// Respuesta de la operación
 				enviar_pid(pid, fd_conexion);
 
-				// Ahora recién libero la IO
-				enviar_op_code(IO_FINALIZADA, fd_conexion);
-
-				if(recibir_op_code(fd_conexion) != OK){
-					log_error(logger,"KS no confirmó IO_FINALIZADA");
-					break;
-				}
-
+				
 				list_destroy_and_destroy_elements(lista, free);
 				break;
 			}
@@ -125,6 +118,11 @@ int main(int argc, char **argv)
 				enviar_op_code(OK, fd_conexion);
 
 				t_list *lista = recibir_paquete(fd_conexion);
+
+				if(lista == NULL || list_size(lista) < 3){
+					log_error(logger,"Paquete STDIN inválido");
+					break;
+				}
 
 				uint32_t pid = *(uint32_t *)list_get(lista, 0);
 				uint32_t direccion_logica = *(uint32_t *)list_get(lista, 1);

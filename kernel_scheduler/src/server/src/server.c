@@ -242,7 +242,7 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
 
     
         /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
-    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_io_buscada, &socket_cliente);
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
     
     if(compactacion_value)
     {
@@ -539,7 +539,7 @@ bool es_la_io_buscada (void* elemento, void* contexto) {
         // Casteamos el contexto de vuelta a un puntero de int para sacar el socket
      int socket_buscado = *(int*) contexto; 
     
-    return (io->fd == socket_buscado) && (io->enUso == false);
+    return (io->fd == socket_buscado);
 }
 
 /*----                     OP_CODES                     -----*/
@@ -707,10 +707,11 @@ void nueva_io (int cliente_fd){
 void io_libre(int io_socket){ //Copia de atender CPU
 
     pthread_mutex_lock(&mutex_ios);
-        /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
-    t_IO *io_libre = list_find_with_context(list_suplementarias->io, es_la_cpu_buscada, &io_socket);
+    
+    t_IO *io_libre = list_find_with_context(list_suplementarias->io, es_la_io_buscada, &io_socket);
 
-    if(io_libre == NULL){
+    if(io_libre == NULL)
+    {
         log_error(logger, "No se encontro a la IO buscada");
         pthread_mutex_unlock(&mutex_ios);
         return;
@@ -720,74 +721,74 @@ void io_libre(int io_socket){ //Copia de atender CPU
     pthread_mutex_unlock(&mutex_ios);
 
     /*Mandamos el PCB a la IO*/
-    if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) { 
-        
-        if(!io_libre->enUso && !list_is_empty(lista_bck_io)){
+    if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) 
+    {   
+        if(!io_libre->enUso && !list_is_empty(lista_bck_io))
+        {
             io_libre->enUso = true;
         }
-        else {
-            return;
-        }
+        else return;
 
         espera_io* pcb_a_ejecutar = list_remove(lista_bck_io,0);
         
-        if(pcb_a_ejecutar->io_op_code == IO_SLEEP){
+        if(pcb_a_ejecutar->io_op_code == IO_SLEEP)
+        {
             enviar_op_code(gl_IO_SLEEP, io_socket);
-            if(recibir_op_code(io_socket) != OK){
+            
+            if(recibir_op_code(io_socket) != OK) return;
+
+            t_paquete* paquete_para_io = crear_paquete(PAQUETE); 
+            agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
+            agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->sleep.time,sizeof(uint32_t));        
+            
+            log_info(logger, "Enviando IO_SLEEP PID=%d TIME=%d",
+            pcb_a_ejecutar->pid,
+            pcb_a_ejecutar->sleep.time);
+            
+            log_info(logger, "Tamaño buffer enviado: %d", paquete_para_io->buffer->size);
+            printf("ENVIO BUFFER SIZE = %d\n", paquete_para_io->buffer->size);
+            
+            printf("sizeof(op_code) = %ld\n", sizeof(op_code));
+            printf("sizeof(uint32_t) = %ld\n", sizeof(uint32_t));
+            
+            enviar_solo_buffer(paquete_para_io->buffer, io_socket);
+            eliminar_paquete(paquete_para_io);
+
+            if(recibir_op_code(io_socket) != IO_SLEEP)
+            {
+                log_error(logger, "IO no confirmó finalizacion del sleep");
                 return;
             }
 
-                t_paquete* paquete_para_io = crear_paquete(PAQUETE); 
-                agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->pid,sizeof(uint32_t));
-                agregar_a_paquete(paquete_para_io,&pcb_a_ejecutar->sleep.time,sizeof(uint32_t));        
-                
-                log_info(logger, "Enviando IO_SLEEP PID=%d TIME=%d",
-                pcb_a_ejecutar->pid,
-                pcb_a_ejecutar->sleep.time);
-                
-                log_info(logger, "Tamaño buffer enviado: %d", paquete_para_io->buffer->size);
-                printf("ENVIO BUFFER SIZE = %d\n", paquete_para_io->buffer->size);
-                
-                printf("sizeof(op_code) = %ld\n", sizeof(op_code));
-                printf("sizeof(uint32_t) = %ld\n", sizeof(uint32_t));
-                
-                enviar_solo_buffer(paquete_para_io->buffer, io_socket);
-                eliminar_paquete(paquete_para_io);
-
-                if(recibir_op_code(io_socket) != IO_SLEEP){
-                    log_error(logger, "IO no confirmó finalizacion del sleep");
-                    return;
-                }
-
         }
-        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN){
+        
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDIN)
+        {
+            enviar_op_code(gl_IO_STDIN, io_socket);
 
-        enviar_op_code(gl_IO_STDIN, io_socket);
+            if(recibir_op_code(io_socket) != OK) return;
 
-        if(recibir_op_code(io_socket) != OK){
-            return;
+            t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
+
+            printf("PID: %u\n", pcb_a_ejecutar->pid);
+            printf("DIRECCION: %u\n", pcb_a_ejecutar->iostdin.direc);
+            printf("LENGTH: %u\n", pcb_a_ejecutar->iostdin.length);
+
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
+            agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
+
+            printf("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
+
+            enviar_solo_buffer(paquete_io->buffer, io_socket);
+            eliminar_paquete(paquete_io);
         }
-
-        t_paquete* paquete_io = crear_paquete(gl_IO_STDIN);
-
-        printf("PID: %u\n", pcb_a_ejecutar->pid);
-        printf("DIRECCION: %u\n", pcb_a_ejecutar->iostdin.direc);
-        printf("LENGTH: %u\n", pcb_a_ejecutar->iostdin.length);
-
-        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
-        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.direc, sizeof(uint32_t));
-        agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdin.length, sizeof(uint32_t));
-
-        printf("TAMAÑO FINAL PAQUETE: %d\n", paquete_io->buffer->size);
-
-        enviar_solo_buffer(paquete_io->buffer, io_socket);
-        eliminar_paquete(paquete_io);
-    }
-        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT){
+        
+        else if (pcb_a_ejecutar->io_op_code == gl_IO_STDOUT)
+        {
             enviar_op_code(gl_IO_STDOUT, io_socket);
-            if(recibir_op_code(io_socket) != OK){
-                return;
-            }
+            
+            if(recibir_op_code(io_socket) != OK) return;
 
             t_paquete* paquete_io = crear_paquete(PAQUETE);
     
@@ -800,8 +801,21 @@ void io_libre(int io_socket){ //Copia de atender CPU
             eliminar_paquete(paquete_io);
 
         }
-        else {
-            log_info(logger, "Error al identificar IO de PID:[%d] (funcion: io_libre)",pcb_a_ejecutar->pid);
+
+        else 
+        {
+            if (io_libre == NULL){
+                log_error(logger, "PID:[%d] Error al Identificar IO (io_libre == NULL)",pcb_a_ejecutar->pid);
+            }
+
+            if (list_is_empty(lista_bck_io)){
+                log_error(logger, "PID:[%d] Error lista_bck_io Esta Vacia",pcb_a_ejecutar->pid);
+            }
+
+            if (!list_is_empty(list_suplementarias->io)){
+                log_error(logger,"PID:[%d] Error lista_suplementarias->io Esta Vacia",pcb_a_ejecutar->pid); 
+            }
+            
         }
 
 
@@ -813,6 +827,8 @@ void io_libre(int io_socket){ //Copia de atender CPU
 void io_finalizada(int io_socket)
 {
     pthread_mutex_lock(&mutex_ios);
+
+    loguear_lista_suplementaria("IO", logger);
 
     t_IO *io = list_find_with_context(
         list_suplementarias->io,
@@ -1441,11 +1457,9 @@ void pruebas_io(){
     espera_io* prueba = malloc(sizeof(espera_io));
 
     prueba->pid = 1;
-    prueba->io_op_code = gl_IO_STDIN;
+    prueba->io_op_code = gl_IO_SLEEP;
 
-    prueba->iostdin.direc = 100;
-    prueba->iostdin.length = 10;
-    prueba->iostdin.input = NULL;
+    prueba->sleep.time = 5000;
 
     list_add(lista_bck_io, prueba);
 
@@ -1510,6 +1524,232 @@ void loguear_lista(t_list* lista, t_log* logger)
     }
 
     log_debug(logger, "Fin de Chequeo");
+}
+
+void loguear_lista_suplementaria(char* tipo_lista, t_log* logger)
+{
+    log_debug(logger, "==============================");
+    log_debug(logger, "Chequeo Lista Suplementaria [%s]", tipo_lista);
+    log_debug(logger, "==============================");
+
+    if (list_suplementarias == NULL) {
+        log_debug(logger, "list_suplementarias NULL");
+        return;
+    }
+
+    if (strcmp(tipo_lista, "CPU") == 0) {
+
+        t_list* lista = list_suplementarias->cpu;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista CPU Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            t_CPU* cpu = list_get(lista, i);
+
+            if (cpu == NULL) {
+                log_debug(logger, "[%d] CPU NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] FD:[%d] ID:[%s] EnUso:[%s]",
+                i,
+                cpu->fd,
+                cpu->identificador != NULL ? cpu->identificador : "NULL",
+                cpu->enUso ? "true" : "false"
+            );
+        }
+
+    } else if (strcmp(tipo_lista, "IO") == 0) {
+
+        t_list* lista = list_suplementarias->io;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista IO Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            t_IO* io = list_get(lista, i);
+
+            if (io == NULL) {
+                log_debug(logger, "[%d] IO NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] FD:[%d] Nombre:[%s] EnUso:[%s]",
+                i,
+                io->fd,
+                io->nombre != NULL ? io->nombre : "NULL",
+                io->enUso ? "true" : "false"
+            );
+        }
+
+    } else if (strcmp(tipo_lista, "MS") == 0) {
+
+        t_list* lista = list_suplementarias->ms;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista Memory Stick Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            t_mem_stick* ms = list_get(lista, i);
+
+            if (ms == NULL) {
+                log_debug(logger, "[%d] Memory Stick NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] Socket:[%d] IP:[%s] Puerto:[%s] Base:[%u] Tamanio:[%u]",
+                i,
+                ms->socket,
+                ms->ip != NULL ? ms->ip : "NULL",
+                ms->puerto != NULL ? ms->puerto : "NULL",
+                ms->base,
+                ms->tamanio
+            );
+        }
+
+    } else if (strcmp(tipo_lista, "DESALOJO") == 0) {
+
+        t_list* lista = list_suplementarias->desalojo;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista Desalojo Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            PCB* pcb = list_get(lista, i);
+
+            if (pcb == NULL) {
+                log_debug(logger, "[%d] PCB NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] PID:[%d] Estado:[%s] Prioridad:[%d]",
+                i,
+                pcb->data.PID,
+                nombre_estado(pcb->estado_pcb),
+                pcb->data.prioridad
+            );
+        }
+
+    } else if (strcmp(tipo_lista, "BCK_IO") == 0) {
+
+        t_list* lista = lista_bck_io;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista BCK_IO Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            espera_io* io_pcb = list_get(lista, i);
+
+            if (io_pcb == NULL) {
+                log_debug(logger, "[%d] espera_io NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] PID:[%d] IO_OP:[%s]",
+                i,
+                io_pcb->pid,
+                opcode_to_string(io_pcb->io_op_code)
+            );
+
+            switch (io_pcb->io_op_code) {
+                case IO_SLEEP:
+                case gl_IO_SLEEP:
+                    log_debug(logger, "    SLEEP Time:[%u]", io_pcb->sleep.time);
+                    break;
+
+                case IO_STDIN:
+                case gl_IO_STDIN:
+                    log_debug(
+                        logger,
+                        "    STDIN Direccion:[%u] Length:[%u]",
+                        io_pcb->iostdin.direc,
+                        io_pcb->iostdin.length
+                    );
+                    break;
+
+                case IO_STDOUT:
+                case gl_IO_STDOUT:
+                    log_debug(
+                        logger,
+                        "    STDOUT Length:[%u] Info:[%s]",
+                        io_pcb->iostdout.length,
+                        io_pcb->iostdout.info != NULL ? io_pcb->iostdout.info : "NULL"
+                    );
+                    break;
+
+                default:
+                    log_debug(logger, "    Tipo de IO no reconocido");
+                    break;
+            }
+        }
+
+    } else if (strcmp(tipo_lista, "MUTEX") == 0) {
+
+        t_list* lista = lista_mutex;
+
+        if (lista == NULL || list_is_empty(lista)) {
+            log_debug(logger, "Lista Mutex Vacia");
+            return;
+        }
+
+        for (int i = 0; i < list_size(lista); i++) {
+            mutex_cpu* mutex = list_get(lista, i);
+
+            if (mutex == NULL) {
+                log_debug(logger, "[%d] Mutex NULL", i);
+                continue;
+            }
+
+            log_debug(
+                logger,
+                "[%d] Mutex:[%s] Valor:[%d] DuenioPID:[%d] Cola:[%d]",
+                i,
+                mutex->mutex_id != NULL ? mutex->mutex_id : "NULL",
+                mutex->valor,
+                mutex->dueño_actual != NULL ? mutex->dueño_actual->data.PID : -1,
+                mutex->cola_mutex != NULL ? list_size(mutex->cola_mutex) : -1
+            );
+
+            if (mutex->cola_mutex != NULL) {
+                for (int j = 0; j < list_size(mutex->cola_mutex); j++) {
+                    int* pid = list_get(mutex->cola_mutex, j);
+
+                    log_debug(
+                        logger,
+                        "    Cola[%d] PID:[%d]",
+                        j,
+                        pid != NULL ? *pid : -1
+                    );
+                }
+            }
+        }
+
+    } else {
+        log_debug(logger, "Tipo de lista suplementaria desconocido: [%s]", tipo_lista);
+    }
+
+    log_debug(logger, "Fin Chequeo Lista Suplementaria [%s]", tipo_lista);
 }
 
 void prueba_lago_plazo_mock() {

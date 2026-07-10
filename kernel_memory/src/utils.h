@@ -87,6 +87,7 @@ void ejecutar_compactacion_fisica_memory_stick(void);
 void solicitar_y_ejecutar_compactacion(int socket_ks);
 void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmento, uint32_t tamanio_segmento);
 void eliminar_segmento(int pid, int id_segmento); // La que armamos recién
+void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
 
 // SWAP
 void suspender_proceso(int pid);

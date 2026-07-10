@@ -95,12 +95,16 @@ void manejar_crear_proceso(int socket_cliente) {
     int pid = recibir_pid(socket_cliente);
     char* path = recibir_mensaje(socket_cliente, logger);
 
-    FILE* archivo = fopen(path, "r");
+    char* base_path = config_get_string_value(config_km, "SCRIPTS_BASEPATH");
+    char* path_completo = string_from_format("%s/%s", base_path, path);
+
+    FILE* archivo = fopen(path_completo, "r");
     
     // Si falló el archivo, liberamos de forma segura y salimos
     if (archivo == NULL) {
         log_error(logger, "No se pudo abrir el archivo: %s", path);
         free(path);
+        free(path_completo);
         return;
     }
 
@@ -515,6 +519,44 @@ void conexion_memory_stick(int socket_ms) {
     eliminar_paquete (paquete_notificacion);
 }
 
+bool desconectada;
+
+void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
+{
+    bool avisar_ks = false;
+    int fd_a_cerrar = -1;
+
+    pthread_mutex_lock(&mutex_ms);
+
+    if (!ms->desconectada) {
+        ms->desconectada = true;
+        fd_a_cerrar = ms->socket_fd;
+        ms->socket_fd = -1;
+
+        list_remove_element(lista_memory_sticks, ms);
+    }
+
+    pthread_mutex_unlock(&mutex_ms);
+
+    if (fd_a_cerrar != -1) {
+        close(fd_a_cerrar);
+    }
+
+    pthread_mutex_lock(&mutex_mem_corrupt);
+
+    if (!mem_corrupt_notificado) {
+        mem_corrupt_notificado = true;
+        avisar_ks = true;
+    }
+
+    pthread_mutex_unlock(&mutex_mem_corrupt);
+
+    if (avisar_ks && socket_kernel_scheduler >= 0) {
+        log_error(logger, "## Memory Stick desconectada. Memoria corrupta.");
+        enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
+    }
+}
+
 
 t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global) {
     pthread_mutex_lock(&mutex_ms);
@@ -656,9 +698,7 @@ void ejecutar_compactacion_fisica_memory_stick() {
 void solicitar_y_ejecutar_compactacion(int socket_ks) {
     log_warning(logger, "## Memoria fragmentada. Solicitando desalojo al Kernel Scheduler...");
 
-    t_paquete* paquete_desalojo = crear_paquete(DESALOJO);
-    enviar_paquete(paquete_desalojo, socket_ks);
-    eliminar_paquete(paquete_desalojo);
+    enviar_op_code(DESALOJO, socket_ks);
 
     // Bloqueo de sincronización: Queda esperando que KS eche a los procesos de las CPU
     op_code respuesta_ks;
@@ -743,7 +783,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     }
     pthread_mutex_unlock(&mutex_contextos);
 
-    log_info(logger, "## PID: %d - Segmento %d Creado en Base: %u", pid, id_segmento, nuevo_segmento->direccion_base);
+    log_info(logger, "## PID: %d - Segmento Creado %d - Tamaño: %u", pid, id_segmento, tamanio_segmento);
 
     int ok = 1;
     send(socket_cliente, &ok, sizeof(int), 0);

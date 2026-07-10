@@ -1,32 +1,27 @@
 #define _POSIX_C_SOURCE 200809L
 #include "server.h"
-#include <string.h> // strdup vive aquí
+#include <string.h> 
 #include "utils.h"
 #include <sys/socket.h>
 #include <pthread.h>
 #include <commons/config.h>
+#include <commons/bitarray.h> // Necesaria para gestionar bloques
+#include <math.h>            // Necesaria para ceil()
 
+// --- Variables Globales ---
 t_log* logger;
 t_config* config;
-
-// FALTA LLENAR HANDSHAKE : 7/6
-
+int socket_swap;             // Socket para hablar con el SWAP
+int block_size_swap;         // Tamaño de bloque recibido del SWAP
+t_bitarray* bitmap_swap;     // Administrador de bloques libres
+int total_bloques_swap;
 int main(int argc, char** argv) {
-
-    // Justo antes de la línea del config_create
-    printf("DEBUG: Intentando abrir el archivo en la ruta: %s\n", argv[1]);
-    // Obtener el directorio de trabajo actual
-    char cwd[1024];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        printf("DEBUG: Directorio actual de ejecución: %s\n", cwd);
-    }
-
     if (argc < 2) {
         printf("Falta el path al archivo de config\n");
         return 1;
     }
 
-    config = config_create(argv[1]); // <--- Usa el argumento que pasas por consola
+    config = config_create(argv[1]);
     if (config == NULL) {
         perror("Error al abrir config"); 
         return 1;
@@ -39,21 +34,23 @@ int main(int argc, char** argv) {
 
     inicializar_utils();
 
+
+    // --- INICIAMOS EL SERVIDOR ---
     char* puerto = config_get_string_value(config, "PUERTO_ESCUCHA");
     int server_fd = iniciar_servidor(puerto, logger);
     log_info(logger, "Kernel Memory escuchando en puerto %s...", puerto);
 
     while (1) {
-            int cliente_fd = esperar_cliente(server_fd, logger);
+        int cliente_fd = esperar_cliente(server_fd, logger);
         
         if (cliente_fd != -1) {
-            log_info(logger, "Conexión entrante detectada en socket %d. Creando hilo de identificación...", cliente_fd);
+            log_info(logger, "Conexión entrante detectada en socket %d. Creando hilo...", cliente_fd);
 
             pthread_t hilo_cliente;
             int* socket_ptr = malloc(sizeof(int));
             *socket_ptr = cliente_fd;
 
-            // Creamos el hilo genérico que primero resolverá el Handshake
+            // Aquí el cliente (sea SWAP, CPU o Kernel) enviará su OpCode de Handshake
             pthread_create(&hilo_cliente, NULL, (void*)atender_cliente_inicial, socket_ptr);
             pthread_detach(hilo_cliente);
         }
@@ -63,7 +60,6 @@ int main(int argc, char** argv) {
     log_destroy(logger);
     return 0;
 }
-
 
 
 void atender_cpu(int cpu_fd) {
@@ -82,7 +78,6 @@ void atender_cpu(int cpu_fd) {
             // Y luego procesa ese paquete
                 list_destroy_and_destroy_elements(paquete, free);
                 break;
-
             case LEER_MEMORIA:
                 manejar_lectura_memoria(cpu_fd); 
                 break;
@@ -117,6 +112,16 @@ void atender_kernel(int kernel_fd) {
                 manejar_crear_proceso(kernel_fd); 
                 break;
 
+                case SUSPENDER_PROCESO:
+                // Recibir PID del KS
+                 int pid = recibir_pid(kernel_fd); // O la forma que tengas de recibirlo
+                 // Llamar a la función
+                suspender_proceso(pid); 
+                // 3. Avisar al KS que terminó
+                int ok = 1;
+                send(kernel_fd, &ok, sizeof(int), 0);
+                break;
+
             case ks_EXIT: 
                 manejar_finalizar_proceso(kernel_fd); 
                 break;
@@ -140,6 +145,28 @@ void* atender_cliente_inicial(void* arg) {
     int respuesta_ok = 1;
 
     switch (handshake_op) {
+
+        case HANDSHAKE_SWAP:
+            log_info(logger, "## SWAP detectado. Recibiendo configuración...");
+            
+            // Recibir datos del SWAP
+            recv(cliente_fd, &block_size_swap, sizeof(int), MSG_WAITALL);
+            recv(cliente_fd, &total_size_swap, sizeof(int), MSG_WAITALL);
+            
+            // Guardar socket global
+            socket_swap = cliente_fd;
+            
+            // Crear el Bitmap
+            int cantidad_bloques = total_size_swap / block_size_swap;
+            // El calloc inicializa en 0 (todo libre)
+            char* bitarray_data = calloc(1, ceil((double)cantidad_bloques / 8));
+            bitmap_swap = bitarray_create_with_mode(bitarray_data, cantidad_bloques, LSB_FIRST);
+            
+            log_info(logger, "## Bitarray creado. Tamaño: %d bloques.", cantidad_bloques);
+            
+            // IMPORTANTE: El SWAP no se atiende aquí, su socket queda guardado 
+            // en la global 'socket_swap' para usarlo cuando sea necesario.
+            return NULL;
         
         case NUEVA_CPU: 
             log_info(logger, "## Handshake recibido: CPU detectada en socket %d. Confirmando...", cliente_fd);

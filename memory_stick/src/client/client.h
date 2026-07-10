@@ -9,7 +9,7 @@
 
 extern t_log* logger;
 extern t_config* config;
-extern t_memory_stick_globals ms_globals;
+extern t_memory_stick_global ms_globals;
 extern pthread_mutex_t mutex_memoria;
 
 void arrancar_cliente_km(void);

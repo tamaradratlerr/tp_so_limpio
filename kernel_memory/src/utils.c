@@ -478,6 +478,27 @@ void conexion_memory_stick(int socket_ms) {
     list_add(lista_memory_sticks, nuevo_ms);
     pthread_mutex_unlock(&mutex_ms);
 
+
+    //TEMA DE LA BASE
+    t_paquete* paquete_info = crear_paquete(INFO_MEMORY_STICK);
+
+    t_info_memory_stick info;
+
+    info.base = nuevo_ms->base_global;
+    info.tamanio = nuevo_ms->tamanio;
+
+    agregar_a_paquete(paquete_info, &info.base, sizeof(uint32_t));
+    agregar_a_paquete(paquete_info, &info.tamanio, sizeof(uint32_t));
+
+    enviar_paquete(paquete_info, socket_ms);
+
+    log_info(logger,
+    "MS conectado: base=%u tamaño=%u",
+    nuevo_ms->base_global,
+    nuevo_ms->tamanio);
+
+    eliminar_paquete(paquete_info);
+
     // Inicializamos o expandimos el espacio libre mapeado en KM
     pthread_mutex_lock(&mutex_lista_libres);
     if (list_is_empty(lista_huecos_libres)) {

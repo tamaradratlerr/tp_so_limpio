@@ -104,11 +104,9 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        ms_inicial->base = recibir_uint32(ms_inicial->socket);
+        ms_inicial->base = (uint32_t) recibir_int(ms_inicial->socket);
+        ms_inicial->tamanio = (uint32_t) recibir_int(ms_inicial->socket);
         
-        ms_inicial->tamanio = recibir_uint32(ms_inicial->socket);
-
-
         sem_wait(&mutex_memory_sticks);
 
         list_add(
@@ -1638,8 +1636,8 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
     t_segmento* seg = malloc(sizeof(t_segmento));
 
     seg->id_segmento = 0;
-    seg->base = 0;
-    seg->tamanio = 1024;
+    seg->base = 42;
+    seg->tamanio = 16;
 
     list_add(nuevo_contexto->tabla_segmentos, seg);
 

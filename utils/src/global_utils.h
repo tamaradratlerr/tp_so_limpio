@@ -112,8 +112,19 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     COMPACTACION_FINALIZADA,   // La Memoria le avisa al Kernel que ya terminó de mover los bytes
 
     // nueva memoria que viene de memory stick
-    NUEVA_MEMORIA_ACUM
+    NUEVA_MEMORIA_ACUM,
+    
 
+
+
+
+    //SWAP
+    HANDSHAKE_SWAP = 100,
+    LECTURA_BLOQUE,
+    ESCRITURA_BLOQUE,
+    RESPUESTA_OK,
+    RESPUESTA_ERROR,
+    RESPUESTA_DATOS
 
 } op_code;
 
@@ -190,15 +201,6 @@ typedef enum
 }estado;
 
 //SWAP
-typedef enum {
-    HANDSHAKE_SWAP = 100,
-    LECTURA_BLOQUE,
-    ESCRITURA_BLOQUE,
-    RESPUESTA_OK,
-    RESPUESTA_ERROR,
-    RESPUESTA_DATOS
-} op_code; 
-
 
 //Tipo de dato que ingresa desde el kernel memory
 typedef struct {
@@ -315,5 +317,31 @@ void enviar_int(int code_op, int socket_cliente);
 
 int recibir_int(int socket_cliente);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//--------- MS - KM - SWAP
+
+typedef struct {
+    uint32_t memory_size;   //Tamaño del memory stick en bytes
+    void* memory;           // Memoria asignada (malloc)
+    t_list* cpus_conectadas;// Lista de CPUs conectadas
+} t_memory_stick_globals;
 
 #endif /* GLOBAL_UTILS_H_ */

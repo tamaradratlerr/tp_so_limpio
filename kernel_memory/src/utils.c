@@ -105,6 +105,7 @@ void manejar_crear_proceso(int socket_cliente) {
         char* instruccion_duplicada = strdup(linea); 
         string_trim(&instruccion_duplicada); 
         list_add(instrucciones, instruccion_duplicada);
+    }
 
     fclose(archivo);
     free(path); // Ya no necesitamos la copia local del path
@@ -131,7 +132,7 @@ void manejar_crear_proceso(int socket_cliente) {
     list_destroy(paquete);
 }
 
-}
+
 
 //FINALIZACION DE PROCESO
 //a partir de este PID recibido se deberán liberar todos los segmentos asociados al Proceso 

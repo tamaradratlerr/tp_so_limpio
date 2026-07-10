@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <errno.h>
+#include <math.h>
 #include "../../utils/src/global_utils.h"
 
 
@@ -79,11 +80,8 @@ pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
 void manejar_crear_proceso(int socket_cliente) {
     t_list* paquete = recibir_paquete(socket_cliente);
 
-    // 1. Extraemos los datos crudos del paquete
-    char* texto_pid = (char*) list_get(paquete, 0);
-    char* path_original = (char*) list_get(paquete, 1);
-
-    int pid = atoi(texto_pid);
+    int pid = *(int*) list_get(paquete,0);
+    char* path_original = (char*) list_get (paquete,1);
 
     // 2. DUPLICAMOS el path inmediatamente en una variable propia del stack/heap local.
     // Esto nos independiza por completo de lo que haga el paquete del socket.
@@ -494,10 +492,17 @@ void conexion_memory_stick(int socket_ms) {
 
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    t_paquete* paquete = crear_paquete(NUEVA_MEMORY_STICK); 
-    agregar_a_paquete(paquete, &memoria_total_sistema, sizeof(uint32_t));
-    enviar_paquete(paquete, socket_kernel_scheduler);
-    eliminar_paquete(paquete);
+    t_paquete* paquete_notificacion = crear_paquete(NUEVA_MEMORY_STICK);
+
+    agregar_a_paquete(
+    paquete_notificacion,
+    &memoria_total_sistema,
+    sizeof(uint32_t)); 
+
+    enviar_paquete(paquete_notificacion , socket_kernel_scheduler);
+    eliminar_paquete (paquete_notificacion);
+
+
 }
 
 
@@ -756,6 +761,11 @@ void eliminar_segmento(int pid, int id_segmento) {
 
     free(seg_a_eliminar);
 }
+// Mueve la función comparadora fuera del ámbito de la función principal
+bool _ordenar_huecos_por_base(void* h1, void* h2) {
+    return ((t_hueco*)h1)->direccion_base < ((t_hueco*)h2)->direccion_base;
+}
+
 void liberar_espacio_en_huecos(uint32_t direccion_base, uint32_t tamanio) {
     pthread_mutex_lock(&mutex_lista_libres);
 
@@ -764,18 +774,18 @@ void liberar_espacio_en_huecos(uint32_t direccion_base, uint32_t tamanio) {
     nuevo_hueco->tamanio = tamanio;
     list_add(lista_huecos_libres, nuevo_hueco);
 
-    bool _ordenar_huecos_por_base(void* h1, void* h2) {
-        return ((t_hueco*)h1)->direccion_base < ((t_hueco*)h2)->direccion_base;
-    }
+    // Ahora la función es visible aquí
     list_sort(lista_huecos_libres, _ordenar_huecos_por_base);
 
+    //El bucle de consolidación parece correcto
     for (int i = 0; i < list_size(lista_huecos_libres) - 1; i++) {
         t_hueco* actual = list_get(lista_huecos_libres, i);
         t_hueco* siguiente = list_get(lista_huecos_libres, i + 1);
 
         if (actual->direccion_base + actual->tamanio == siguiente->direccion_base) {
             actual->tamanio += siguiente->tamanio;
-            list_remove(lista_huecos_libres, i + 1);
+            // Verifica si tu list_remove libera memoria o solo el nodo
+            list_remove(lista_huecos_libres, i + 1); 
             free(siguiente);
             i--; 
         }
@@ -966,8 +976,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
     for (int i = 0; i < seg->cantidad_bloques; i++) {
         int numero_bloque = seg->bloque_swap + i;
 
-        t_paquete* paquete = crear_paquete();
-        paquete->codigo_operacion = LECTURA_BLOQUE;
+        t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
         agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
         enviar_paquete(paquete, socket_swap);
         eliminar_paquete(paquete);
@@ -1018,8 +1027,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 
 void enviar_a_swap(int nro_bloque, void* datos) {
     //  Crear y enviar el paquete
-    t_paquete* paquete = crear_paquete();
-    paquete->codigo_operacion = ESCRITURA_BLOQUE;
+    t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
     
     agregar_a_paquete(paquete, &nro_bloque, sizeof(int));
     agregar_a_paquete(paquete, datos, block_size_swap);

@@ -79,14 +79,6 @@ void atender_cpu(int cpu_fd) {
             // Y luego procesa ese paquete
                 list_destroy_and_destroy_elements(paquete, free);
                 break;
-            case LEER_MEMORIA:
-                manejar_lectura_memoria(cpu_fd); 
-                break;
-
-            case ESCRIBIR_MEMORIA:
-                manejar_escritura_memoria(cpu_fd);
-                break;
-
             case km_GUARDAR_CONTEXTO:
                 manejar_guardar_contexto(cpu_fd);
                 break;
@@ -110,6 +102,7 @@ void atender_kernel(int kernel_fd) {
         int cod_op = recibir_op_code(kernel_fd);
 
         switch (cod_op) {
+            case ENVIAR_PROCESO:
             case ks_INIT_PROC:
                 manejar_crear_proceso(kernel_fd);
                 break;
@@ -154,7 +147,7 @@ void* atender_cliente_inicial(void* arg) {
     free(arg);
 
     int handshake_op = recibir_op_code(cliente_fd);
-    int respuesta_ok = 1;
+    int respuesta_ok = OK;
 
     switch (handshake_op) {
         case HANDSHAKE_SWAP: {

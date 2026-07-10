@@ -1,10 +1,9 @@
 #include "client.h"
-
+t_log* logger;
 int main(int argc, char* argv[]) //./bin/swap [Archivo Config]
 //significa que el programa tiene que recibir el path del config por argumento argv[1]
 {
 	int conexion;
-	t_log* logger;
 	t_config* config;
 
 // confirmacion
@@ -46,7 +45,7 @@ if(tamano_swap % tamano_bloque != 0) {
 	inicializar_swap(path_swap, tamano_swap, tamano_bloque);
 
 	// 5. CONEXIÓN
-	conexion = crear_conexion(ip_km, puerto_km);
+	conexion = crear_conexion(ip_km, puerto_km , logger, SWAP);
 
 	if(conexion < 0){
 		log_error(logger, "Error en la conexión con Kernel Memory");
@@ -59,8 +58,7 @@ if(tamano_swap % tamano_bloque != 0) {
 	
 	
 	// CUMPLIR CONSIGNAS: Informar tamaño de bloque y tamaño total
-	t_paquete* p = crear_paquete();
-	p->codigo_operacion = HANDSHAKE_SWAP; // Usamos el enum de utils.h
+	t_paquete* p = crear_paquete(HANDSHAKE_SWAP);
 
 	// Agregamos los datos que pide el enunciado usando ints normales
 	agregar_a_paquete(p, &tamano_bloque, sizeof(int));
@@ -84,15 +82,6 @@ t_log* iniciar_logger(void)
 	return log_create("swap.log", "SWAP", true, LOG_LEVEL_INFO);
 }
 
-t_config* iniciar_config(char* path_config)
-{
-	t_config* nuevo_config = config_create(path_config);
-	if (nuevo_config == NULL) {
-		perror("No se pudo leer el config");
-		exit(1);
-	}
-	return nuevo_config;
-}
 
 void terminar_programa(int conexion, t_log* logger, t_config* config)
 {

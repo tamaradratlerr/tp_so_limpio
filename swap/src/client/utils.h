@@ -13,32 +13,11 @@
 #include <sys/stat.h>
 #include <pthread.h> //para usar mutex
 #include <commons/collections/list.h> //para listas
+#include "../../utils/src/global_utils.h" // Aquí ya están los op_code y funciones de red
 
 // 1. Identificadores de las operaciones (Protocolo)
 
-typedef enum {
-  HANDSHAKE_SWAP = 100,
-LECTURA_BLOQUE,
-ESCRITURA_BLOQUE,
-RESPUESTA_OK,
-RESPUESTA_ERROR,
-RESPUESTA_DATOS
-} op_code;
 
-//variables globales
-
-
-typedef struct
-{
-	int size;
-	void* stream;
-} t_buffer;
-
-typedef struct
-{
-	op_code codigo_operacion;
-	t_buffer* buffer;
-} t_paquete;
 
 
 // especificos swap
@@ -67,20 +46,6 @@ typedef struct {
 
 } t_paquete_bloque;
 
-
-int crear_conexion(char* ip, char* puerto);
-void enviar_mensaje(char* mensaje, int socket_cliente);
-
-t_paquete* crear_paquete(void);
-
-void agregar_a_paquete(t_paquete* paquete, void* valor, int tamanio);
-void enviar_paquete(t_paquete* paquete, int socket_cliente);
-void liberar_conexion(int socket_cliente);
-void eliminar_paquete(t_paquete* paquete);
-
-int recibir_operacion(int socket_cliente);
-void* recibir_buffer(int* size, int socket_cliente);
-t_list* recibir_paquete(int socket_cliente);
 
 
 //"SWAP contará con un único archivo cuyo path y tamaño serán definidos por SWAP_FILE_PATH y SWAP_FILE_SIZE"

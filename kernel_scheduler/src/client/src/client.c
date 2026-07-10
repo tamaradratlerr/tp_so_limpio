@@ -99,7 +99,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 			return 1; 
 		}
 		
-		enviar_op_code(OK, info_km.conexion_km);
+		enviar_op_code(NUEVO_KERNEL, info_km.conexion_km);
 	}	
 
 	

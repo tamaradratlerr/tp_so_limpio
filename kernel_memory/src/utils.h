@@ -7,6 +7,7 @@
 #include <commons/config.h> // Para que reconozca t_config
 #include <pthread.h>  
 #include <stdint.h>
+#include <commons/bitarray.h>
 #include "../../utils/src/global_utils.h" // Aquí ya están los op_code y funciones de red
 
 
@@ -39,6 +40,10 @@ extern t_list* lista_contextos;
 extern t_list* lista_memory_sticks;  
 extern t_list* lista_procesos;
 extern uint32_t memoria_total_sistema;
+extern int socket_swap;
+extern int block_size_swap;
+extern t_bitarray* bitmap_swap;
+extern int total_bloques_swap;
 
 extern pthread_mutex_t mutex_lista_libres;
 extern pthread_mutex_t mutex_contextos;
@@ -65,8 +70,6 @@ int buscar_indice_contexto(int pid);
 void manejar_crear_proceso(int socket_cliente);
 void manejar_finalizar_proceso(int socket_cliente);
 void manejar_pedido_instruccion_cpu(int socket_cliente);
-void manejar_lectura_memoria(int socket_ks);
-void manejar_escritura_memoria(int socket_ks);
 void manejar_guardar_contexto(int socket_cliente);
 void enviar_contexto_cpu(int socket_cpu, int pid);
 void recibir_contexto_cpu(int socket_cpu);
@@ -87,5 +90,7 @@ void eliminar_segmento(int pid, int id_segmento); // La que armamos recién
 void suspender_proceso(int pid);
 int desuspender_proceso(int pid);
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino);
+void liberar_espacio_en_huecos(uint32_t direccion_base , uint32_t tamanio);
+void enviar_a_swap (int nro_bloque , void* datos);
 
 #endif /* UTILS_H_ */

@@ -1,5 +1,5 @@
 #define _XOPEN_SOURCE 700 //para asegurar que se reconozca pread y pwrite
-
+#include "../../utils/src/global_utils.h" // Aquí ya están los op_code y funciones de red
 #include "utils.h"
 
 static char* archivo_swap_path = NULL;
@@ -8,33 +8,10 @@ static int tamanio_bloque_swap = 0;
 static pthread_mutex_t mutex_swap = PTHREAD_MUTEX_INITIALIZER;
 
 
+
 //------------------------------
 //FUNCIONES DE RECEPCION
 
-int recibir_operacion(int socket_cliente)
-{
-    int cod_op;
-
-    if(recv(socket_cliente,
-            &cod_op,
-            sizeof(int),
-            MSG_WAITALL) > 0)
-    {
-        return cod_op;
-    }
-
-    return -1;
-}
-
-void* recibir_buffer(int* size, int socket_cliente) { //sirve para leer paquetes
-    void * buffer;
-    if(recv(socket_cliente, size, sizeof(int), MSG_WAITALL) > 0) {
-        buffer = malloc(*size);
-        recv(socket_cliente, buffer, *size, MSG_WAITALL);
-        return buffer;
-    }
-    return NULL;
-}
 
 //swap 
 
@@ -63,31 +40,6 @@ void inicializar_swap(char* path, int tamanio_swap, int tamanio_bloque)
 
 //Sirve para recibir un paquete armado con agregar_a_paquete
 
-t_list* recibir_paquete(int socket_cliente)
-{
-    int size;
-    int desplazamiento = 0;
-    void* buffer = recibir_buffer(&size, socket_cliente);
-    t_list* valores = list_create();
-
-    while(desplazamiento < size)
-    {
-        int tamanio;
-
-        memcpy(&tamanio, buffer + desplazamiento, sizeof(int));
-        desplazamiento += sizeof(int);
-
-        void* valor = malloc(tamanio);
-
-        memcpy(valor, buffer + desplazamiento, tamanio);
-        desplazamiento += tamanio;
-
-        list_add(valores, valor);
-    }
-
-    free(buffer);
-    return valores;
-}
 
 //armo una confirmacion de escritura, dsp de escribir swap avisa que todo salio bien.
 void enviar_respuesta_simple(int socket_km, op_code respuesta)
@@ -140,8 +92,7 @@ void manejar_lectura_bloque(int socket_km, t_log* logger)
         return;
     }
 
-    t_paquete* respuesta = crear_paquete();
-    respuesta->codigo_operacion = RESPUESTA_DATOS;
+    t_paquete* respuesta = crear_paquete(RESPUESTA_DATOS);
 
     agregar_a_paquete(respuesta, datos, tamanio_bloque_swap);
     enviar_paquete(respuesta, socket_km);
@@ -209,7 +160,7 @@ void atender_kernel(int socket_km, t_log* logger)
     while(1)
     {
         //op_code cod_op = recibir_operacion(socket_km);
-        int cod_op = recibir_operacion(socket_km);
+        int cod_op = recibir_op_code(socket_km);
 
         switch(cod_op)
         {

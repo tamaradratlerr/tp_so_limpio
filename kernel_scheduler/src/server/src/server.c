@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) /*OK*/
     }
     
 
-    int server_fd = iniciar_servidor(info_km.puerto_km, logger);  /*Ese puerto KM me parece que esta mal*/
+    int server_fd = iniciar_servidor(config_get_string_value(config, "PUERTO_ESCUCHA"),logger); 
 
     while (scheduler_control_loop == 1) {
         

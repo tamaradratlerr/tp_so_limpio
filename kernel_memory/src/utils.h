@@ -94,5 +94,5 @@ int desuspender_proceso(int pid);
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino);
 void liberar_espacio_en_huecos(uint32_t direccion_base , uint32_t tamanio);
 void enviar_a_swap (int nro_bloque , void* datos);
-
+void liberar_bloques_swap(int nro_bloque, int cantidad);
 #endif /* UTILS_H_ */

@@ -199,6 +199,18 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     pthread_mutex_unlock(&mutex_procesos);
 
+
+//devolver la memoria a la lista de huecos y liberar bloques de SWAP.
+    for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+
+    if (seg->en_swap) {
+        liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
+    } else {
+        liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+    }
+}
+
     //libero todas las instrucciones del proceso pq antes use strdup(instruccion) y usa mem. dinam
     list_destroy_and_destroy_elements(proceso->instrucciones, free);
 
@@ -501,8 +513,6 @@ void conexion_memory_stick(int socket_ms) {
 
     enviar_paquete(paquete_notificacion , socket_kernel_scheduler);
     eliminar_paquete (paquete_notificacion);
-
-
 }
 
 
@@ -668,6 +678,23 @@ void solicitar_y_ejecutar_compactacion(int socket_ks) {
 
 
 void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmento, uint32_t tamanio_segmento) {
+
+    int max_segment_size = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
+
+    if (tamanio_segmento > (uint32_t) max_segment_size) {
+    log_error(
+        logger,
+        "## PID: %d - Segmento %d excede tamaño máximo permitido: %u > %d",
+        pid,
+        id_segmento,
+        tamanio_segmento,
+        max_segment_size
+    );
+
+    int error = -1;
+    send(socket_cliente, &error, sizeof(int), 0);
+    return;
+    }
     
     pthread_mutex_lock(&mutex_lista_libres);
     t_hueco* bache_elegido = seleccionar_hueco_segun_algoritmo(tamanio_segmento);
@@ -1013,7 +1040,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
     for (int i = 0; i < seg->cantidad_bloques; i++) {
         int numero_bloque = seg->bloque_swap + i;
 
-        t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
+        t_paquete * paquete = crear_paquete(ESCRITURA_BLOQUE);
         agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
         enviar_paquete(paquete, socket_swap);
         eliminar_paquete(paquete);

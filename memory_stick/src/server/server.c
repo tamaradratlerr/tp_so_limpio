@@ -171,35 +171,82 @@ void* atender_cliente(void* arg) {
         continue;
     }
 
-        t_list* parametros = recibir_paquete(socket_cliente);
+        if(cop == LEER_MEMORIA){
 
-        if (cop == LEER_MEMORIA) {
-            uint32_t dir_global = *(uint32_t*)list_get(parametros,0);
-            uint32_t tamanio = *(uint32_t*)list_get(parametros,1);
+    uint32_t dir_fisica;
+    uint32_t tamanio;
+
+    recv(socket_cliente,
+         &dir_fisica,
+         sizeof(uint32_t),
+         MSG_WAITALL);
+
+    recv(socket_cliente,
+         &tamanio,
+         sizeof(uint32_t),
+         MSG_WAITALL);
 
 
-            uint32_t dir_local = dir_global - ms_globals.base;
+    uint32_t dir_local = dir_fisica - ms_globals.base;
 
 
-            void* bytes_leidos = leer_de_bloque_memoria(dir_local,tamanio);
+    void* bytes = leer_de_bloque_memoria(dir_local, tamanio);
 
-            send(socket_cliente, bytes_leidos, tamanio, 0);
 
-            free(bytes_leidos);
-        } 
-        else if (cop == ESCRIBIR_MEMORIA) {
-            uint32_t dir_fisica  = *(uint32_t*)list_get(parametros, 0);
-            uint32_t tamanio     = *(uint32_t*)list_get(parametros, 1);
-            void* datos_escribir = list_get(parametros, 2);
+    send(socket_cliente,
+         bytes,
+         tamanio,
+         0);
 
-            uint32_t dir_local = dir_fisica - ms_globals.base;
 
-            escribir_en_bloque_memoria(dir_local, datos_escribir, tamanio);
-            
-            enviar_op_code(OK_ESCRITURA, socket_cliente);
-        }
+    free(bytes);
+}
+else if (cop == ESCRIBIR_MEMORIA) {
 
-        list_destroy_and_destroy_elements(parametros, free);
+    uint32_t dir_fisica;
+    uint32_t tamanio;
+
+
+    recv(socket_cliente,
+         &dir_fisica,
+         sizeof(uint32_t),
+         MSG_WAITALL);
+
+
+    recv(socket_cliente,
+         &tamanio,
+         sizeof(uint32_t),
+         MSG_WAITALL);
+
+
+    void* datos_escribir = malloc(tamanio);
+
+
+    recv(socket_cliente,
+         datos_escribir,
+         tamanio,
+         MSG_WAITALL);
+
+
+
+    uint32_t dir_local = dir_fisica - ms_globals.base;
+
+
+    escribir_en_bloque_memoria(
+        dir_local,
+        datos_escribir,
+        tamanio
+    );
+
+
+    free(datos_escribir);
+
+
+    enviar_op_code(
+        OK_ESCRITURA,
+        socket_cliente
+    );
+}
     }
 
     close(socket_cliente);

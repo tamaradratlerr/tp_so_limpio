@@ -823,8 +823,8 @@ void ejecutar_mov_in (t_instruccion* instr){
 
 void ejecutar_mov_out(t_instruccion* instr){
 
-    char* reg_dir_nombre = instr->params[0];
-    char* reg_valor_nombre = instr->params[1];
+    char* reg_valor_nombre = instr->params[0];
+    char* reg_dir_nombre = instr->params[1];
 
     int tamanio = 0;
     void* buffer;
@@ -1692,7 +1692,7 @@ char* instruccion[] = {
 
     "SET AX 123",
     "SET SI 0",
-    "MOV_OUT AX",
+    "MOV_OUT AX SI",
     "MOV_IN BX SI",
     "EXIT_PROC"
 

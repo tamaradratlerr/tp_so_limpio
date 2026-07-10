@@ -900,15 +900,16 @@ void recibir_contexto_cpu(int socket_cpu) {
         return;
     }
 
+    // PC
     contexto->pc = *(uint32_t*)list_get(paquete, 1);
 
-    // registros 8 bits
+    // Registros 8 bits
     contexto->ax = *(uint8_t*)list_get(paquete, 2);
     contexto->bx = *(uint8_t*)list_get(paquete, 3);
     contexto->cx = *(uint8_t*)list_get(paquete, 4);
     contexto->dx = *(uint8_t*)list_get(paquete, 5);
 
-    // registros 32 bits
+    // Registros 32 bits
     contexto->eax = *(uint32_t*)list_get(paquete, 6);
     contexto->ebx = *(uint32_t*)list_get(paquete, 7);
     contexto->ecx = *(uint32_t*)list_get(paquete, 8);
@@ -916,12 +917,51 @@ void recibir_contexto_cpu(int socket_cpu) {
     contexto->si  = *(uint32_t*)list_get(paquete, 10);
     contexto->di  = *(uint32_t*)list_get(paquete, 11);
 
-    log_info(logger, "Contexto actualizado PID %d", pid);
+
+    // Cantidad de segmentos
+    int cantidad_segmentos = *(int*)list_get(paquete, 12);
+
+
+    // Limpiamos la tabla vieja si ya existía
+    if(contexto->tabla_segmentos != NULL) {
+        list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
+    }
+
+    contexto->tabla_segmentos = list_create();
+
+
+    // Segmentos empiezan desde posición 13
+    int posicion = 13;
+
+    for(int i = 0; i < cantidad_segmentos; i++) {
+
+        t_segmento* segmento = malloc(sizeof(t_segmento));
+
+        segmento->id_segmento = *(int*)list_get(paquete, posicion);
+        posicion++;
+
+        segmento->base = *(uint32_t*)list_get(paquete, posicion);
+        posicion++;
+
+        segmento->tamanio = *(uint32_t*)list_get(paquete, posicion);
+        posicion++;
+
+        list_add(contexto->tabla_segmentos, segmento);
+    }
+
+
+    log_info(logger, 
+             "Contexto actualizado PID %d con %d segmentos",
+             pid,
+             cantidad_segmentos);
+
 
     enviar_op_code(OK, socket_cpu);
 
     list_destroy_and_destroy_elements(paquete, free);
 }
+
+
 
 // CONEXION CON SWAP
 // Buscar bloques consecutivos (Algoritmo First-Fit)

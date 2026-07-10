@@ -615,9 +615,9 @@ void enviar_contexto_a_kernel_memory() {
 
     int err;
     
-    enviar_op_code (CONTEXTO, sockets->conexion_kernel_memory);
+    enviar_op_code (cpu_GUARDAR_CONTEXTO, sockets->conexion_kernel_memory);
 
-    t_paquete* paquete = crear_paquete(CONTEXTO);
+    t_paquete* paquete = crear_paquete(cpu_GUARDAR_CONTEXTO);
 
     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));

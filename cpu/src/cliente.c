@@ -868,10 +868,7 @@ void ejecutar_mov_out(t_instruccion* instr){
   
         buffer = valor;
 
-        if(!mock)
-            escribir_en_memoria(dir_fisica,buffer,tamanio);
-        else
-            escribir_en_memoria_mock(dir_fisica,buffer,tamanio);
+        escribir_en_memoria(dir_fisica,buffer,tamanio);
 
     }
 }
@@ -1483,6 +1480,12 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
 {
+    log_info(logger,
+        "ENTRO escribir_en_memoria: direccion=%u tamanio=%d",
+        dir_fisica,
+        tamanio
+    );
+
     int bytes_restantes = tamanio;
     uint32_t direccion_actual = dir_fisica;
     int offset_buffer = 0;
@@ -1686,10 +1689,12 @@ bool tiene_mismo_id(void* elemento) {
 /*---- Fucnones MOCKS ----*/
 
 char* instruccion[] = {
-    
+
+    "SET AX 123",
     "SET SI 0",
-    "MOV_IN AX",
-    "EXIT_PROC",
+    "MOV_OUT AX",
+    "MOV_IN BX SI",
+    "EXIT_PROC"
 
 };
 

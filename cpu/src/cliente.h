@@ -44,6 +44,10 @@ int control_loop                        = 0;
 int exit_control                        = 0;
 
 
+
+sem_t mutex_memory_sticks;
+
+
 /*----- EXTERN -----*/
 extern t_config_cpu* config_cpu;
 extern t_config* config; 
@@ -58,6 +62,7 @@ extern char* identificador;
 extern int control_loop00;
 extern int control_loop;
 extern int exit_control;
+extern sem_t mutex_memory_sticks;
 
 
 
@@ -115,7 +120,7 @@ void eliminar_segmento(int id);
 
 //--- MMU ---//
 t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica);
-uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado);
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado);
 uint32_t obtener_direccion_del_registro(char* reg);
 uint32_t obtener_tamanio_del_registro(char* reg);
 void* leer_de_memoria(uint32_t dir_fisica, int tamanio);

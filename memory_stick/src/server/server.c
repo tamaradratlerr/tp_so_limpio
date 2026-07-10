@@ -1,67 +1,91 @@
 #include "utils.h"
-extern t_log* logger;
-extern t_memory_stick_globals ms_globals;
-extern int delay_memoria;
-extern pthread_mutex_t mutex_memoria;
 
-
+bool mock = true;
 t_log* logger;
 t_config* config;
 t_memory_stick_globals ms_globals;
-int delay_memoria; 
+int delay_memoria;
 pthread_mutex_t mutex_memoria;
 
 extern void arrancar_cliente_km(void);
 
+
 int main(int argc, char** argv)
 {
     validar_argumentos(argc, argv);
-    
+
     config = config_create(argv[1]);
+    
+    if(config == NULL){
+        printf("No se pudo abrir el archivo de configuración: %s\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
+
     char* file          = config_get_string_value(config, "SERVER_LOG_NAME");
     char* process_name  = config_get_string_value(config, "PROCCES_NAME"); 
     char* server_port   = config_get_string_value(config, "MEMORY_STICK_PORT");
-    delay_memoria       = config_get_int_value(config, "MEMORY_DELAY");
+
+    delay_memoria = config_get_int_value(config, "MEMORY_DELAY");
+
     uint32_t tamanio_ms = (uint32_t)atoi(argv[2]);
 
+
     logger = log_create(file, process_name, 1, LOG_LEVEL_DEBUG);
-    if (logger == NULL)
-    {
-        printf("ERROR: No se pudo crear el logger \n");
+
+    if(logger == NULL){
+        printf("ERROR: No se pudo crear logger\n");
         abort();
     }
 
+
     init_memory_stick(tamanio_ms);
+
     pthread_mutex_init(&mutex_memoria, NULL);
 
+
+    // Conexión con Kernel Memory
     arrancar_cliente_km();
 
-    int server_fd = iniciar_servidor(server_port);
-    log_info(logger, "Servidor MEMORY_STICK listo para recibir clientes \n");
-    
-    while (1) {
-        int socket_cliente = esperar_cliente(server_fd);
+
+    // Servidor para CPUs
+    int server_fd = iniciar_servidor(server_port, logger);
+
+    log_info(logger, "Servidor MEMORY_STICK listo para recibir clientes");
+
+
+    while(1){
+
+        int socket_cliente = esperar_cliente(server_fd, logger);
+
 
         pthread_t thread;
+
         int* socket_ptr = malloc(sizeof(int));
         *socket_ptr = socket_cliente;
 
-        if (pthread_create(&thread, NULL, atender_cliente, socket_ptr) != 0)
-        {
+
+        if(pthread_create(&thread, NULL, atender_cliente, socket_ptr) != 0){
+
             perror("pthread_create");
+
             close(socket_cliente);
             free(socket_ptr);
+
             continue;
         }
+
 
         pthread_detach(thread);
     }
 
+
     config_destroy(config);
     pthread_mutex_destroy(&mutex_memoria);
     free_all_globals();
+
     return EXIT_SUCCESS;
 }
+
 
 void validar_argumentos(int argc, char** argv) {
     if (argc != 3) {
@@ -107,13 +131,20 @@ void* atender_cliente(void* arg) {
         }
 
         if (cop == NUEVA_CPU) {
-            log_info(logger, "## CPU %d Conectada", socket_cliente);
-            
+            enviar_op_code(OK, socket_cliente);
+
+        enviar_uint32(base_memory_stick, socket_cliente);
+        enviar_uint32(tamanio_memory_stick, socket_cliente);
+
+        log_info(logger,
+                "CPU conectada. Base=%u Tam=%u",
+                base_memory_stick,
+                tamanio_memory_stick);
+                
             pthread_mutex_lock(&mutex_memoria);
             list_add(ms_globals.cpus_conectadas, (void*)(intptr_t)socket_cliente);
             pthread_mutex_unlock(&mutex_memoria);
 
-            enviar_op_code(OK, socket_cliente);
             continue;
         }
 

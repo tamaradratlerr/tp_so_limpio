@@ -49,8 +49,76 @@ int main(int argc, char *argv[])
             log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
             return EXIT_FAILURE;
         }
-    }
-       
+
+}
+            sockets->memory_sticks = list_create();
+        sem_init(&mutex_memory_sticks, 0, 1);
+
+        t_mem_stick* ms_inicial = malloc(sizeof(t_mem_stick));
+
+
+        ms_inicial->ip = 
+            config_get_string_value(config, "IP_MEMORY_STICK");
+
+
+        ms_inicial->puerto =
+            config_get_string_value(config, "PUERTO_MEMORY_STICK");
+        
+        log_info(logger,
+            "Intentando conectar a Memory Stick %s:%s",
+            ms_inicial->ip,
+            ms_inicial->puerto
+        );
+
+        ms_inicial->socket =
+            crear_conexion(
+                ms_inicial->ip,
+                ms_inicial->puerto,
+                logger,
+                MEMORY_STICK
+            );
+
+
+        if(ms_inicial->socket < 0)
+        {
+            log_error(logger,
+                "No se pudo conectar al Memory Stick inicial");
+
+            return EXIT_FAILURE;
+        }
+
+        enviar_op_code(
+            NUEVA_CPU,
+            ms_inicial->socket
+        );
+
+
+        op_code respuesta = recibir_op_code(ms_inicial->socket);
+
+
+        if(respuesta != OK)
+        {
+            log_error(logger,
+                "Handshake con Memory Stick falló");
+
+            return EXIT_FAILURE;
+        }
+
+        ms_inicial->base = recibir_uint32(ms_inicial->socket);
+        
+        ms_inicial->tamanio = recibir_uint32(ms_inicial->socket);
+
+
+        sem_wait(&mutex_memory_sticks);
+
+        list_add(
+            sockets->memory_sticks,
+            ms_inicial
+        );
+
+        sem_post(&mutex_memory_sticks);
+    
+
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
     
     enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_scheduler);
@@ -230,6 +298,7 @@ void terminar_programa(t_log* logger, t_config* config, t_cpu_sockets* sockets)
                 free(ms->puerto);
             free(ms);
         }
+        sem_destroy(&mutex_memory_sticks);
 
         list_destroy(sockets->memory_sticks);
     }
@@ -698,7 +767,6 @@ void ejecutar_set (t_instruccion* instr){/*OK*/
 void ejecutar_mov_in (t_instruccion* instr){
 
     char* reg_dest_nombre = instr->params[0];
-    int tamanio = 0;
     void* buffer;
 
     if (es_registro_32bits(reg_dest_nombre)){
@@ -706,12 +774,19 @@ void ejecutar_mov_in (t_instruccion* instr){
         uint32_t dir_fisica;
 
         uint32_t* dest = (uint32_t*)obtener_registro(reg_dest_nombre);
-        dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
-    
-        // Comunicación con Memory Stick
-        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));}
-        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint8_t));}
+        dir_fisica = pedir_direccion_mmu(contexto_actual->si, sizeof(uint32_t));
 
+        if(dir_fisica == ERROR_SEGMENTATION_FAULT)
+        {
+            return;
+        }
+        // Comunicación con Memory Stick
+        buffer = leer_de_memoria(dir_fisica, sizeof(uint32_t));
+
+        if(buffer == NULL)
+        {
+            return;
+        }
         *dest = *(uint32_t*)buffer;
         free(buffer);
 
@@ -723,13 +798,21 @@ void ejecutar_mov_in (t_instruccion* instr){
         uint32_t dir_fisica;
 
         uint8_t* dest = (uint8_t*)obtener_registro(reg_dest_nombre);
-        dir_fisica = pedir_direccion_mmu(contexto_actual->si, tamanio);
+        dir_fisica = pedir_direccion_mmu(contexto_actual->si, sizeof(uint8_t));
         
+        if(dir_fisica == ERROR_SEGMENTATION_FAULT)
+        {
+            return;
+        }
     
         // Comunicación con Memory Stick
-        if(!mock){buffer = leer_de_memoria(dir_fisica, sizeof(uint8_t));}
-        else {buffer = leer_de_memoria_mock(dir_fisica, sizeof(uint8_t));}
-        
+        buffer = leer_de_memoria(dir_fisica, sizeof(uint8_t));
+
+        if(buffer == NULL)
+        {
+            return;
+        }
+
         *dest = *(uint8_t*)buffer;
         free(buffer);
 
@@ -764,10 +847,9 @@ void ejecutar_mov_out(t_instruccion* instr){
         buffer = valor;
 
 
-        if(!mock)
+       
             escribir_en_memoria(dir_fisica,buffer,tamanio);
-        else
-            escribir_en_memoria_mock(dir_fisica,buffer,tamanio);
+        
 
 
         log_info(logger,
@@ -1190,9 +1272,22 @@ void eliminar_segmento(int id) {
 /* ------------------ MMU ------------------*/
 
 t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica) {
+    
+    log_info(logger, "Buscando MS para direccion %u", direccion_fisica);
+    log_info(logger, "Cantidad de Memory Sticks: %d",
+         list_size(sockets->memory_sticks));
+
     for(int i = 0; i < list_size(sockets->memory_sticks); i++)
     {
         t_mem_stick* ms = list_get(sockets->memory_sticks, i);
+        
+        log_info(logger,
+             "MS %d -> base=%u tam=%u rango=[%u,%u)",
+             i,
+             ms->base,
+             ms->tamanio,
+             ms->base,
+             ms->base + ms->tamanio);
 
         if(direccion_fisica >= ms->base &&
            direccion_fisica < (ms->base + ms->tamanio))
@@ -1204,35 +1299,57 @@ t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica) {
     return NULL;
 }
 
-uint32_t pedir_direccion_mmu(uint32_t dir_logica, int tamanio_solicitado)
+uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
 {
-    uint32_t id_segmento = dir_logica / config_cpu -> tam_max_segmento;
-    uint32_t desplazamiento = dir_logica % config_cpu -> tam_max_segmento;
+    uint32_t id_segmento = dir_logica / config_cpu->tam_max_segmento;
+    uint32_t desplazamiento = dir_logica % config_cpu->tam_max_segmento;
 
     int id_buscado = id_segmento;
 
-    t_segmento* segmento =
-        list_find(contexto_actual->tabla_segmentos, tiene_mismo_id);
+    log_info(logger, "Cantidad de segmentos: %d",
+         list_size(contexto_actual->tabla_segmentos));
 
-    if(segmento == NULL){
-        log_error(logger, "Segmento inexistente");
+    for(int i = 0; i < list_size(contexto_actual->tabla_segmentos); i++)
+    {
+        t_segmento* s = list_get(contexto_actual->tabla_segmentos, i);
+
+        log_info(logger,
+                "Segmento %d -> id=%d base=%u tam=%u",
+                i,
+                s->id_segmento,
+                s->base,
+                s->tamanio);
+    }
+
+    t_segmento* segmento = list_find(
+        contexto_actual->tabla_segmentos,
+        tiene_mismo_id
+    );
+
+    if(segmento == NULL)
+    {
+        log_error(logger,
+                  "SEG_FAULT: Segmento %u inexistente",
+                  id_segmento);
+
         return ERROR_SEGMENTATION_FAULT;
     }
 
-    if(desplazamiento + tamanio_solicitado > segmento->tamanio){
-
+    if(desplazamiento + tamanio_solicitado > segmento->tamanio)
+    {
         log_error(logger,
                   "SEG_FAULT: Acceso fuera de límites. PID: %u",
-                  proceso_en_ejecucion->pid);
+                  contexto_actual->pid);
 
         enviar_op_code(ERROR_SEGMENTATION_FAULT,
-                       sockets->conexion_kernel_scheduler);
+                       sockets->conexion_kernel_scheduler);   // o el socket que corresponda
 
         return ERROR_SEGMENTATION_FAULT;
     }
 
     return segmento->base + desplazamiento;
 }
+
 
 uint32_t obtener_direccion_del_registro(char* reg) {
     uint32_t* ptr = (uint32_t*)obtener_registro(reg);
@@ -1391,11 +1508,13 @@ void recibir_memory_stick(int socket_ks)
 
     int offset=0;
 
-    ms->ip = strdup(buffer+offset);
+    char* stream = buffer;
+
+    ms->ip = strdup(stream + offset);
     offset += strlen(ms->ip)+1;
 
 
-    ms->puerto = strdup(buffer+offset);
+    ms->puerto = strdup(stream + offset);
     offset += strlen(ms->puerto)+1;
 
 
@@ -1404,7 +1523,7 @@ void recibir_memory_stick(int socket_ks)
 
 
     memcpy(&ms->tamanio,buffer+offset,sizeof(uint32_t));
-
+    offset += sizeof(uint32_t);
 
     ms->socket = crear_conexion_reintentando(
         ms->ip,
@@ -1416,12 +1535,18 @@ void recibir_memory_stick(int socket_ks)
 
     if(ms->socket <0)
     {
-        log_error(logger,"No conecta Memory Stick");
+       log_error(logger,"No conecta Memory Stick");
+
+        free(ms->ip);
+        free(ms->puerto);
+        free(ms);
+        free(buffer);
+
         return;
     }
 
 
-    enviar_op_code(NUEVA_MEMORY_STICK,ms->socket);
+    enviar_op_code(NUEVA_CPU,ms->socket);
 
     if(recibir_op_code(ms->socket)!=OK)
     {
@@ -1430,12 +1555,15 @@ void recibir_memory_stick(int socket_ks)
     }
 
 
+   sem_wait(&mutex_memory_sticks);
+
     list_add_sorted(
         sockets->memory_sticks,
         ms,
         comparar_base_memory_stick
     );
 
+    sem_post(&mutex_memory_sticks);
     free(buffer);
 }
 
@@ -1481,14 +1609,8 @@ bool tiene_mismo_id(void* elemento) {
 
 char* instruccion[] = {
     
-    "NOOP",
-    "SET AX 10",
-    "SET BX 10",
-    "SUM AX BX",
-    "NOOP",
-    "SUB AX BX",
-    "NOOP",
-    "STDOUT BX AX",
+    "SET SI 0",
+    "MOV_IN AX",
     "EXIT_PROC",
 
 };
@@ -1515,9 +1637,9 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
 
     t_segmento* seg = malloc(sizeof(t_segmento));
 
-    seg->id_segmento = 1;
-    seg->base = 1000;
-    seg->tamanio = 1000;
+    seg->id_segmento = 0;
+    seg->base = 0;
+    seg->tamanio = 1024;
 
     list_add(nuevo_contexto->tabla_segmentos, seg);
 
@@ -1525,7 +1647,7 @@ t_contexto* recibir_contexto_mock () { /*Modiicar estos valores si se quiere cam
 
     return nuevo_contexto;
 
-}/*HACER*/
+}
 
 char* fetch_mock(t_cpu_sockets* sockets){
  

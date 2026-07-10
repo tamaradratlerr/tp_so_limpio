@@ -168,6 +168,7 @@ extern sem_t sem_hay_ready;
 extern sem_t sem_hay_s_ready;
 extern sem_t sem_compactacion;
 extern sem_t sem_rnn_vacio;
+extern sem_t sem_io_vacio;
 
 
 

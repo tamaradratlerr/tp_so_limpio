@@ -698,6 +698,9 @@ void nueva_io (int cliente_fd){
     list_add(list_suplementarias->io, info_io);
     pthread_mutex_unlock(&mutex_ios);
 
+    loguear_lista_suplementaria("BCK_IO",logger);
+    loguear_lista_suplementaria("IO",logger);
+
     enviar_op_code (OK, cliente_fd);
                 
     log_info(logger, "IO '%s' registrada en el socket %d", info_io->nombre, cliente_fd);
@@ -706,6 +709,12 @@ void nueva_io (int cliente_fd){
 // IO LIBRE
 void io_libre(int io_socket){ //Copia de atender CPU
 
+    log_debug(logger,"[IO LIBRE] -> Consultando Semaforo");
+
+    sem_wait(&sem_io_vacio);
+
+    log_debug(logger, "[IO LIBRE] -> Se paso el Semaforo");
+    
     pthread_mutex_lock(&mutex_ios);
     
     t_IO *io_libre = list_find_with_context(list_suplementarias->io, es_la_io_buscada, &io_socket);
@@ -716,9 +725,10 @@ void io_libre(int io_socket){ //Copia de atender CPU
         pthread_mutex_unlock(&mutex_ios);
         return;
     }
-
-
     pthread_mutex_unlock(&mutex_ios);
+
+    loguear_lista_suplementaria("BCK_IO",logger);
+    loguear_lista_suplementaria("IO",logger);
 
     /*Mandamos el PCB a la IO*/
     if ((io_libre != NULL) && (!list_is_empty(lista_bck_io)) && (!list_is_empty(list_suplementarias->io))) 
@@ -2238,6 +2248,8 @@ void io_sleep(int socket_cpu) {
         pthread_mutex_lock(&mutex_ios);
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
+
+        sem_post(&sem_io_vacio);
         
         
     } else {
@@ -2316,7 +2328,7 @@ void io_stdin(int socket_cpu) {
         list_add(lista_bck_io, io_pcb);
         pthread_mutex_unlock(&mutex_ios);
 
-        
+        sem_post(&sem_io_vacio);
         
     } else {
         log_error(logger, "PID %d no encontrado en EXEC", pid_a_bloquear);
@@ -2400,6 +2412,8 @@ void io_stdout(int cpu_socket) {
     eliminar_proceso_Lista(pcb);
 
     list_add(list_suplementarias->desalojo, pcb);
+
+    sem_post(&sem_io_vacio);
 
     espera_io* io_pcb = NULL;
     if(!mock){

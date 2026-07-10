@@ -1,5 +1,6 @@
 #include "utils.h"
 
+bool mock = true;
 t_log* logger;
 t_config* config;
 t_memory_stick_globals ms_globals;
@@ -14,6 +15,11 @@ int main(int argc, char** argv)
     validar_argumentos(argc, argv);
 
     config = config_create(argv[1]);
+    
+    if(config == NULL){
+        printf("No se pudo abrir el archivo de configuración: %s\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
 
     char* file          = config_get_string_value(config, "SERVER_LOG_NAME");
     char* process_name  = config_get_string_value(config, "PROCCES_NAME"); 
@@ -125,13 +131,20 @@ void* atender_cliente(void* arg) {
         }
 
         if (cop == NUEVA_CPU) {
-            log_info(logger, "## CPU %d Conectada", socket_cliente);
-            
+            enviar_op_code(OK, socket_cliente);
+
+        enviar_uint32(base_memory_stick, socket_cliente);
+        enviar_uint32(tamanio_memory_stick, socket_cliente);
+
+        log_info(logger,
+                "CPU conectada. Base=%u Tam=%u",
+                base_memory_stick,
+                tamanio_memory_stick);
+                
             pthread_mutex_lock(&mutex_memoria);
             list_add(ms_globals.cpus_conectadas, (void*)(intptr_t)socket_cliente);
             pthread_mutex_unlock(&mutex_memoria);
 
-            enviar_op_code(OK, socket_cliente);
             continue;
         }
 

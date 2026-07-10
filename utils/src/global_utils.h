@@ -114,6 +114,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     // nueva memoria que viene de memory stick
     NUEVA_MEMORIA_ACUM,
     
+    
 
 
 

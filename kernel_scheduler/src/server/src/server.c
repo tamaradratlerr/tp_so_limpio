@@ -26,6 +26,7 @@ int main(int argc, char *argv[]) /*OK*/
        //prueba_mediano_plazo_mock();
        //prueba_lago_plazo_mock();
        //pruebas_io();
+       pruebas_cpu_ms();
 
     }
     
@@ -1459,6 +1460,16 @@ void data_io_stdout_mock(espera_io* io_pcb, PCB* pcb, uint32_t tam) { /*Siempre 
     return;
 
 } 
+
+void pruebas_cpu_ms(){
+    PCB* pcb_mock = crearNuevoProceso_mock("proceso1", 1, 0);
+
+    cambiar_estado_pcb(pcb_mock, RDY);
+
+    agregar_proceso_lista(pcb_mock);
+    eliminar_proceso_Lista(pcb_mock);
+}
+
 
 void pruebas_io(){
 

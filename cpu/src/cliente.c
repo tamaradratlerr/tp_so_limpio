@@ -1387,7 +1387,11 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
         t_mem_stick* ms = buscar_memory_stick(direccion_actual);
 
         if(ms == NULL){
-            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
+            log_error(logger, 
+                "No existe Memory Stick para la direccion %u",
+                direccion_actual
+            );
+
             free(buffer_total);
             return NULL;
         }
@@ -1401,38 +1405,81 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
             ? bytes_restantes
             : espacio_disponible;
 
-        enviar_op_code(LEER_MEMORIA, ms->socket);
 
-        t_paquete* paquete = crear_paquete(LEER_MEMORIA);
-        agregar_a_paquete(paquete, &dir_local, sizeof(uint32_t));
-        agregar_a_paquete(paquete, &bytes_a_leer, sizeof(int));
+        // Avisamos la operación
+        enviar_op_code(
+            LEER_MEMORIA,
+            ms->socket
+        );
 
-        enviar_paquete(paquete, ms->socket);
-        eliminar_paquete(paquete);
 
-        void* parte = recibir_paquete(ms->socket);
+        // Enviamos dirección local
+        send(
+            ms->socket,
+            &dir_local,
+            sizeof(uint32_t),
+            0
+        );
 
-        if(parte == NULL)
+
+        // Enviamos cantidad de bytes
+        send(
+            ms->socket,
+            &bytes_a_leer,
+            sizeof(int),
+            0
+        );
+
+
+        // Recibimos los bytes directamente
+        void* parte = malloc(bytes_a_leer);
+
+        int recibidos = recv(
+            ms->socket,
+            parte,
+            bytes_a_leer,
+            MSG_WAITALL
+        );
+
+
+        if(recibidos != bytes_a_leer)
         {
+            log_error(logger,
+                "Error recibiendo datos del Memory Stick"
+            );
+
+            free(parte);
             free(buffer_total);
             return NULL;
         }
 
-        memcpy((char*)buffer_total + offset_buffer,
-               parte,
-               bytes_a_leer);
+
+        memcpy(
+            (char*)buffer_total + offset_buffer,
+            parte,
+            bytes_a_leer
+        );
+
 
         free(parte);
+
 
         direccion_actual += bytes_a_leer;
         offset_buffer += bytes_a_leer;
         bytes_restantes -= bytes_a_leer;
     }
 
-    log_info(logger,"## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d] - Valor [%s]",contexto_actual->pid,dir_fisica,(char*)buffer_total);
+
+    log_info(logger,
+        "## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d]",
+        contexto_actual->pid,
+        dir_fisica
+    );
+
 
     return buffer_total;
 }
+
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
 {
@@ -1445,9 +1492,13 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
         t_mem_stick* ms = buscar_memory_stick(direccion_actual);
 
         if(ms == NULL){
-            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
+            log_error(logger,
+                "No existe Memory Stick para la direccion %u",
+                direccion_actual
+            );
             return;
         }
+
 
         uint32_t dir_local = direccion_actual - ms->base;
 
@@ -1458,36 +1509,65 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
             ? bytes_restantes
             : espacio_disponible;
 
-        enviar_op_code(ESCRIBIR_MEMORIA, ms->socket);
 
-        t_paquete* paquete = crear_paquete(ESCRIBIR_MEMORIA);
+        // Avisamos operación
+        enviar_op_code(
+            ESCRIBIR_MEMORIA,
+            ms->socket
+        );
 
-        agregar_a_paquete(paquete, &dir_local, sizeof(uint32_t));
 
-        agregar_a_paquete(paquete,
-                          (char*)buffer + offset_buffer,
-                          bytes_a_escribir);
+        // Mandamos dirección local
+        send(
+            ms->socket,
+            &dir_local,
+            sizeof(uint32_t),
+            0
+        );
 
-        agregar_a_paquete(paquete,
-                          &bytes_a_escribir,
-                          sizeof(int));
 
-        enviar_paquete(paquete, ms->socket);
-        eliminar_paquete(paquete);
+        // Mandamos cantidad de bytes
+        send(
+            ms->socket,
+            &bytes_a_escribir,
+            sizeof(uint32_t),
+            0
+        );
 
+
+        // Mandamos los datos
+        send(
+            ms->socket,
+            (char*)buffer + offset_buffer,
+            bytes_a_escribir,
+            0
+        );
+
+
+        // Esperamos confirmación
         int resultado = recibir_op_code(ms->socket);
 
-        if(resultado != OK){
-            log_error(logger, "Error escribiendo en Memory Stick");
+
+        if(resultado != OK_ESCRITURA)
+        {
+            log_error(logger,
+                "Error escribiendo en Memory Stick"
+            );
             return;
         }
+
 
         direccion_actual += bytes_a_escribir;
         offset_buffer += bytes_a_escribir;
         bytes_restantes -= bytes_a_escribir;
     }
 
-    log_info(logger,"## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d] - Valor [%s]",contexto_actual->pid,dir_fisica,(char*)buffer);
+
+    log_info(logger,
+        "## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d]",
+        contexto_actual->pid,
+        dir_fisica
+    );
 }
 
 /* ------------------ MANEJO DE MEMORY STICK  ------------------*/

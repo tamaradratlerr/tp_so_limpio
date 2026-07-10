@@ -57,6 +57,7 @@ sem_t sem_hay_ready;
 sem_t sem_hay_s_ready;
 sem_t sem_compactacion;
 sem_t sem_rnn_vacio;
+sem_t sem_io_vacio;
 
 
 /*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
@@ -77,6 +78,8 @@ t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas la
     sem_init(&sem_hay_s_ready, 0, 0);
     sem_init(&sem_compactacion, 0, 1);
     sem_init(&sem_rnn_vacio, 0, 0);
+    sem_init(&sem_io_vacio, 0, 0);
+
 
 	return listasProcesos;
 };
@@ -95,6 +98,7 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
     sem_destroy(&sem_hay_s_ready);
     sem_destroy(&sem_compactacion);
     sem_destroy(&sem_rnn_vacio);
+    sem_destroy(&sem_io_vacio);
 }
 
 void iniciar_listas_suple()

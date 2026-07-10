@@ -299,6 +299,8 @@ int recibir_int(int socket_cliente)
     int cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
     {
+
+        log_debug(logger,"Fue Recibido el INT:[%d]",cod_op);
         return cod_op;
     }
     else
@@ -405,6 +407,7 @@ void enviar_int(int code_op, int socket_cliente)
 {
     // Solo enviamos el código, no hace falta crear un paquete complejo si solo es el op_code
     send(socket_cliente, &code_op, sizeof(int), 0);
+    log_debug(logger,"Fue enviado en INT:[%d]",code_op);
 }
 
 char *recibir_mensaje(int socket_cliente, t_log *logger)

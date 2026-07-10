@@ -2293,7 +2293,7 @@ void rta_io_sleep(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    void mediano_plazo_rdy (pcb);
+   mediano_plazo_rdy (pcb);
 
     log_info(logger,
         "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready",
@@ -2390,7 +2390,7 @@ void rta_io_stdin(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    void mediano_plazo_rdy (pcb);
+    mediano_plazo_rdy (pcb);
 
 
     log_info(logger,
@@ -2447,7 +2447,7 @@ void io_stdout(int cpu_socket) {
         t_list* lista_mem = recibir_paquete(info_km.conexion_km);
         char* datos_leidos = (char*)list_get(lista_mem, 0);
 
-        espera_io* io_pcb = malloc(sizeof(espera_io));
+        io_pcb = malloc(sizeof(espera_io));
 
         io_pcb->pid = pcb->data.PID;
         io_pcb->io_op_code = gl_IO_STDOUT;
@@ -2484,7 +2484,7 @@ void rta_io_stdout(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    void mediano_plazo_rdy (pcb);
+    mediano_plazo_rdy (pcb);
 
 
     log_info(logger,

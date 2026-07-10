@@ -1063,7 +1063,12 @@ void ejecutar_stdout(t_instruccion* instr) {
 
     enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
 
-
+    int err = recibir_op_code(sockets->conexion_kernel_scheduler);
+    if(err != OK)
+    {
+        log_error(logger,"Error en Comunicacion FUNCION;[ejecutar_stdoput]");
+        return;
+    }   
 }
 
 void ejecutar_stdin(t_instruccion* instr) {

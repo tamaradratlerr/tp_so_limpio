@@ -362,7 +362,7 @@ PCB* iniciar_pcb (int PID, int prioridad){
 	return nuevo_pcb;
 }
 
-PCB* crearNuevoProceso(char* path, int prioridad, int fd_km) {
+PCB*   crearNuevoProceso(char* path, int prioridad, int fd_km) {
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
     log_info (logger, "## Se crea el proceso PID [%d] - Estado [NEW]", contador_pid);
@@ -390,14 +390,13 @@ void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*), voi
 
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	
-	t_paquete* paquete = crear_paquete(ENVIAR_PROCESO);
+	enviar_op_code(ks_INIT_PROC,info_km.conexion_km);
+    
+    t_paquete* paquete = crear_paquete(ENVIAR_PROCESO);
 	
-    agregar_a_paquete(paquete, &(pcb->data.PID), sizeof(int));
-    agregar_a_paquete(paquete, path, strlen(path) + 1);	
-
-	enviar_paquete(paquete, fd_km);
-    eliminar_paquete(paquete);
-
+    enviar_pid(pcb->data.PID,info_km.conexion_km);
+    enviar_mensaje(path,info_km.conexion_km);
+    
     log_info(logger, "Fue Enviado el Proceso PID [%d] a la Kernel Memory",pcb->data.PID);
 
 }

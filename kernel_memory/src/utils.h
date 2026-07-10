@@ -70,6 +70,8 @@ int buscar_indice_contexto(int pid);
 void manejar_crear_proceso(int socket_cliente);
 void manejar_finalizar_proceso(int socket_cliente);
 void manejar_pedido_instruccion_cpu(int socket_cliente);
+void lectura_memoria(int socket_ks);
+void escritura_memoria(int socket_ks);
 void manejar_guardar_contexto(int socket_cliente);
 void enviar_contexto_cpu(int socket_cpu, int pid);
 void recibir_contexto_cpu(int socket_cpu);
@@ -92,5 +94,5 @@ int desuspender_proceso(int pid);
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino);
 void liberar_espacio_en_huecos(uint32_t direccion_base , uint32_t tamanio);
 void enviar_a_swap (int nro_bloque , void* datos);
-
+void liberar_bloques_swap(int nro_bloque, int cantidad);
 #endif /* UTILS_H_ */

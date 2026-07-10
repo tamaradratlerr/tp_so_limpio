@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) /*OK*/
        //prueba_mediano_plazo_mock();
        //prueba_lago_plazo_mock();
        //pruebas_io();
-       pruebas_cpu_ms();
+       //pruebas_cpu_ms();
 
     }
     
@@ -2077,17 +2077,12 @@ void mem_alloc (int socket_cliente){
 
     enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
 
+    enviar_pid(pid, info_km.conexion_km);
+   
     t_paquete* paquete = crear_paquete(gl_MEM_ALLOC);
+    enviar_int((int) tamanio, info_km.conexion_km);
+    enviar_int ((int) tamanio, info_km.conexion_km);
 
-    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    
-
-    enviar_paquete(paquete, info_km.conexion_km);
-    eliminar_paquete(paquete);
-
-    
 
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
@@ -2115,14 +2110,8 @@ void mem_free (int socket_cliente){
 
     enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
 
-    t_paquete* paquete = crear_paquete(gl_MEM_FREE);
-
-    agregar_a_paquete(paquete, &id_segmento, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));
-    
-
-    enviar_paquete(paquete, info_km.conexion_km);
-    eliminar_paquete(paquete);
+    enviar_pid(pid,info_km.conexion_km);
+    enviar_int((int) id_segmento, info_km.conexion_km);
 
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);

@@ -3,7 +3,7 @@
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 
-bool mock = true; 
+bool mock = false; 
 
 /*-----                        MAIN                        -----*/
 
@@ -50,8 +50,8 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-}
-            sockets->memory_sticks = list_create();
+    }
+        sockets->memory_sticks = list_create();
         sem_init(&mutex_memory_sticks, 0, 1);
 
         t_mem_stick* ms_inicial = malloc(sizeof(t_mem_stick));
@@ -168,7 +168,6 @@ int main(int argc, char *argv[])
         }
         
         contexto_key++;
-        log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
 
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
@@ -180,8 +179,6 @@ int main(int argc, char *argv[])
             
             char* instruccion_raw;
 
-            if(!mock)
-            {
                 if(contexto_key == 1)
                 { 
                     log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
@@ -190,19 +187,6 @@ int main(int argc, char *argv[])
                 }
                 
                 instruccion_raw = fetch(sockets); /* Fase Fetch */
-            }
-            else 
-            {
-                if (contexto_key == 1)
-                {    
-                    log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
-                    contexto_actual = recibir_contexto_mock();
-                    contexto_key--;
-                }
-
-                instruccion_raw = fetch_mock(sockets); /* Fase Fetch */
-
-            } 
             
             if (instruccion_raw == NULL)
             {
@@ -348,26 +332,12 @@ char* fetch(t_cpu_sockets* sockets) {
     log_info(logger, "## PID:[%d] - FETCH - Program Counter:[%d]", 
              contexto_actual->pid, contexto_actual->pc);
     
-    
-    int tamanio = 0; /* => Hay que darle un valor a esto anres de mandarlo*/
-
-    uint32_t dir_fisica = pedir_direccion_mmu(contexto_actual->pc, tamanio);
-    
-    if (dir_fisica == ERROR_MMU) {
-        log_error(logger, "Segmentation Fault en PC: %u", contexto_actual->pc);
-        return NULL;
-    }
 
     
     enviar_op_code(FETCH, sockets-> conexion_kernel_memory ); //Le informamos al KM que vamos a solicitarle una instruccion
 
-    t_paquete* paquete = crear_paquete(FETCH);
-    agregar_a_paquete(paquete, &(contexto_actual->pid), sizeof(int));
-    agregar_a_paquete(paquete, &(contexto_actual->pc), sizeof(uint32_t));
-
-    enviar_paquete(paquete, sockets->conexion_kernel_memory); // Enviamos a KM los datos que necesita para identificar la intruccion
-    eliminar_paquete(paquete);
-
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->pc, sockets->conexion_kernel_memory);
     
     char* instruccion_raw = recibir_mensaje(sockets->conexion_kernel_memory, logger); // recibimos el string de la instrucción
     
@@ -520,79 +490,87 @@ void interrupt() {
 /* ---------------- FUNCIONES COMPLEMENTARIAS PARA CICLO DE INTRUCCION ---------------- */
 
 t_contexto* recibir_contexto(int socket_km) {
-    
-    // recibir el paquete (recibo un buffer del socket)
-    int buffer_size;
 
     enviar_op_code(CONTEXTO, socket_km);
+    enviar_pid(proceso_en_ejecucion->pid, socket_km);
 
-    void* buffer = recibir_buffer(&buffer_size, socket_km);
+    op_code respuesta = recibir_op_code(socket_km);
 
-    // crear una estructura para almacenar lo recibido
+    if(respuesta != CONTEXTO && respuesta != PAQUETE) {
+        log_error(logger, "Respuesta invalida al pedir contexto. OP_CODE recibido: %d", respuesta);
+        return NULL;
+    }
+
+    t_list* paquete = recibir_paquete(socket_km);
+
+    if(paquete == NULL) {
+        log_error(logger, "No se pudo recibir el paquete de contexto desde Kernel Memory");
+        return NULL;
+    }
+
+    if(list_size(paquete) < 13) {
+        log_error(logger, "Contexto corrupto: campos insuficientes. Campos recibidos: %d", list_size(paquete));
+        list_destroy_and_destroy_elements(paquete, free);
+        return NULL;
+    }
+
     t_contexto* nuevo_contexto = malloc(sizeof(t_contexto));
 
-    // Desempaquetar en el MISMO ORDEN
-    int offset = 0;
+    nuevo_contexto->pid = *(int*) list_get(paquete, 0);
+    nuevo_contexto->pc  = *(uint32_t*) list_get(paquete, 1);
 
-    memcpy(&nuevo_contexto->pid, buffer + offset, sizeof(int));
-    offset += sizeof(int);
+    nuevo_contexto->ax = *(uint8_t*) list_get(paquete, 2);
+    nuevo_contexto->bx = *(uint8_t*) list_get(paquete, 3);
+    nuevo_contexto->cx = *(uint8_t*) list_get(paquete, 4);
+    nuevo_contexto->dx = *(uint8_t*) list_get(paquete, 5);
 
-    memcpy(&nuevo_contexto->pc, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    
+    nuevo_contexto->eax = *(uint32_t*) list_get(paquete, 6);
+    nuevo_contexto->ebx = *(uint32_t*) list_get(paquete, 7);
+    nuevo_contexto->ecx = *(uint32_t*) list_get(paquete, 8);
+    nuevo_contexto->edx = *(uint32_t*) list_get(paquete, 9);
+    nuevo_contexto->si  = *(uint32_t*) list_get(paquete, 10);
+    nuevo_contexto->di  = *(uint32_t*) list_get(paquete, 11);
 
-    // Registros 8 bits
-    memcpy(&nuevo_contexto->ax, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->bx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->cx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
-    memcpy(&nuevo_contexto->dx, buffer + offset, sizeof(uint8_t));
-    offset += sizeof(uint8_t);
+    int cantidad = *(int*) list_get(paquete, 12);
+    int campos_esperados = 13 + cantidad * 3;
 
-    // Registros 32 bits
-    memcpy(&nuevo_contexto->eax, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->ebx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->ecx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->edx, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->si, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-    memcpy(&nuevo_contexto->di, buffer + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
+    if(cantidad < 0 || list_size(paquete) != campos_esperados) {
+        log_error(logger,
+                  "Contexto corrupto: cantidad_segmentos=%d campos_recibidos=%d campos_esperados=%d",
+                  cantidad,
+                  list_size(paquete),
+                  campos_esperados);
 
-    // Tabla de Segmentos
+        list_destroy_and_destroy_elements(paquete, free);
+        free(nuevo_contexto);
+        return NULL;
+    }
+
     nuevo_contexto->tabla_segmentos = list_create();
 
-    int cantidad;
+    int pos = 13;
 
-    memcpy(&cantidad, buffer + offset, sizeof(int));
-    offset += sizeof(int);
+    for(int i = 0; i < cantidad; i++) {
 
-    for(int i = 0; i < cantidad; i++)
-    {
         t_segmento* seg = malloc(sizeof(t_segmento));
 
-        memcpy(&seg->id_segmento, buffer + offset, sizeof(int));
-        offset += sizeof(int);
-
-        memcpy(&seg->base, buffer + offset, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        memcpy(&seg->tamanio, buffer + offset, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
+        seg->id_segmento = *(int*) list_get(paquete, pos++);
+        seg->base        = *(uint32_t*) list_get(paquete, pos++);
+        seg->tamanio     = *(uint32_t*) list_get(paquete, pos++);
 
         list_add(nuevo_contexto->tabla_segmentos, seg);
     }
 
-    free(buffer);
+    log_info(logger,
+             "Contexto recibido PID %d PC %u con %d segmentos",
+             nuevo_contexto->pid,
+             nuevo_contexto->pc,
+             cantidad);
+
+    list_destroy_and_destroy_elements(paquete, free);
+
     return nuevo_contexto;
 }
-
 void liberar_instruccion(t_instruccion* instruccion) {
     if (instruccion == NULL) return;
     for (int i = 0; i < instruccion->cant_params; i++) {
@@ -629,9 +607,9 @@ void enviar_contexto_a_kernel_memory() {
 
     int err;
     
-    enviar_op_code (CONTEXTO, sockets->conexion_kernel_memory);
+    enviar_op_code (cpu_GUARDAR_CONTEXTO, sockets->conexion_kernel_memory);
 
-    t_paquete* paquete = crear_paquete(CONTEXTO);
+    t_paquete* paquete = crear_paquete(cpu_GUARDAR_CONTEXTO);
 
     agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
     agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));
@@ -823,8 +801,8 @@ void ejecutar_mov_in (t_instruccion* instr){
 
 void ejecutar_mov_out(t_instruccion* instr){
 
-    char* reg_dir_nombre = instr->params[0];
-    char* reg_valor_nombre = instr->params[1];
+    char* reg_valor_nombre = instr->params[0];
+    char* reg_dir_nombre = instr->params[1];
 
     int tamanio = 0;
     void* buffer;
@@ -868,10 +846,7 @@ void ejecutar_mov_out(t_instruccion* instr){
   
         buffer = valor;
 
-        if(!mock)
-            escribir_en_memoria(dir_fisica,buffer,tamanio);
-        else
-            escribir_en_memoria_mock(dir_fisica,buffer,tamanio);
+        escribir_en_memoria(dir_fisica,buffer,tamanio);
 
     }
 }
@@ -1483,6 +1458,12 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
 
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
 {
+    log_info(logger,
+        "ENTRO escribir_en_memoria: direccion=%u tamanio=%d",
+        dir_fisica,
+        tamanio
+    );
+
     int bytes_restantes = tamanio;
     uint32_t direccion_actual = dir_fisica;
     int offset_buffer = 0;
@@ -1686,10 +1667,12 @@ bool tiene_mismo_id(void* elemento) {
 /*---- Fucnones MOCKS ----*/
 
 char* instruccion[] = {
-    
+
+    "SET AX 123",
     "SET SI 0",
-    "MOV_IN AX",
-    "EXIT_PROC",
+    "MOV_OUT AX SI",
+    "MOV_IN BX SI",
+    "EXIT_PROC"
 
 };
 

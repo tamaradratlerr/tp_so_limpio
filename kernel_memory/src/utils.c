@@ -38,7 +38,9 @@ pthread_mutex_t mutex_ms;
 uint32_t memoria_total_sistema = 0;
 
 // La función encierra TODO la creación de estructuras juntas
-void inicializar_utils(void) {
+void inicializar_utils(void)
+{
+    
     lista_contextos = list_create();
     pthread_mutex_init(&mutex_contextos, NULL);
 
@@ -52,40 +54,46 @@ void inicializar_utils(void) {
     pthread_mutex_init(&mutex_lista_libres, NULL);
 } 
 
-t_contexto* crear_contexto(int pid) {
+t_contexto* crear_contexto(int pid) 
+{
 
     t_contexto* ctx = malloc(sizeof(t_contexto));
 
     ctx->pid = pid;
 
-    //inicializar todos los registros asociados con el valor 0
-    memset(ctx, 0, sizeof(t_contexto));
+    ctx->pc = 0;
+    ctx->ax = 0;
+    ctx->bx = 0;
+    ctx->cx = 0;
+    ctx->dx = 0;
+    ctx->eax = 0;
+    ctx->ebx = 0;
+    ctx->ecx = 0;
+    ctx->edx = 0;
+    ctx->si = 0;
+    ctx->di = 0;
+    
     ctx->tabla_segmentos = list_create();
     
     return ctx;
 }
 
 //MULTIHILO
-void agregar_contexto(int pid) {
-pthread_mutex_lock(&mutex_contextos); //Evitar que 2 hilos toquen la lista al mismo tiempo.
+void agregar_contexto(int pid) 
+{
+    pthread_mutex_lock(&mutex_contextos); //Evitar que 2 hilos toquen la lista al mismo tiempo.
 
-t_contexto* ctx = crear_contexto(pid); //“crear el contexto de ejecución del Proceso”
-list_add(lista_contextos, ctx); //lo guardo en mi lista
+    t_contexto* ctx = crear_contexto(pid); //“crear el contexto de ejecución del Proceso”
+    list_add(lista_contextos, ctx); //lo guardo en mi lista
 
-pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
+    pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
 }
 
-//recibir pid y path
-//pid identificar el proceso y path ¨direccion¨ para abrir el archivo
+
 void manejar_crear_proceso(int socket_cliente) {
-    t_list* paquete = recibir_paquete(socket_cliente);
-
-    int pid = *(int*) list_get(paquete,0);
-    char* path_original = (char*) list_get (paquete,1);
-
-    // 2. DUPLICAMOS el path inmediatamente en una variable propia del stack/heap local.
-    // Esto nos independiza por completo de lo que haga el paquete del socket.
-    char* path = strdup(path_original);
+    
+    int pid = recibir_pid(socket_cliente);
+    char* path = recibir_mensaje(socket_cliente, logger);
 
     FILE* archivo = fopen(path, "r");
     
@@ -93,14 +101,14 @@ void manejar_crear_proceso(int socket_cliente) {
     if (archivo == NULL) {
         log_error(logger, "No se pudo abrir el archivo: %s", path);
         free(path);
-        // Cambiamos el destroy_elements por un destroy común por si los elementos no eran mutables
-        list_destroy(paquete); 
         return;
     }
 
     t_list* instrucciones = list_create();
     char linea[256];  
-    while (fgets(linea, sizeof(linea), archivo) != NULL) { 
+   
+    while (fgets(linea, sizeof(linea), archivo) != NULL) 
+    { 
       
         char* instruccion_duplicada = strdup(linea); 
         string_trim(&instruccion_duplicada); 
@@ -108,10 +116,9 @@ void manejar_crear_proceso(int socket_cliente) {
     }
 
     fclose(archivo);
-    free(path); // Ya no necesitamos la copia local del path
-
-    // 3. Guardamos el proceso en la lista global
+    
     t_proceso* proceso = malloc(sizeof(t_proceso));
+    
     proceso->pid = pid;
     proceso->instrucciones = instrucciones;
 
@@ -119,20 +126,11 @@ void manejar_crear_proceso(int socket_cliente) {
     list_add(lista_procesos, proceso);
     pthread_mutex_unlock(&mutex_procesos);
 
-    // Crear el contexto de ejecución del Proceso
     agregar_contexto(pid);
 
     log_info(logger, "## PID: %d - Proceso Creado Exitosamente", pid);
 
-    // 4. LA CLAVE DE LA SOLUCIÓN:
-    // Si list_destroy_and_destroy_elements(paquete, free) te daba error, 
-    // probá usando list_destroy(paquete) a secas. 
-    // Si adentro tenés un buffer único, deberías liberar el buffer contenedor (si tenés la referencia),
-    // pero destruir la estructura de la lista con list_destroy NO va a tocar los punteros internos y evitará el crash.
-    list_destroy(paquete);
 }
-
-
 
 //FINALIZACION DE PROCESO
 //a partir de este PID recibido se deberán liberar todos los segmentos asociados al Proceso 
@@ -200,6 +198,18 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     pthread_mutex_unlock(&mutex_procesos);
 
+
+//devolver la memoria a la lista de huecos y liberar bloques de SWAP.
+    for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+
+    if (seg->en_swap) {
+        liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
+    } else {
+        liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+    }
+}
+
     //libero todas las instrucciones del proceso pq antes use strdup(instruccion) y usa mem. dinam
     list_destroy_and_destroy_elements(proceso->instrucciones, free);
 
@@ -234,18 +244,11 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
     // Recibimos el paquete de la CPU
-    t_list* paquete = recibir_paquete(socket_cliente);
     
-    // Extraemos los valores de forma segura y COPIAMOS el contenido
-    // Esto es vital: si destruimos el paquete después, las variables locales sobreviven.
-    int* pid_ptr = (int*)list_get(paquete, 0);
-    uint32_t* pc_ptr = (uint32_t*)list_get(paquete, 1);
-    
-    int pid = *pid_ptr;
-    uint32_t pc = *pc_ptr;
-    
-    // Limpiamos el paquete inmediatamente para evitar fugas
-    list_destroy_and_destroy_elements(paquete, free);
+    log_debug(logger,"Se Ingreso a menjar_pedido_instruccion_cpu");
+
+    int pid = recibir_pid(socket_cliente);
+    uint32_t pc = (uint32_t) recibir_int(socket_cliente);
 
     // Buscamos el proceso
     pthread_mutex_lock(&mutex_procesos);
@@ -276,24 +279,10 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
     if (delay > 0) {
         usleep(delay * 1000);
     }
-
-    // Preparamos el envío: [TAMAÑO_INSTRUCCION][INSTRUCCION]
-    int tam_instruccion = strlen(instruccion) + 1;
-    int tam_total = sizeof(int) + tam_instruccion;
-    void* buffer_enviar = malloc(tam_total);
-
-    int offset = 0;
-    memcpy(buffer_enviar + offset, &tam_instruccion, sizeof(int));
-    offset += sizeof(int);
-    memcpy(buffer_enviar + offset, instruccion, tam_instruccion);
-
-    // Enviamos
-    send(socket_cliente, buffer_enviar, tam_total, 0);
+    enviar_mensaje(instruccion,socket_cliente);
     
     log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s", pid, pc, instruccion);
 
-    //Limpiamos buffer local
-    free(buffer_enviar);
 }
 
 //Se conecta con ks: stdout
@@ -514,7 +503,7 @@ void conexion_memory_stick(int socket_ms) {
 
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    t_paquete* paquete_notificacion = crear_paquete(NUEVA_MEMORY_STICK);
+    t_paquete* paquete_notificacion = crear_paquete(NUEVO_ESPACIO);
 
     agregar_a_paquete(
     paquete_notificacion,
@@ -523,8 +512,6 @@ void conexion_memory_stick(int socket_ms) {
 
     enviar_paquete(paquete_notificacion , socket_kernel_scheduler);
     eliminar_paquete (paquete_notificacion);
-
-
 }
 static bool mem_corrupt_notificado = false;
 static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
@@ -717,6 +704,23 @@ void solicitar_y_ejecutar_compactacion(int socket_ks) {
 
 
 void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmento, uint32_t tamanio_segmento) {
+
+    int max_segment_size = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
+
+    if (tamanio_segmento > (uint32_t) max_segment_size) {
+    log_error(
+        logger,
+        "## PID: %d - Segmento %d excede tamaño máximo permitido: %u > %d",
+        pid,
+        id_segmento,
+        tamanio_segmento,
+        max_segment_size
+    );
+
+    int error = -1;
+    send(socket_cliente, &error, sizeof(int), 0);
+    return;
+    }
     
     pthread_mutex_lock(&mutex_lista_libres);
     t_hueco* bache_elegido = seleccionar_hueco_segun_algoritmo(tamanio_segmento);
@@ -770,6 +774,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     int ok = 1;
     send(socket_cliente, &ok, sizeof(int), 0);
 }
+
 void eliminar_segmento(int pid, int id_segmento) {
     pthread_mutex_lock(&mutex_contextos);
     t_contexto* ctx = buscar_contexto(pid);
@@ -857,24 +862,24 @@ t_contexto* buscar_contexto(int pid) {
 }
 
 void enviar_contexto_cpu(int socket_cpu, int pid) {
+
     t_contexto* contexto = buscar_contexto(pid);
 
     if(contexto == NULL) {
-        log_error(logger, "No existe contexto para PID %d", pid);
-        enviar_op_code(NOTOK, socket_cpu);
+        log_error(logger, "No existe contexto PID %d", pid);
         return;
     }
 
-    enviar_op_code(CONTEXTO, socket_cpu);
     t_paquete* paquete = crear_paquete(CONTEXTO);
 
-    // Registros base
     agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
     agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
+
     agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
+
     agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
@@ -882,27 +887,23 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     agregar_a_paquete(paquete, &contexto->si, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->di, sizeof(uint32_t));
 
-    // tabla de segmentos
-    pthread_mutex_lock(&mutex_contextos);
     int cantidad_segmentos = list_size(contexto->tabla_segmentos);
     agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
 
-   for (int i = 0; i < cantidad_segmentos; i++) {
-    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
-    agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
-    agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &seg->id_ms, sizeof(int));
-    }
-    pthread_mutex_unlock(&mutex_contextos);
+    for(int i = 0; i < cantidad_segmentos; i++) {
 
+        t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+
+        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
+        agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
+    }
 
     enviar_paquete(paquete, socket_cpu);
     eliminar_paquete(paquete);
 
     log_info(logger, "Contexto enviado PID %d con %d segmentos", pid, cantidad_segmentos);
 }
-//lo recibo en el mismo orden en el que la cpu lo envia
 
 void recibir_contexto_cpu(int socket_cpu) {
 
@@ -922,15 +923,16 @@ void recibir_contexto_cpu(int socket_cpu) {
         return;
     }
 
+    // PC
     contexto->pc = *(uint32_t*)list_get(paquete, 1);
 
-    // registros 8 bits
+    // Registros 8 bits
     contexto->ax = *(uint8_t*)list_get(paquete, 2);
     contexto->bx = *(uint8_t*)list_get(paquete, 3);
     contexto->cx = *(uint8_t*)list_get(paquete, 4);
     contexto->dx = *(uint8_t*)list_get(paquete, 5);
 
-    // registros 32 bits
+    // Registros 32 bits
     contexto->eax = *(uint32_t*)list_get(paquete, 6);
     contexto->ebx = *(uint32_t*)list_get(paquete, 7);
     contexto->ecx = *(uint32_t*)list_get(paquete, 8);
@@ -938,12 +940,51 @@ void recibir_contexto_cpu(int socket_cpu) {
     contexto->si  = *(uint32_t*)list_get(paquete, 10);
     contexto->di  = *(uint32_t*)list_get(paquete, 11);
 
-    log_info(logger, "Contexto actualizado PID %d", pid);
+
+    // Cantidad de segmentos
+    int cantidad_segmentos = *(int*)list_get(paquete, 12);
+
+
+    // Limpiamos la tabla vieja si ya existía
+    if(contexto->tabla_segmentos != NULL) {
+        list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
+    }
+
+    contexto->tabla_segmentos = list_create();
+
+
+    // Segmentos empiezan desde posición 13
+    int posicion = 13;
+
+    for(int i = 0; i < cantidad_segmentos; i++) {
+
+        t_segmento* segmento = malloc(sizeof(t_segmento));
+
+        segmento->id_segmento = *(int*)list_get(paquete, posicion);
+        posicion++;
+
+        segmento->base = *(uint32_t*)list_get(paquete, posicion);
+        posicion++;
+
+        segmento->tamanio = *(uint32_t*)list_get(paquete, posicion);
+        posicion++;
+
+        list_add(contexto->tabla_segmentos, segmento);
+    }
+
+
+    log_info(logger, 
+             "Contexto actualizado PID %d con %d segmentos",
+             pid,
+             cantidad_segmentos);
+
 
     enviar_op_code(OK, socket_cpu);
 
     list_destroy_and_destroy_elements(paquete, free);
 }
+
+
 
 // CONEXION CON SWAP
 // Buscar bloques consecutivos (Algoritmo First-Fit)
@@ -1025,7 +1066,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
     for (int i = 0; i < seg->cantidad_bloques; i++) {
         int numero_bloque = seg->bloque_swap + i;
 
-        t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
+        t_paquete * paquete = crear_paquete(ESCRITURA_BLOQUE);
         agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
         enviar_paquete(paquete, socket_swap);
         eliminar_paquete(paquete);

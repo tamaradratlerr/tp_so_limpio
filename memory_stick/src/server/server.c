@@ -110,7 +110,12 @@ void escribir_en_bloque_memoria(uint32_t dir_fisica, void* datos_a_escribir, uin
     memcpy(ms_globals.memoria + dir_fisica, datos_a_escribir, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
-    log_info(logger, "## Escritura de %u bytes", tamanio);
+    log_info(logger,
+        "## Escritura de %u bytes en direccion %u. Valor: %d",
+        tamanio,
+        dir_fisica,
+        *(uint8_t*)datos_a_escribir
+    );
 }
 
 void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {

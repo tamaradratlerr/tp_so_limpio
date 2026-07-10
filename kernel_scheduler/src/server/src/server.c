@@ -1505,7 +1505,9 @@ void prueba_mediano_plazo_mock()
     log_info(logger, "Hilo finalizado");
 
     // Simulamos que terminó la IO
-    mediano_plazo_rdy(pcb);
+    pthread_t hilo1;
+    pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
+    pthread_detach(hilo1);
 
     log_info(logger, "Proceso pasó a SUSP_READY");
 
@@ -2276,7 +2278,9 @@ void io_sleep(int socket_cpu) {
         enviar_op_code(NOTOK, socket_cpu);
     }
 
-    mediano_plazo_bck(pcb);
+    pthread_t hilo1;
+    pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
+    pthread_detach(hilo1);
 }
 
 void rta_io_sleep(int socket_io){ 
@@ -2289,7 +2293,7 @@ void rta_io_sleep(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    mediano_plazo_rdy(pcb);
+    void mediano_plazo_rdy (pcb);
 
     log_info(logger,
         "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready",
@@ -2343,7 +2347,9 @@ void io_stdin(int socket_cpu) {
         enviar_op_code(NOTOK, socket_cpu);
     }
 
-    mediano_plazo_bck(pcb);
+    pthread_t hilo1;
+    pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
+    pthread_detach(hilo1);
 }    
 
 void rta_io_stdin(int socket_io){
@@ -2384,7 +2390,7 @@ void rta_io_stdin(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    mediano_plazo_rdy(pcb);
+    void mediano_plazo_rdy (pcb);
 
 
     log_info(logger,
@@ -2423,7 +2429,6 @@ void io_stdout(int cpu_socket) {
     list_add(list_suplementarias->desalojo, pcb);
     pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
-    sem_post(&sem_io_vacio);
 
     espera_io* io_pcb = NULL;
     
@@ -2462,7 +2467,11 @@ void io_stdout(int cpu_socket) {
     log_debug(logger,"Se Agego PID:[%d] a lista de bck_io",io_pcb->pid);
     pthread_mutex_unlock(&mutex_ios);
 
-    mediano_plazo_bck(pcb);
+    sem_post(&sem_io_vacio);
+
+    pthread_t hilo1;
+    pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
+    pthread_detach(hilo1);
 }
 
 void rta_io_stdout(int socket_io){
@@ -2475,7 +2484,7 @@ void rta_io_stdout(int socket_io){
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    mediano_plazo_rdy(pcb);
+    void mediano_plazo_rdy (pcb);
 
 
     log_info(logger,

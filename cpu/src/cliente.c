@@ -510,7 +510,7 @@ t_contexto* recibir_contexto(int socket_km) {
 
     enviar_op_code(CONTEXTO, socket_km);
 
-    enviar_pid(contexto_actual->pid,socket_km);
+    enviar_pid(proceso_en_ejecucion->pid,socket_km);
 
     void* buffer = recibir_buffer(&buffer_size, socket_km);
 

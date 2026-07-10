@@ -839,7 +839,7 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     }
 
 
-    t_paquete* paquete = crear_paquete(CONTEXTO);
+    t_paquete* paquete = crear_paquete(PAQUETE);
 
     agregar_a_paquete(paquete,&contexto->pid,sizeof(int));
     agregar_a_paquete(paquete,&contexto->pc,sizeof(uint32_t));
@@ -873,10 +873,9 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     }
 
 
-    enviar_paquete(paquete,socket_cpu);
+    enviar_buffer(paquete->buffer,paquete->buffer->size,socket_cpu);
 
     eliminar_paquete(paquete);
-
 
     log_info(logger,"Contexto enviado PID %d",pid);
 }//lo recibo en el mismo orden en el que la cpu lo envia

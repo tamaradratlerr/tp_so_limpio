@@ -269,7 +269,7 @@ void *recibir_buffer(int *size, int socket_cliente)
     void *buffer;
     if (recv(socket_cliente, size, sizeof(int), MSG_WAITALL) > 0)
     {
-        log_info(logger,"RECIBI SIZE: %d", *size);
+        log_debug(logger,"RECIBI SIZE: %d", *size);
         buffer = malloc(*size);
         recv(socket_cliente, buffer, *size, MSG_WAITALL);
         return buffer;

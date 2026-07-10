@@ -175,7 +175,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     t_list* paquete = recibir_paquete(socket_cliente); //recibe el pid
 
-    int pid = atoi(list_get(paquete, 0)); //obtiene el pid del paquete (atoi= convierte texto a número)
+    int pid = *(int*) list_get(paquete, 0);
 
     //ahora identifico que proceso debe eliminar
 
@@ -198,6 +198,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     pthread_mutex_unlock(&mutex_procesos);
 
+    t_contexto* contexto = NULL;
 
 //devolver la memoria a la lista de huecos y liberar bloques de SWAP.
     for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {

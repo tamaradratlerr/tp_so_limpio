@@ -89,6 +89,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     km_IO_STDIN, //Devolucion del IO STDIN por parte de la KM
     SOLICITUD_INSTRUCCION,
     km_GUARDAR_CONTEXTO,
+    cpu_GUARDAR_CONTEXTO,
     ks_INIT_PROC,
     ks_EXIT,
     NUEVO_KERNEL,

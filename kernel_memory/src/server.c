@@ -83,6 +83,14 @@ void atender_cpu(int cpu_fd) {
                 enviar_contexto_cpu(cpu_fd, pid_ejecutando);
 
                 break;
+            
+            case cpu_GUARDAR_CONTEXTO:
+
+                log_debug(logger, "CPU manda para guardar contexto");
+
+                recibir_contexto_cpu(cpu_fd);
+
+                break;
 
             case SOLICITUD_INSTRUCCION:
                 

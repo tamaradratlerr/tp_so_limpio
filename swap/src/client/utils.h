@@ -17,14 +17,12 @@
 // 1. Identificadores de las operaciones (Protocolo)
 
 typedef enum {
-    MENSAJE,
-    PAQUETE,
-    HANDSHAKE_SWAP,
-    LECTURA_BLOQUE,
-    ESCRITURA_BLOQUE,
-    RESPUESTA_OK,
-    RESPUESTA_ERROR,
-    RESPUESTA_DATOS
+  HANDSHAKE_SWAP = 100,
+LECTURA_BLOQUE,
+ESCRITURA_BLOQUE,
+RESPUESTA_OK,
+RESPUESTA_ERROR,
+RESPUESTA_DATOS
 } op_code;
 
 //variables globales

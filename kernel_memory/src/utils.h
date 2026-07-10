@@ -15,10 +15,23 @@ typedef struct {
     uint32_t tamanio;        
 } t_hueco;
 
+typedef enum {
+    HANDSHAKE_SWAP = 100,
+    LECTURA_BLOQUE,
+    ESCRITURA_BLOQUE,
+    RESPUESTA_OK,
+    RESPUESTA_ERROR,
+    RESPUESTA_DATOS
+} op_code; 
+
 typedef struct {
     int id_segmento;
-    uint32_t direccion_base; 
-    uint32_t limite;         
+    int id_ms;
+    int direccion_base;
+    int limite;
+    bool en_swap;         // ¿Está en el disco?
+    int bloque_swap;      // ¿En qué bloque empieza en el SWAP?
+    int cantidad_bloques; // ¿Cuántos bloques ocupa?
 } t_segmento_aux;
 
 //DESP BORRO DA ERROR , SOLUCONAR ARCH GLOBAL
@@ -58,6 +71,7 @@ extern pthread_mutex_t mutex_procesos;
 
 extern t_log* logger; 
 extern t_config* config_km;
+extern int socket_kernel_scheduler;
 
 
 

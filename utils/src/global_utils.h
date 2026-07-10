@@ -189,6 +189,16 @@ typedef enum
     //Faltan agregar los estados del CheckPoint 3
 }estado;
 
+//SWAP
+typedef enum {
+    HANDSHAKE_SWAP = 100,
+    LECTURA_BLOQUE,
+    ESCRITURA_BLOQUE,
+    RESPUESTA_OK,
+    RESPUESTA_ERROR,
+    RESPUESTA_DATOS
+} op_code; 
+
 
 //Tipo de dato que ingresa desde el kernel memory
 typedef struct {

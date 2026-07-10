@@ -234,61 +234,80 @@ void manejar_finalizar_proceso(int socket_cliente) {
 }
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
+    // Recibimos el paquete de la CPU
     t_list* paquete = recibir_paquete(socket_cliente);
+    
+    // Extraemos los valores de forma segura y COPIAMOS el contenido
+    // Esto es vital: si destruimos el paquete después, las variables locales sobreviven.
+    int* pid_ptr = (int*)list_get(paquete, 0);
+    uint32_t* pc_ptr = (uint32_t*)list_get(paquete, 1);
+    
+    int pid = *pid_ptr;
+    uint32_t pc = *pc_ptr;
+    
+    // Limpiamos el paquete inmediatamente para evitar fugas
+    list_destroy_and_destroy_elements(paquete, free);
 
-    int pid = *(int*)list_get(paquete, 0);
-    uint32_t pc = *(uint32_t*)list_get(paquete, 1);
-
+    // Buscamos el proceso
+    pthread_mutex_lock(&mutex_procesos);
     int indice = buscar_indice_proceso(pid);
+    
     if (indice == -1) {
+        pthread_mutex_unlock(&mutex_procesos);
         log_error(logger, "CPU pidió instrucción para PID: %d inexistente", pid);
-        int tam_error = strlen("ERROR") + 1;
-        void* error_buffer = malloc(sizeof(int) + tam_error);
-        memcpy(error_buffer, &tam_error, sizeof(int));
-        memcpy(error_buffer + sizeof(int), "ERROR", tam_error);
-        send(socket_cliente, error_buffer, sizeof(int) + tam_error, 0);
-        free(error_buffer);
-        list_destroy_and_destroy_elements(paquete, free);
+        // Podrías enviar un op_code de error aquí si tu protocolo lo requiere
         return;
     }
 
-    pthread_mutex_lock(&mutex_procesos);
     t_proceso* proceso = list_get(lista_procesos, indice);
-    
-    // SOLUCIÓN AL ERROR: Le agregamos el casteo (char*) para que el compilador no chille
+
+    // 5. Verificamos que el PC esté dentro del rango de instrucciones
+    if (pc >= (uint32_t)list_size(proceso->instrucciones)) {
+        pthread_mutex_unlock(&mutex_procesos);
+        log_error(logger, "PID: %d - PC %d fuera de rango", pid, pc);
+        return;
+    }
+
+    // Obtenemos la instrucción
     char* instruccion = (char*)list_get(proceso->instrucciones, pc);
     pthread_mutex_unlock(&mutex_procesos);
 
-    int tam_instruccion = strlen(instruccion) + 1; 
-    int tam_a_enviar = sizeof(int) + tam_instruccion;
-    void* buffer_enviar = malloc(tam_a_enviar);
+    // Aplicamos el DELAY obligatorio según configuración
+    int delay = config_get_int_value(config_km, "INSTRUCTION_DELAY");
+    if (delay > 0) {
+        usleep(delay * 1000);
+    }
 
-    int desplazamiento = 0;
-    memcpy(buffer_enviar + desplazamiento, &tam_instruccion, sizeof(int));
-    desplazamiento += sizeof(int);
-    memcpy(buffer_enviar + desplazamiento, instruccion, tam_instruccion);
-   
-    send(socket_cliente, buffer_enviar, tam_a_enviar, 0);
-    log_info(logger, "## CPU - PID: %d - Leyendo PC: %d - Instrucción: %s", pid, pc, instruccion);
+    // Preparamos el envío: [TAMAÑO_INSTRUCCION][INSTRUCCION]
+    int tam_instruccion = strlen(instruccion) + 1;
+    int tam_total = sizeof(int) + tam_instruccion;
+    void* buffer_enviar = malloc(tam_total);
 
+    int offset = 0;
+    memcpy(buffer_enviar + offset, &tam_instruccion, sizeof(int));
+    offset += sizeof(int);
+    memcpy(buffer_enviar + offset, instruccion, tam_instruccion);
+
+    // Enviamos
+    send(socket_cliente, buffer_enviar, tam_total, 0);
+    
+    log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s", pid, pc, instruccion);
+
+    //Limpiamos buffer local
     free(buffer_enviar);
-    list_destroy_and_destroy_elements(paquete, free);
 }
-
 
 //Se conecta con ks: stdout
 
 //Se conecta con ks: stdin
 //yo (tami) puse tambien el pid (te mando el pid)
 void lectura_memoria(int socket_ks) {
-    // 1. Recibimos el paquete con los parámetros de lectura del Kernel Scheduler
     t_list* paquete = recibir_paquete(socket_ks);
 
     if (paquete == NULL || list_size(paquete) < 3) {
-        log_error(logger, "## Error: Paquete de lectura incompleto o inválido de KS");
-        void* buffer_error = calloc(1, sizeof(int)); 
-        send(socket_ks, buffer_error, sizeof(int), 0);
-        free(buffer_error);
+        log_error(logger, "## Error: Paquete de lectura inválido");
+        int error = -1;
+        send(socket_ks, &error, sizeof(int), 0);
         if (paquete) list_destroy_and_destroy_elements(paquete, free);
         return;
     }
@@ -296,95 +315,89 @@ void lectura_memoria(int socket_ks) {
     uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
     uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
 
-    // 2. Buscamos qué Memory Stick tiene guardado este rango de memoria
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
 
     if (ms != NULL) {
         uint32_t dir_local = dir_fisica - ms->base_global;
 
-        t_paquete* paquete_ms = crear_paquete(LEER_MEMORIA);
-        agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
-        agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
-        
-        enviar_paquete(paquete_ms, ms->socket_fd);
-        eliminar_paquete(paquete_ms);
-
-        void* buffer_datos_reales = malloc(tamanio);
-        
-        if (recv(ms->socket_fd, buffer_datos_reales, tamanio, MSG_WAITALL) > 0) {
-            log_info(logger, "## Lectura Exitosa desde MS (FD: %d) - Dir Global: %u - Leídos: %u bytes", ms->socket_fd, dir_fisica, tamanio);
-            send(socket_ks, buffer_datos_reales, tamanio, 0);
+        // PROTECCIÓN: Validar que el pedido no se salga de los límites de la MS
+        if (dir_local + tamanio > ms->tamanio) {
+            log_error(logger, "## Error: Intento de lectura fuera de límites en MS (FD: %d)", ms->socket_fd);
+            int error = -1;
+            send(socket_ks, &error, sizeof(int), 0);
         } else {
-            log_error(logger, "## Error al recibir los bytes desde la Memory Stick por red");
-            void* basura = calloc(1, tamanio);
-            send(socket_ks, basura, tamanio, 0);
-            free(basura);
-        }
+            // Aplicar delay si lo requiere tu configuración
+            usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
 
-        free(buffer_datos_reales); 
-    } else {
-        log_error(logger, "## Segmentation Fault: Intento de lectura en Dirección Física %u inexistente", dir_fisica);
-        void* bloque_vacio = calloc(1, tamanio);
-        send(socket_ks, bloque_vacio, tamanio, 0);
-        free(bloque_vacio);
-    }
+            t_paquete* paquete_ms = crear_paquete(LEER_MEMORIA);
+            agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
+            agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
+            
+            enviar_paquete(paquete_ms, ms->socket_fd);
+            eliminar_paquete(paquete_ms);
 
-    list_destroy_and_destroy_elements(paquete, free);
-} 
-
-void escritura_memoria(int socket_ks) {
-    
-    // 1. Recibimos el paquete estructurado que nos envía el Kernel Scheduler
-    t_list* paquete = recibir_paquete(socket_ks);
-    
-    if (paquete == NULL || list_size(paquete) < 4) { // Cambiado a 4 porque mandás OpCode, Dir, Tam y Datos
-        log_error(logger, "## Error: Paquete de escritura incompleto o inválido de KS");
-        int error_res = -1;
-        send(socket_ks, &error_res, sizeof(int), 0);
-        if (paquete) list_destroy_and_destroy_elements(paquete, free);
-        return;
-    }
-
-    // Extraemos los parámetros enviados por el KS
-    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
-    uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
-    void* datos_escribir = list_get(paquete, 3); 
-
-    // 2. Buscamos a qué Memory Stick física le pertenece esa dirección global
-    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
-    
-    int confirmacion;
-
-    if (ms != NULL) {
-        uint32_t dir_local = dir_fisica - ms->base_global;
-
-        t_paquete* paquete_ms = crear_paquete(ESCRIBIR_MEMORIA);
-        agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
-        agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
-        agregar_a_paquete(paquete_ms, datos_escribir, tamanio);
-        
-        enviar_paquete(paquete_ms, ms->socket_fd);
-        eliminar_paquete(paquete_ms);
-
-        op_code respuesta_ms;
-        if (recv(ms->socket_fd, &respuesta_ms, sizeof(op_code), MSG_WAITALL) > 0 && respuesta_ms == OK_ESCRITURA) {
-            log_info(logger, "## Escritura Exitosa en MS (FD: %d) - Dir Global: %u - Tamaño: %u bytes", ms->socket_fd, dir_fisica, tamanio);
-            confirmacion = 1; 
-        } else {
-            log_error(logger, "## Error: La Memory Stick no confirmó la escritura correctamente");
-            confirmacion = -1;
+            void* buffer_datos = malloc(tamanio);
+            if (recv(ms->socket_fd, buffer_datos, tamanio, MSG_WAITALL) > 0) {
+                log_info(logger, "## Lectura Exitosa - Dir Global: %u", dir_fisica);
+                send(socket_ks, buffer_datos, tamanio, 0);
+            } else {
+                log_error(logger, "## Error de comunicación con MS");
+            }
+            free(buffer_datos);
         }
     } else {
-        log_error(logger, "## Error de Segmentación: Dirección física global %u inválida", dir_fisica);
-        confirmacion = -1; 
+        log_error(logger, "## Error: Dirección %u inexistente", dir_fisica);
+        int error = -1;
+        send(socket_ks, &error, sizeof(int), 0);
     }
-
-    // 3. Le respondemos el resultado al Kernel Scheduler
-    send(socket_ks, &confirmacion, sizeof(int), 0);
 
     list_destroy_and_destroy_elements(paquete, free);
 }
 
+void escritura_memoria(int socket_ks) {
+    t_list* paquete = recibir_paquete(socket_ks);
+    
+    if (paquete == NULL || list_size(paquete) < 4) {
+        log_error(logger, "## Error: Paquete de escritura inválido");
+        int error = -1;
+        send(socket_ks, &error, sizeof(int), 0);
+        if (paquete) list_destroy_and_destroy_elements(paquete, free);
+        return;
+    }
+
+    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
+    uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
+    void* datos = list_get(paquete, 3); 
+
+    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
+    int confirmacion = -1;
+
+    if (ms != NULL) {
+        uint32_t dir_local = dir_fisica - ms->base_global;
+
+        // PROTECCIÓN: Validar límites
+        if (dir_local + tamanio <= ms->tamanio) {
+            usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
+
+            t_paquete* paquete_ms = crear_paquete(ESCRIBIR_MEMORIA);
+            agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
+            agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
+            agregar_a_paquete(paquete_ms, datos, tamanio);
+            
+            enviar_paquete(paquete_ms, ms->socket_fd);
+            eliminar_paquete(paquete_ms);
+
+            op_code respuesta;
+            if (recv(ms->socket_fd, &respuesta, sizeof(op_code), MSG_WAITALL) > 0 && respuesta == OK) {
+                log_info(logger, "## Escritura Exitosa - Dir Global: %u", dir_fisica);
+                confirmacion = 1;
+            }
+        }
+    }
+
+    send(socket_ks, &confirmacion, sizeof(int), 0);
+    list_destroy_and_destroy_elements(paquete, free);
+}
 
 //VER NOTION PONER ENVIAR CONTEXTTO Y GUARDAR CONTEXTO
 void manejar_guardar_contexto(int socket_cliente) {
@@ -731,17 +744,26 @@ void eliminar_segmento(int pid, int id_segmento) {
         return;
     }
 
+    //Sacamos el segmento de la tabla del proceso
     list_remove(ctx->tabla_segmentos, indice_seg);
     pthread_mutex_unlock(&mutex_contextos);
 
+
+    liberar_espacio_en_huecos(seg_a_eliminar->direccion_base, seg_a_eliminar->limite);
+
+    log_info(logger, "## PID: %d - Segmento %d Liberado (Base: %u, Tamaño: %u)", 
+             pid, id_segmento, seg_a_eliminar->direccion_base, seg_a_eliminar->limite);
+
+    free(seg_a_eliminar);
+}
+void liberar_espacio_en_huecos(uint32_t direccion_base, uint32_t tamanio) {
     pthread_mutex_lock(&mutex_lista_libres);
-    
+
     t_hueco* nuevo_hueco = malloc(sizeof(t_hueco));
-    nuevo_hueco->direccion_base = seg_a_eliminar->direccion_base;
-    nuevo_hueco->tamanio = seg_a_eliminar->limite;
+    nuevo_hueco->direccion_base = direccion_base;
+    nuevo_hueco->tamanio = tamanio;
     list_add(lista_huecos_libres, nuevo_hueco);
 
-    // Definimos la función lambda/auxiliar para ordenar por dirección base
     bool _ordenar_huecos_por_base(void* h1, void* h2) {
         return ((t_hueco*)h1)->direccion_base < ((t_hueco*)h2)->direccion_base;
     }
@@ -751,22 +773,15 @@ void eliminar_segmento(int pid, int id_segmento) {
         t_hueco* actual = list_get(lista_huecos_libres, i);
         t_hueco* siguiente = list_get(lista_huecos_libres, i + 1);
 
-        // Si el actual termina justo donde empieza el siguiente, se unen
         if (actual->direccion_base + actual->tamanio == siguiente->direccion_base) {
             actual->tamanio += siguiente->tamanio;
             list_remove(lista_huecos_libres, i + 1);
             free(siguiente);
-            i--; // Volvemos un índice atrás para verificar si se puede seguir uniendo
+            i--; 
         }
     }
     pthread_mutex_unlock(&mutex_lista_libres);
-
-    log_info(logger, "## PID: %d - Segmento %d Liberado (Base: %u, Tamaño: %u)", 
-             pid, id_segmento, seg_a_eliminar->direccion_base, seg_a_eliminar->limite);
-
-    free(seg_a_eliminar);
 }
-
 
 t_contexto* buscar_contexto(int pid) {
 
@@ -813,11 +828,12 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     int cantidad_segmentos = list_size(contexto->tabla_segmentos);
     agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
 
-    for (int i = 0; i < cantidad_segmentos; i++) {
-        t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
-        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
-        agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
-        agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
+   for (int i = 0; i < cantidad_segmentos; i++) {
+    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+    agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
+    agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &seg->id_ms, sizeof(int));
     }
     pthread_mutex_unlock(&mutex_contextos);
 
@@ -868,4 +884,199 @@ void recibir_contexto_cpu(int socket_cpu) {
     enviar_op_code(OK, socket_cpu);
 
     list_destroy_and_destroy_elements(paquete, free);
+}
+
+// CONEXION CON SWAP
+// Buscar bloques consecutivos (Algoritmo First-Fit)
+int obtener_n_bloques_libres(int n) {
+    int contador = 0;
+    int inicio = -1;
+
+    for (int i = 0; i < total_bloques_swap; i++) {
+        if (!bitarray_test_bit(bitmap_swap, i)) {
+            if (contador == 0) inicio = i;
+            contador++;
+            if (contador == n) {
+                // Marcar como ocupados
+                for (int j = inicio; j < inicio + n; j++) 
+                    bitarray_set_bit(bitmap_swap, j);
+                return inicio;
+            }
+        } else {
+            contador = 0;
+            inicio = -1;
+        }
+    }
+    return -1; // No hay espacio suficiente
+}
+
+// Liberar bloques al volver a RAM
+void liberar_bloques_swap(int nro_bloque, int cantidad) {
+    for (int i = nro_bloque; i < nro_bloque + cantidad; i++) {
+        bitarray_clean_bit(bitmap_swap, i);
+    }
+}
+
+void mover_segmento_a_swap(t_segmento_aux* seg) {
+    int bloques_necesarios = ceil((double)seg->limite / block_size_swap);
+    int primer_bloque = obtener_n_bloques_libres(bloques_necesarios);
+
+    if (primer_bloque == -1) {
+        log_error(logger, "SWAP LLENO: No se pudo suspender PID %d", seg->id_segmento);
+        return;
+    }
+
+    void* buffer = leer_bytes_globales(seg->direccion_base, seg->limite);
+    
+    for (int i = 0; i < bloques_necesarios; i++) {
+        // Calculamos cuánto leer: si es el último bloque, puede que no sea completo
+        int a_escribir = (i == bloques_necesarios - 1) ? 
+                         (seg->limite - (i * block_size_swap)) : block_size_swap;
+        
+        void* bloque_data = calloc(1, block_size_swap);
+        memcpy(bloque_data, buffer + (i * block_size_swap), a_escribir);
+        
+        enviar_a_swap(primer_bloque + i, bloque_data);
+        free(bloque_data);
+    }
+    
+    seg->bloque_swap = primer_bloque;
+    seg->cantidad_bloques = bloques_necesarios;
+    seg->en_swap = true;
+    
+    liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+    free(buffer);
+}
+void suspender_proceso(int pid) {
+    t_contexto* ctx = buscar_contexto(pid); 
+    if (!ctx) return;
+
+    for (int i = 0; i < list_size(ctx->tabla_segmentos); i++) {
+        t_segmento_aux* seg = list_get(ctx->tabla_segmentos, i);
+        if (!seg->en_swap) {
+            mover_segmento_a_swap(seg);
+        }
+    }
+    log_info(logger, "Proceso %d movido totalmente a SWAP", pid);
+}
+void recibir_de_swap(t_segmento_aux* seg, void* buffer_destino) {
+    // Enviar pedido
+    t_paquete* paquete = crear_paquete(); // O tu función de creación
+    paquete->codigo_operacion = LECTURA_BLOQUE;
+    agregar_a_paquete(paquete, &(seg->bloque_swap), sizeof(int)); // Pedimos el inicio
+    enviar_paquete(paquete, socket_swap);
+    eliminar_paquete(paquete);
+
+    t_list* respuesta = recibir_paquete(socket_swap);
+    int offset = 0;
+    for(int i = 0; i < list_size(respuesta); i++) {
+    void* bloque = list_get(respuesta, i);
+    memcpy(buffer_destino + offset, bloque, block_size_swap);
+    offset += block_size_swap;
+}
+
+    //  LIMPIEZA CRÍTICA (Evita Memory Leaks)
+    // list_destroy_and_destroy_elements libera los elementos (datos) y la lista
+    list_destroy_and_destroy_elements(respuesta, free); 
+    
+    // Actualizar estado
+    liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
+    seg->en_swap = false;
+    log_info(logger, "Segmento %d recuperado de SWAP", seg->id);}
+
+
+void enviar_a_swap(int nro_bloque, void* datos) {
+    //  Crear y enviar el paquete
+    t_paquete* paquete = crear_paquete();
+    paquete->codigo_operacion = ESCRITURA_BLOQUE;
+    
+    agregar_a_paquete(paquete, &nro_bloque, sizeof(int));
+    agregar_a_paquete(paquete, datos, block_size_swap);
+    
+    enviar_paquete(paquete, socket_swap);
+    eliminar_paquete(paquete);
+    
+    //  Esperar confirmación del SWAP
+    int cod_op = recibir_op_code(socket_swap);
+    
+    //  Manejo de estados de la conexión
+    if (cod_op == RESPUESTA_OK) {
+        log_info(logger, "## Escritura exitosa: bloque %d", nro_bloque);
+    } 
+    else if (cod_op == RESPUESTA_ERROR) {
+    log_error(logger, "## Error: El SWAP rechazó la escritura del bloque %d", nro_bloque);
+    }
+
+    else if (cod_op == -1) {
+        log_error(logger, "## Error Crítico: SWAP desconectado inesperadamente al escribir bloque %d", nro_bloque);
+        // Opcional: abortar, cerrar socket o intentar reconectar
+        close(socket_swap);
+        socket_swap = -1; // Marcamos el socket como inválido
+    } 
+    else {
+        log_error(logger, "## Error: Código de operación inesperado recibido del SWAP: %d", cod_op);
+    }
+}
+
+void desuspender_proceso(int pid) {
+    t_contexto* ctx = buscar_contexto(pid);
+
+    if (!ctx) {
+        log_error(logger, "No existe el proceso %d para desuspender", pid);
+        return;
+    }
+
+    log_info(logger, "Des-suspendiendo proceso %d...", pid);
+
+    for (int i = 0; i < list_size(ctx->tabla_segmentos); i++) {
+        t_segmento_aux* seg = list_get(ctx->tabla_segmentos, i);
+
+        if (seg->en_swap) {
+            pthread_mutex_lock(&mutex_lista_libres);
+
+            t_hueco* hueco = seleccionar_hueco_segun_algoritmo(seg->limite);
+
+            if (hueco == NULL) {
+                pthread_mutex_unlock(&mutex_lista_libres);
+                log_error(
+                    logger,
+                    "ERROR: No hay espacio en RAM para el segmento %d del proceso %d",
+                    seg->id_segmento,
+                    pid
+                );
+                return;
+            }
+
+            int nueva_base = hueco->direccion_base;
+
+            hueco->direccion_base += seg->limite;
+            hueco->tamanio -= seg->limite;
+
+            if (hueco->tamanio == 0) {
+                list_remove_element(lista_huecos_libres, hueco);
+                free(hueco);
+            }
+
+            pthread_mutex_unlock(&mutex_lista_libres);
+
+            void* buffer = malloc(seg->limite);
+            recibir_de_swap(seg, buffer);
+
+            escribir_bytes_globales(nueva_base, seg->limite, buffer);
+
+            seg->direccion_base = nueva_base;
+            seg->en_swap = false;
+
+            free(buffer);
+
+            log_info(
+                logger,
+                "Segmento %d restaurado en dirección %d",
+                seg->id_segmento,
+                nueva_base
+            );
+        }
+    }
+
+    log_info(logger, "Proceso %d des-suspendido exitosamente", pid);
 }

@@ -26,4 +26,4 @@ void arrancar_cliente_km(void) {
     
     pthread_create(&thread_km, NULL, atender_cliente, socket_km_ptr);
     pthread_detach(thread_km);
-}
+    }

@@ -4,9 +4,6 @@
 // DESP VER QUE BORRAR Y AGREGAR 
 
 
-
-
-
 t_log* logger;
 t_memory_stick_globals ms_globals;
 

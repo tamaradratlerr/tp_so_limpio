@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) /*OK*/
        //prueba_mediano_plazo_mock();
        //prueba_lago_plazo_mock();
        //pruebas_io();
-       pruebas_cpu_ms();
+       //pruebas_cpu_ms();
 
     }
     

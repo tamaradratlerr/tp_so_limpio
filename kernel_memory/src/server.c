@@ -68,8 +68,10 @@ int main(int argc, char** argv) {
 /*FUNCIONES*/
 void atender_cpu(int cpu_fd) {
     log_info(logger, "--- Hilo CPU [%d] iniciado ---", cpu_fd);
+    
     while (1) {
         
+        log_info(logger,"*****     Esperando Por nuevas Solicitudes de CPU     *****");
         int cod_op = recibir_op_code(cpu_fd);
         
         switch (cod_op) {
@@ -82,6 +84,8 @@ void atender_cpu(int cpu_fd) {
 
                 enviar_contexto_cpu(cpu_fd, pid_ejecutando);
 
+                log_debug(logger, "FIN Enviar Contexto");
+
                 break;
             
             case cpu_GUARDAR_CONTEXTO:
@@ -92,8 +96,7 @@ void atender_cpu(int cpu_fd) {
 
                 break;
 
-            case SOLICITUD_INSTRUCCION:
-                
+            case FETCH:
                 manejar_pedido_instruccion_cpu(cpu_fd);
                 
                 break;

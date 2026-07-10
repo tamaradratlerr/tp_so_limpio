@@ -233,18 +233,11 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
     // Recibimos el paquete de la CPU
-    t_list* paquete = recibir_paquete(socket_cliente);
     
-    // Extraemos los valores de forma segura y COPIAMOS el contenido
-    // Esto es vital: si destruimos el paquete después, las variables locales sobreviven.
-    int* pid_ptr = (int*)list_get(paquete, 0);
-    uint32_t* pc_ptr = (uint32_t*)list_get(paquete, 1);
-    
-    int pid = *pid_ptr;
-    uint32_t pc = *pc_ptr;
-    
-    // Limpiamos el paquete inmediatamente para evitar fugas
-    list_destroy_and_destroy_elements(paquete, free);
+    log_debug(logger,"Se Ingreso a menjar_pedido_instruccion_cpu");
+
+    int pid = recibir_pid(socket_cliente);
+    uint32_t pc = (uint32_t) recibir_int(socket_cliente);
 
     // Buscamos el proceso
     pthread_mutex_lock(&mutex_procesos);
@@ -275,24 +268,10 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
     if (delay > 0) {
         usleep(delay * 1000);
     }
-
-    // Preparamos el envío: [TAMAÑO_INSTRUCCION][INSTRUCCION]
-    int tam_instruccion = strlen(instruccion) + 1;
-    int tam_total = sizeof(int) + tam_instruccion;
-    void* buffer_enviar = malloc(tam_total);
-
-    int offset = 0;
-    memcpy(buffer_enviar + offset, &tam_instruccion, sizeof(int));
-    offset += sizeof(int);
-    memcpy(buffer_enviar + offset, instruccion, tam_instruccion);
-
-    // Enviamos
-    send(socket_cliente, buffer_enviar, tam_total, 0);
+    enviar_mensaje(instruccion,socket_cliente);
     
     log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s", pid, pc, instruccion);
 
-    //Limpiamos buffer local
-    free(buffer_enviar);
 }
 
 //Se conecta con ks: stdout
@@ -834,52 +813,44 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     t_contexto* contexto = buscar_contexto(pid);
 
     if(contexto == NULL) {
-        log_error(logger,"No existe contexto PID %d",pid);
+        log_error(logger, "No existe contexto PID %d", pid);
         return;
     }
 
+    t_paquete* paquete = crear_paquete(CONTEXTO);
 
-    t_paquete* paquete = crear_paquete(PAQUETE);
+    agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
+    agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
 
-    agregar_a_paquete(paquete,&contexto->pid,sizeof(int));
-    agregar_a_paquete(paquete,&contexto->pc,sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
+    agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
 
-    agregar_a_paquete(paquete,&contexto->ax,sizeof(uint8_t));
-    agregar_a_paquete(paquete,&contexto->bx,sizeof(uint8_t));
-    agregar_a_paquete(paquete,&contexto->cx,sizeof(uint8_t));
-    agregar_a_paquete(paquete,&contexto->dx,sizeof(uint8_t));
-
-    agregar_a_paquete(paquete,&contexto->eax,sizeof(uint32_t));
-    agregar_a_paquete(paquete,&contexto->ebx,sizeof(uint32_t));
-    agregar_a_paquete(paquete,&contexto->ecx,sizeof(uint32_t));
-    agregar_a_paquete(paquete,&contexto->edx,sizeof(uint32_t));
-    agregar_a_paquete(paquete,&contexto->si,sizeof(uint32_t));
-    agregar_a_paquete(paquete,&contexto->di,sizeof(uint32_t));
-
+    agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->edx, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->si, sizeof(uint32_t));
+    agregar_a_paquete(paquete, &contexto->di, sizeof(uint32_t));
 
     int cantidad_segmentos = list_size(contexto->tabla_segmentos);
+    agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
 
-    agregar_a_paquete(paquete,&cantidad_segmentos,sizeof(int));
+    for(int i = 0; i < cantidad_segmentos; i++) {
 
+        t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
 
-    for(int i=0;i<cantidad_segmentos;i++){
-
-        t_segmento_aux* seg=list_get(contexto->tabla_segmentos,i);
-
-        agregar_a_paquete(paquete,&seg->id_segmento,sizeof(int));
-        agregar_a_paquete(paquete,&seg->direccion_base,sizeof(uint32_t));
-        agregar_a_paquete(paquete,&seg->limite,sizeof(uint32_t));
-        agregar_a_paquete(paquete,&seg->id_ms,sizeof(int));
+        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
+        agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
+        agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
     }
 
-
-    enviar_buffer(paquete->buffer,paquete->buffer->size,socket_cpu);
-
+    enviar_paquete(paquete, socket_cpu);
     eliminar_paquete(paquete);
 
-    log_info(logger,"Contexto enviado PID %d",pid);
-}//lo recibo en el mismo orden en el que la cpu lo envia
-//lo recibo en el mismo orden en el que la cpu lo envia
+    log_info(logger, "Contexto enviado PID %d con %d segmentos", pid, cantidad_segmentos);
+}
 
 void recibir_contexto_cpu(int socket_cpu) {
 

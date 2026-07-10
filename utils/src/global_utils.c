@@ -54,10 +54,6 @@ void eliminar_paquete(t_paquete *paquete)
 void *serializar_paquete(t_paquete *paquete, int bytes)
 {
 
-    log_info(logger, "SERIALIZANDO:");
-    log_info(logger, "Codigo: %d", paquete->codigo_operacion);
-    log_info(logger, "Buffer size: %d", paquete->buffer->size);
-
     void *magic = malloc(bytes);
     int desplazamiento = 0;
 
@@ -338,14 +334,14 @@ t_list *recibir_paquete(int socket_cliente)
         return NULL;
     }
     
-    log_info(logger,"Tamaño buffer recibido EN FUNCION GLOBAL: %d", size);
+    log_debug(logger,"Tamaño buffer recibido EN FUNCION GLOBAL: %d", size);
 
     while (desplazamiento < size)
     {
         // 1. Leemos el tamaño del próximo dato (casteando a char*)
         memcpy(&tamanio, (char *)buffer + desplazamiento, sizeof(int));
         
-        log_info(logger,"Tamaño del campo recibido EN FUNCION GLOBAL: %d", tamanio);
+        log_debug(logger,"Tamaño del campo recibido EN FUNCION GLOBAL: %d", tamanio);
         
         desplazamiento += sizeof(int);
 

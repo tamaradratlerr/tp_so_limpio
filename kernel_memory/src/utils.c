@@ -830,51 +830,56 @@ t_contexto* buscar_contexto(int pid) {
 }
 
 void enviar_contexto_cpu(int socket_cpu, int pid) {
+
     t_contexto* contexto = buscar_contexto(pid);
 
     if(contexto == NULL) {
-        log_error(logger, "No existe contexto para PID %d", pid);
-        enviar_op_code(NOTOK, socket_cpu);
+        log_error(logger,"No existe contexto PID %d",pid);
         return;
     }
 
-    enviar_op_code(CONTEXTO, socket_cpu);
+
     t_paquete* paquete = crear_paquete(CONTEXTO);
 
-    // Registros base
-    agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
-    agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->edx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->si, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto->di, sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->pid,sizeof(int));
+    agregar_a_paquete(paquete,&contexto->pc,sizeof(uint32_t));
 
-    // tabla de segmentos
-    pthread_mutex_lock(&mutex_contextos);
+    agregar_a_paquete(paquete,&contexto->ax,sizeof(uint8_t));
+    agregar_a_paquete(paquete,&contexto->bx,sizeof(uint8_t));
+    agregar_a_paquete(paquete,&contexto->cx,sizeof(uint8_t));
+    agregar_a_paquete(paquete,&contexto->dx,sizeof(uint8_t));
+
+    agregar_a_paquete(paquete,&contexto->eax,sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->ebx,sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->ecx,sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->edx,sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->si,sizeof(uint32_t));
+    agregar_a_paquete(paquete,&contexto->di,sizeof(uint32_t));
+
+
     int cantidad_segmentos = list_size(contexto->tabla_segmentos);
-    agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
 
-   for (int i = 0; i < cantidad_segmentos; i++) {
-    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
-    agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
-    agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &seg->id_ms, sizeof(int));
+    agregar_a_paquete(paquete,&cantidad_segmentos,sizeof(int));
+
+
+    for(int i=0;i<cantidad_segmentos;i++){
+
+        t_segmento_aux* seg=list_get(contexto->tabla_segmentos,i);
+
+        agregar_a_paquete(paquete,&seg->id_segmento,sizeof(int));
+        agregar_a_paquete(paquete,&seg->direccion_base,sizeof(uint32_t));
+        agregar_a_paquete(paquete,&seg->limite,sizeof(uint32_t));
+        agregar_a_paquete(paquete,&seg->id_ms,sizeof(int));
     }
-    pthread_mutex_unlock(&mutex_contextos);
 
 
-    enviar_paquete(paquete, socket_cpu);
+    enviar_paquete(paquete,socket_cpu);
+
     eliminar_paquete(paquete);
 
-    log_info(logger, "Contexto enviado PID %d con %d segmentos", pid, cantidad_segmentos);
-}
+
+    log_info(logger,"Contexto enviado PID %d",pid);
+}//lo recibo en el mismo orden en el que la cpu lo envia
 //lo recibo en el mismo orden en el que la cpu lo envia
 
 void recibir_contexto_cpu(int socket_cpu) {

@@ -69,11 +69,25 @@ int main(int argc, char** argv) {
 void atender_cpu(int cpu_fd) {
     log_info(logger, "--- Hilo CPU [%d] iniciado ---", cpu_fd);
     while (1) {
+        
         int cod_op = recibir_op_code(cpu_fd);
         
         switch (cod_op) {
+            
+            case CONTEXTO: 
+
+                log_info(logger, "CPU solicita contexto");
+
+                int pid_ejecutando = recibir_pid(cpu_fd);
+
+                enviar_contexto_cpu(cpu_fd, pid_ejecutando);
+
+                break;
+
             case SOLICITUD_INSTRUCCION:
+                
                 manejar_pedido_instruccion_cpu(cpu_fd);
+                
                 break;
                 
             case ENVIAR_PROCESO:
@@ -84,7 +98,7 @@ void atender_cpu(int cpu_fd) {
                 break;
             
             case km_GUARDAR_CONTEXTO:
-            manejar_guardar_contexto(cpu_fd);
+                manejar_guardar_contexto(cpu_fd);
             break;
 
             case -1:
@@ -130,6 +144,7 @@ void atender_kernel(int kernel_fd) {
                 } else {
                     enviar_op_code(NOTOK, kernel_fd);
                 }
+                
                 break;
             }
 
@@ -145,15 +160,17 @@ void atender_kernel(int kernel_fd) {
             
             case gl_MEM_FREE:
 
-                int pid = recibir_pid(kernel_fd);
-                int id_segmento = recibir_int(kernel_fd);
+                int pid_mem = recibir_pid (kernel_fd);
+                int id_segmento_mem = recibir_int (kernel_fd);
 
-                eliminar_segmento(pid, id_segmento);
+                eliminar_segmento(pid_mem, id_segmento_mem);
 
                 break;
 
             case ks_EXIT:
+                
                 manejar_finalizar_proceso(kernel_fd);
+                
                 break;
 
             case -1:

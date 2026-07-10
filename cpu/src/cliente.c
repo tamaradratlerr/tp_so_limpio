@@ -50,8 +50,8 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-}
-            sockets->memory_sticks = list_create();
+    }
+        sockets->memory_sticks = list_create();
         sem_init(&mutex_memory_sticks, 0, 1);
 
         t_mem_stick* ms_inicial = malloc(sizeof(t_mem_stick));
@@ -168,7 +168,6 @@ int main(int argc, char *argv[])
         }
         
         contexto_key++;
-        log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
 
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
@@ -180,8 +179,6 @@ int main(int argc, char *argv[])
             
             char* instruccion_raw;
 
-            if(!mock)
-            {
                 if(contexto_key == 1)
                 { 
                     log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
@@ -190,19 +187,6 @@ int main(int argc, char *argv[])
                 }
                 
                 instruccion_raw = fetch(sockets); /* Fase Fetch */
-            }
-            else 
-            {
-                if (contexto_key == 1)
-                {    
-                    log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
-                    contexto_actual = recibir_contexto_mock();
-                    contexto_key--;
-                }
-
-                instruccion_raw = fetch_mock(sockets); /* Fase Fetch */
-
-            } 
             
             if (instruccion_raw == NULL)
             {
@@ -525,6 +509,8 @@ t_contexto* recibir_contexto(int socket_km) {
     int buffer_size;
 
     enviar_op_code(CONTEXTO, socket_km);
+
+    enviar_pid(contexto_actual->pid,socket_km);
 
     void* buffer = recibir_buffer(&buffer_size, socket_km);
 

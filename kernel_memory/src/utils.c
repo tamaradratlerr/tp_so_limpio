@@ -513,7 +513,7 @@ void conexion_memory_stick(int socket_ms) {
 
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    t_paquete* paquete_notificacion = crear_paquete(NUEVA_MEMORY_STICK);
+    t_paquete* paquete_notificacion = crear_paquete(NUEVO_ESPACIO);
 
     agregar_a_paquete(
     paquete_notificacion,

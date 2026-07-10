@@ -95,6 +95,7 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     OK_ESCRITURA,
     NUEVO_ESPACIO, //En caso de nuevo MEM.STICK. o Se libere espacio (KM => KS) 
     SUSPENDIDO, //Informa que el proximo PID esta en estado SUSPENDIDO
+    INFO_MEMORY_STICK,
 
     // IO
     NUEVA_IO, //Se informa que hay una nueva IO
@@ -160,6 +161,11 @@ typedef struct {
     int tamanio;
     int base;
 } t_segmento;
+
+typedef struct {
+    uint32_t base;
+    uint32_t tamanio;
+} t_info_memory_stick;
 
 typedef struct{
     uint32_t base;
@@ -340,9 +346,11 @@ int recibir_int(int socket_cliente);
 //--------- MS - KM - SWAP
 
 typedef struct {
-    uint32_t memory_size;   //Tamaño del memory stick en bytes
-    void* memory;           // Memoria asignada (malloc)
-    t_list* cpus_conectadas;// Lista de CPUs conectadas
-} t_memory_stick_globals;
+    int socket_kernel_memory;
+    uint32_t base;
+    uint32_t tamanio;
+    void* memoria;
+    t_list* cpus_conectadas;
+} t_memory_stick_global;
 
 #endif /* GLOBAL_UTILS_H_ */

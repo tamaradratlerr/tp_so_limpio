@@ -3,7 +3,7 @@
 bool mock = true;
 t_log* logger;
 t_config* config;
-t_memory_stick_globals ms_globals;
+t_memory_stick_global ms_globals;
 int delay_memoria;
 pthread_mutex_t mutex_memoria;
 
@@ -20,25 +20,34 @@ int main(int argc, char** argv)
         printf("No se pudo abrir el archivo de configuración: %s\n", argv[1]);
         exit(EXIT_FAILURE);
     }
+    
+    char* file = config_get_string_value(config, "SERVER_LOG_NAME");
+    char* process_name = config_get_string_value(config, "PROCESS_NAME");
+    char* server_port = config_get_string_value(config, "MEMORY_STICK_PORT");
 
-    char* file          = config_get_string_value(config, "SERVER_LOG_NAME");
-    char* process_name  = config_get_string_value(config, "PROCCES_NAME"); 
-    char* server_port   = config_get_string_value(config, "MEMORY_STICK_PORT");
 
     delay_memoria = config_get_int_value(config, "MEMORY_DELAY");
 
+
+    // El tamaño viene por argumento
     uint32_t tamanio_ms = (uint32_t)atoi(argv[2]);
 
+    printf("file: %s\n", file);
+    printf("process_name: %s\n", process_name);
 
-    logger = log_create(file, process_name, 1, LOG_LEVEL_DEBUG);
-
-    if(logger == NULL){
-        printf("ERROR: No se pudo crear logger\n");
-        abort();
-    }
+    logger = log_create(
+        file,
+        process_name,
+        true,
+        log_level_from_string(
+            config_get_string_value(config, "LOG_LEVEL")
+        )
+    );
 
 
     init_memory_stick(tamanio_ms);
+
+
 
     pthread_mutex_init(&mutex_memoria, NULL);
 
@@ -98,7 +107,7 @@ void escribir_en_bloque_memoria(uint32_t dir_fisica, void* datos_a_escribir, uin
     usleep(delay_memoria * 1000);
 
     pthread_mutex_lock(&mutex_memoria);
-    memcpy(ms_globals.memory + dir_fisica, datos_a_escribir, tamanio);
+    memcpy(ms_globals.memoria + dir_fisica, datos_a_escribir, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
     log_info(logger, "## Escritura de %u bytes", tamanio);
@@ -110,7 +119,7 @@ void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
     void* buffer_lectura = malloc(tamanio);
 
     pthread_mutex_lock(&mutex_memoria);
-    memcpy(buffer_lectura, ms_globals.memory + dir_fisica, tamanio);
+    memcpy(buffer_lectura, ms_globals.memoria + dir_fisica, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
     log_info(logger, "## Lectura de %u bytes", tamanio);
@@ -130,23 +139,37 @@ void* atender_cliente(void* arg) {
             break;
         }
 
-        if (cop == NUEVA_CPU) {
-            enviar_op_code(OK, socket_cliente);
+       if (cop == NUEVA_CPU) {
 
-        enviar_uint32(base_memory_stick, socket_cliente);
-        enviar_uint32(tamanio_memory_stick, socket_cliente);
+        // Confirmamos handshake
+        enviar_op_code(OK, socket_cliente);
 
         log_info(logger,
-                "CPU conectada. Base=%u Tam=%u",
-                base_memory_stick,
-                tamanio_memory_stick);
-                
-            pthread_mutex_lock(&mutex_memoria);
-            list_add(ms_globals.cpus_conectadas, (void*)(intptr_t)socket_cliente);
-            pthread_mutex_unlock(&mutex_memoria);
+            "Enviando info a CPU: base=%u tamaño=%u",
+            ms_globals.base,
+            ms_globals.tamanio
+        );
 
-            continue;
-        }
+        send(socket_cliente,
+            &ms_globals.base,
+            sizeof(uint32_t),
+            0);
+
+        send(socket_cliente,
+            &ms_globals.tamanio,
+            sizeof(uint32_t),
+            0);
+
+
+        pthread_mutex_lock(&mutex_memoria);
+
+        list_add(ms_globals.cpus_conectadas,
+                (void*)(intptr_t)socket_cliente);
+
+        pthread_mutex_unlock(&mutex_memoria);
+
+        continue;
+    }
 
         t_list* parametros = recibir_paquete(socket_cliente);
 

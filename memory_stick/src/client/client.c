@@ -44,9 +44,13 @@ void arrancar_cliente_km(void) {
 
     agregar_a_paquete(
         p_handshake,
-        &(ms_globals.memory_size),
+        &(ms_globals.tamanio),
         sizeof(uint32_t)
     );
+
+    log_info(logger,
+    "Enviando a Kernel Memory: tamaño=%u",
+    ms_globals.tamanio);
 
 
     enviar_paquete(

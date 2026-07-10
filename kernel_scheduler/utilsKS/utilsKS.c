@@ -14,7 +14,7 @@ int scheduler_control_loop = 1;
 
 
 //ACA PUSE EL MOCK km
-bool mock = false;
+bool mock = true;
 
 /*FALSE => Se ejecuta Normalmente
   TRUE => Se ejecuta sin KM (para realizar pruebas)

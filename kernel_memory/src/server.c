@@ -114,13 +114,22 @@ void atender_kernel(int kernel_fd) {
                 manejar_crear_proceso(kernel_fd);
                 break;
 
-            case SUSPENDER_PROCESO: {
+            case SUSPENDIDO: {
                 int pid = recibir_pid(kernel_fd);
 
                 suspender_proceso(pid);
+                enviar_op_code(OK, kernel_fd);
+                break;
+            }
 
-                int ok = 1;
-                send(kernel_fd, &ok, sizeof(int), 0);
+            case NUEVO_ESPACIO: {
+                int pid = recibir_pid(kernel_fd);
+
+                if (desuspender_proceso(pid) == 0) {
+                    enviar_op_code(OK, kernel_fd);
+                } else {
+                    enviar_op_code(NOTOK, kernel_fd);
+                }
                 break;
             }
 

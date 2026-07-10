@@ -632,6 +632,8 @@ t_instruccion_code identificar_codigo(char* token) {
 
 void* obtener_registro(char* nombre) {
     
+    log_debug(logger, "Funcion: [Obtener_Registro]");
+
     // registros de 8 bits
     if (strcmp(nombre, "AX") == 0) return &(contexto_actual->ax);
     if (strcmp(nombre, "BX") == 0) return &(contexto_actual->bx);
@@ -1053,22 +1055,23 @@ void ejecutar_stdout(t_instruccion* instr) {
     log_info (logger, "## PID:[%d] - Ejecutando [STDOUT] -  Registro [%p] - tamanio [%p]",contexto_actual->pid, ptr_dir, ptr_tam);/*Logger Obligatorio*/
     log_info(logger, "PID: %u", pid_actual);
 
-    t_paquete* paquete = crear_paquete(gl_IO_STDOUT);
+    enviar_op_code(gl_IO_STDOUT,sockets->conexion_kernel_scheduler);
 
-    agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
+    enviar_int((int)tamanio,sockets->conexion_kernel_scheduler);
 
-    // Enviar a ks y desalojar proceso
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
+    enviar_int((int)direccion_logica,sockets->conexion_kernel_scheduler);
+
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
+
 
 }
 
 void ejecutar_stdin(t_instruccion* instr) {
 
-    char* reg_dir = instr->params[1];
-    char* reg_tam = instr->params[2];
+    log_debug(logger, "STDIN");
+    
+    char* reg_dir = instr->params[0];
+    char* reg_tam = instr->params[1];
 
     uint32_t direccion_logica;
     uint32_t tamanio;
@@ -1089,6 +1092,7 @@ void ejecutar_stdin(t_instruccion* instr) {
         tamanio = (uint32_t)(*(uint8_t*)ptr_tam);
     }
 
+    log_debug(logger,"Obteniendo direccion y tamaño");
     
     tamanio = obtener_tamanio_del_registro(reg_tam);
     direccion_logica = obtener_direccion_del_registro(instr->params[1]);
@@ -1098,15 +1102,13 @@ void ejecutar_stdin(t_instruccion* instr) {
 
     enviar_op_code(gl_IO_STDIN,sockets->conexion_kernel_scheduler);
 
-    t_paquete* paquete = crear_paquete(gl_IO_STDIN);
 
-    agregar_a_paquete(paquete, &tamanio, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &direccion_logica, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &pid_actual, sizeof(uint32_t));
+    enviar_int((int)tamanio,sockets->conexion_kernel_scheduler);
+
+    enviar_int((int)direccion_logica,sockets->conexion_kernel_scheduler);
+
+    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
     
-
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
 
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "Proceso creado exitosamente por el Kernel.");
@@ -1481,11 +1483,6 @@ char* instruccion[] = {
     "NOOP",
     "SUB AX BX",
     "NOOP",
-    "SLEEP 25000",
-    "NOOP",
-    "NOOP",
-    "STDIN BX AX",
-    "SLEEP 25000",
     "STDOUT BX AX",
     "EXIT_PROC",
 

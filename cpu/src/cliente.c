@@ -3,7 +3,7 @@
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 
-bool mock = true; 
+bool mock = false; 
 
 /*-----                        MAIN                        -----*/
 

@@ -174,10 +174,14 @@ void* atender_cliente(void* arg) {
         t_list* parametros = recibir_paquete(socket_cliente);
 
         if (cop == LEER_MEMORIA) {
-            uint32_t dir_fisica = *(uint32_t*)list_get(parametros, 0);
-            uint32_t tamanio    = *(uint32_t*)list_get(parametros, 1);
+            uint32_t dir_global = *(uint32_t*)list_get(parametros,0);
+            uint32_t tamanio = *(uint32_t*)list_get(parametros,1);
 
-            void* bytes_leidos = leer_de_bloque_memoria(dir_fisica, tamanio);
+
+            uint32_t dir_local = dir_global - ms_globals.base;
+
+
+            void* bytes_leidos = leer_de_bloque_memoria(dir_local,tamanio);
 
             send(socket_cliente, bytes_leidos, tamanio, 0);
 
@@ -188,8 +192,10 @@ void* atender_cliente(void* arg) {
             uint32_t tamanio     = *(uint32_t*)list_get(parametros, 1);
             void* datos_escribir = list_get(parametros, 2);
 
-            escribir_en_bloque_memoria(dir_fisica, datos_escribir, tamanio);
+            uint32_t dir_local = dir_fisica - ms_globals.base;
 
+            escribir_en_bloque_memoria(dir_local, datos_escribir, tamanio);
+            
             enviar_op_code(OK_ESCRITURA, socket_cliente);
         }
 

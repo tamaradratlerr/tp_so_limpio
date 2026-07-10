@@ -100,14 +100,6 @@ void atender_cpu(int cpu_fd) {
                 manejar_pedido_instruccion_cpu(cpu_fd);
                 
                 break;
-
-            case LEER_MEMORIA:
-                lectura_memoria(cpu_fd);
-                break;
-
-            case ESCRIBIR_MEMORIA:
-                escritura_memoria(cpu_fd);
-                 break;
                 
             case ENVIAR_PROCESO:
                 //rescibir proceso de ks
@@ -149,6 +141,14 @@ void atender_kernel(int kernel_fd) {
                 manejar_crear_proceso(kernel_fd);
                 break;
 
+            case LEER_MEMORIA:
+                lectura_memoria(kernel_fd);
+                break;
+
+            case ESCRIBIR_MEMORIA:
+                escritura_memoria(kernel_fd);
+                break;
+           
             case SUSPENDIDO: 
                 
                 int pid_s = recibir_pid(kernel_fd);

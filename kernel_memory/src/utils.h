@@ -15,15 +15,6 @@ typedef struct {
     uint32_t tamanio;        
 } t_hueco;
 
-typedef enum {
-    HANDSHAKE_SWAP = 100,
-    LECTURA_BLOQUE,
-    ESCRITURA_BLOQUE,
-    RESPUESTA_OK,
-    RESPUESTA_ERROR,
-    RESPUESTA_DATOS
-} op_code; 
-
 typedef struct {
     int id_segmento;
     int id_ms;
@@ -34,27 +25,12 @@ typedef struct {
     int cantidad_bloques; // ¿Cuántos bloques ocupa?
 } t_segmento_aux;
 
-//DESP BORRO DA ERROR , SOLUCONAR ARCH GLOBAL
-typedef struct {
-    int pid;
-    uint32_t pc;
-    uint8_t ax, bx, cx, dx;
-    uint32_t eax, ebx, ecx, edx;
-    uint32_t si, di;
-    t_list* tabla_segmentos;
-} t_contexto; 
 
 typedef struct {
     int socket_fd;           // Socket de conexión física a esta Memory Stick
     uint32_t base_global;    // Dónde arranca en el mapa globalizado
     uint32_t tamanio;        // Cuánto espacio aporta
 } t_memory_stick_nodo;
-
-// Estructura para manejar los procesos en KM 
-typedef struct {
-    int pid;
-    t_list* instrucciones;
-} t_proceso;
 
 
 // VARIABLES GLOBALES
@@ -106,5 +82,10 @@ void ejecutar_compactacion_fisica_memory_stick(void);
 void solicitar_y_ejecutar_compactacion(int socket_ks);
 void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmento, uint32_t tamanio_segmento);
 void eliminar_segmento(int pid, int id_segmento); // La que armamos recién
+
+// SWAP
+void suspender_proceso(int pid);
+int desuspender_proceso(int pid);
+int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino);
 
 #endif /* UTILS_H_ */

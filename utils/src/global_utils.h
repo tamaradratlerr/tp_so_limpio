@@ -112,7 +112,15 @@ typedef enum // Todos los Posibles intercambios de informacion con la CPU, IO y 
     COMPACTACION_FINALIZADA,   // La Memoria le avisa al Kernel que ya terminó de mover los bytes
 
     // nueva memoria que viene de memory stick
-    NUEVA_MEMORIA_ACUM
+    NUEVA_MEMORIA_ACUM,
+
+    // SWAP
+    HANDSHAKE_SWAP = 100,
+    LECTURA_BLOQUE,
+    ESCRITURA_BLOQUE,
+    RESPUESTA_OK,
+    RESPUESTA_ERROR,
+    RESPUESTA_DATOS
 
 
 } op_code;
@@ -188,17 +196,6 @@ typedef enum
     
     //Faltan agregar los estados del CheckPoint 3
 }estado;
-
-//SWAP
-typedef enum {
-    HANDSHAKE_SWAP = 100,
-    LECTURA_BLOQUE,
-    ESCRITURA_BLOQUE,
-    RESPUESTA_OK,
-    RESPUESTA_ERROR,
-    RESPUESTA_DATOS
-} op_code; 
-
 
 //Tipo de dato que ingresa desde el kernel memory
 typedef struct {

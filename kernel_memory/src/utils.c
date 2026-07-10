@@ -959,31 +959,62 @@ void suspender_proceso(int pid) {
     }
     log_info(logger, "Proceso %d movido totalmente a SWAP", pid);
 }
-void recibir_de_swap(t_segmento_aux* seg, void* buffer_destino) {
-    // Enviar pedido
-    t_paquete* paquete = crear_paquete(); // O tu función de creación
-    paquete->codigo_operacion = LECTURA_BLOQUE;
-    agregar_a_paquete(paquete, &(seg->bloque_swap), sizeof(int)); // Pedimos el inicio
-    enviar_paquete(paquete, socket_swap);
-    eliminar_paquete(paquete);
-
-    t_list* respuesta = recibir_paquete(socket_swap);
+int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
+{
     int offset = 0;
-    for(int i = 0; i < list_size(respuesta); i++) {
-    void* bloque = list_get(respuesta, i);
-    memcpy(buffer_destino + offset, bloque, block_size_swap);
-    offset += block_size_swap;
-}
 
-    //  LIMPIEZA CRÍTICA (Evita Memory Leaks)
-    // list_destroy_and_destroy_elements libera los elementos (datos) y la lista
-    list_destroy_and_destroy_elements(respuesta, free); 
-    
-    // Actualizar estado
+    for (int i = 0; i < seg->cantidad_bloques; i++) {
+        int numero_bloque = seg->bloque_swap + i;
+
+        t_paquete* paquete = crear_paquete();
+        paquete->codigo_operacion = LECTURA_BLOQUE;
+        agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
+        enviar_paquete(paquete, socket_swap);
+        eliminar_paquete(paquete);
+
+        int cod_op = recibir_op_code(socket_swap);
+
+        if (cod_op != RESPUESTA_DATOS) {
+            log_error(logger,
+                "Error al leer bloque %d de SWAP. Opcode recibido: %d",
+                numero_bloque, cod_op);
+            return -1;
+        }
+
+        t_list* respuesta = recibir_paquete(socket_swap);
+
+        if (respuesta == NULL || list_size(respuesta) != 1) {
+            log_error(logger,
+                "Respuesta inválida al leer bloque %d de SWAP",
+                numero_bloque);
+
+            if (respuesta != NULL) {
+                list_destroy_and_destroy_elements(respuesta, free);
+            }
+
+            return -1;
+        }
+
+        void* bloque = list_get(respuesta, 0);
+
+        int bytes_restantes = seg->limite - offset;
+        int bytes_a_copiar = bytes_restantes < block_size_swap
+            ? bytes_restantes
+            : block_size_swap;
+
+        memcpy((char*) buffer_destino + offset, bloque, bytes_a_copiar);
+        offset += bytes_a_copiar;
+
+        list_destroy_and_destroy_elements(respuesta, free);
+    }
+
     liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
     seg->en_swap = false;
-    log_info(logger, "Segmento %d recuperado de SWAP", seg->id);}
 
+    log_info(logger, "Segmento %d recuperado de SWAP", seg->id_segmento);
+
+    return 0;
+}
 
 void enviar_a_swap(int nro_bloque, void* datos) {
     //  Crear y enviar el paquete
@@ -1018,12 +1049,12 @@ void enviar_a_swap(int nro_bloque, void* datos) {
     }
 }
 
-void desuspender_proceso(int pid) {
+int desuspender_proceso(int pid) {
     t_contexto* ctx = buscar_contexto(pid);
 
     if (!ctx) {
         log_error(logger, "No existe el proceso %d para desuspender", pid);
-        return;
+        return -1;
     }
 
     log_info(logger, "Des-suspendiendo proceso %d...", pid);
@@ -1044,7 +1075,7 @@ void desuspender_proceso(int pid) {
                     seg->id_segmento,
                     pid
                 );
-                return;
+                return -1;
             }
 
             int nueva_base = hueco->direccion_base;
@@ -1060,7 +1091,11 @@ void desuspender_proceso(int pid) {
             pthread_mutex_unlock(&mutex_lista_libres);
 
             void* buffer = malloc(seg->limite);
-            recibir_de_swap(seg, buffer);
+            if (recibir_de_swap(seg, buffer) != 0) {
+                free(buffer);
+                liberar_espacio_en_huecos(nueva_base, seg->limite);
+                return -1;
+            }
 
             escribir_bytes_globales(nueva_base, seg->limite, buffer);
 
@@ -1079,4 +1114,5 @@ void desuspender_proceso(int pid) {
     }
 
     log_info(logger, "Proceso %d des-suspendido exitosamente", pid);
+    return 0;
 }

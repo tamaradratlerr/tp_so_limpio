@@ -82,8 +82,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	// Creamos una conexión hacia el servidor
 	log_info(logger,"Iniciando Conexion con Kernel Memory {Kernel_Scheduler ==> Kernel_Memory}");
 	
-	if(!mock)
-	{
+	
 		
 		info_km.conexion_km = crear_conexion(info_km.ip_km, info_km.puerto_km, logger, KERNEL_MEMORY);
 		
@@ -99,25 +98,14 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 			return 1; 
 		}
 		
-		enviar_op_code(NUEVO_KERNEL, info_km.conexion_km);
-	}	
+	enviar_op_code(NUEVO_KERNEL, info_km.conexion_km);
 
+	int err = recibir_op_code(info_km.conexion_km);
 	
 	PCB* nuevo_pcb;
 
-	// Enviamos al servidor el valor de CLAVE como mensaje
-	if(mock)
-	{	
-		log_info(logger,"## Conectado a Kernel Memory ==> Socket: [MOCK]"); /*Logger Obligatorio*/
-		log_debug(logger,"Iniciando Proceso Inicial");
-		nuevo_pcb = crearNuevoProceso_mock(archivo_procesos, 1, info_km.conexion_km);
-	}	
-
-	else
-	{
-		log_debug(logger,"Iniciando Proceso Inicial");
-		nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);
-	}	
+	log_debug(logger,"Iniciando Proceso Inicial");
+	nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);	
 	
 	cambiar_estado_pcb(nuevo_pcb, RDY);
 	agregar_proceso_lista(nuevo_pcb);

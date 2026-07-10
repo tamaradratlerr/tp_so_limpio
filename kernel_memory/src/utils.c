@@ -38,7 +38,9 @@ pthread_mutex_t mutex_ms;
 uint32_t memoria_total_sistema = 0;
 
 // La función encierra TODO la creación de estructuras juntas
-void inicializar_utils(void) {
+void inicializar_utils(void)
+{
+    
     lista_contextos = list_create();
     pthread_mutex_init(&mutex_contextos, NULL);
 
@@ -52,40 +54,46 @@ void inicializar_utils(void) {
     pthread_mutex_init(&mutex_lista_libres, NULL);
 } 
 
-t_contexto* crear_contexto(int pid) {
+t_contexto* crear_contexto(int pid) 
+{
 
     t_contexto* ctx = malloc(sizeof(t_contexto));
 
     ctx->pid = pid;
 
-    //inicializar todos los registros asociados con el valor 0
-    memset(ctx, 0, sizeof(t_contexto));
+    ctx->pc = 0;
+    ctx->ax = 0;
+    ctx->bx = 0;
+    ctx->cx = 0;
+    ctx->dx = 0;
+    ctx->eax = 0;
+    ctx->ebx = 0;
+    ctx->ecx = 0;
+    ctx->edx = 0;
+    ctx->si = 0;
+    ctx->di = 0;
+    
     ctx->tabla_segmentos = list_create();
     
     return ctx;
 }
 
 //MULTIHILO
-void agregar_contexto(int pid) {
-pthread_mutex_lock(&mutex_contextos); //Evitar que 2 hilos toquen la lista al mismo tiempo.
+void agregar_contexto(int pid) 
+{
+    pthread_mutex_lock(&mutex_contextos); //Evitar que 2 hilos toquen la lista al mismo tiempo.
 
-t_contexto* ctx = crear_contexto(pid); //“crear el contexto de ejecución del Proceso”
-list_add(lista_contextos, ctx); //lo guardo en mi lista
+    t_contexto* ctx = crear_contexto(pid); //“crear el contexto de ejecución del Proceso”
+    list_add(lista_contextos, ctx); //lo guardo en mi lista
 
-pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
+    pthread_mutex_unlock(&mutex_contextos); //libero el acceso a la lista.
 }
 
-//recibir pid y path
-//pid identificar el proceso y path ¨direccion¨ para abrir el archivo
+
 void manejar_crear_proceso(int socket_cliente) {
-    t_list* paquete = recibir_paquete(socket_cliente);
-
-    int pid = *(int*) list_get(paquete,0);
-    char* path_original = (char*) list_get (paquete,1);
-
-    // 2. DUPLICAMOS el path inmediatamente en una variable propia del stack/heap local.
-    // Esto nos independiza por completo de lo que haga el paquete del socket.
-    char* path = strdup(path_original);
+    
+    int pid = recibir_pid(socket_cliente);
+    char* path = recibir_mensaje(socket_cliente, logger);
 
     FILE* archivo = fopen(path, "r");
     
@@ -93,24 +101,24 @@ void manejar_crear_proceso(int socket_cliente) {
     if (archivo == NULL) {
         log_error(logger, "No se pudo abrir el archivo: %s", path);
         free(path);
-        // Cambiamos el destroy_elements por un destroy común por si los elementos no eran mutables
-        list_destroy(paquete); 
         return;
     }
 
     t_list* instrucciones = list_create();
     char linea[256];  
-    while (fgets(linea, sizeof(linea), archivo) != NULL) { 
+   
+    while (fgets(linea, sizeof(linea), archivo) != NULL) 
+    { 
       
         char* instruccion_duplicada = strdup(linea); 
         string_trim(&instruccion_duplicada); 
         list_add(instrucciones, instruccion_duplicada);
-
+    }
+    
     fclose(archivo);
-    free(path); // Ya no necesitamos la copia local del path
-
-    // 3. Guardamos el proceso en la lista global
+    
     t_proceso* proceso = malloc(sizeof(t_proceso));
+    
     proceso->pid = pid;
     proceso->instrucciones = instrucciones;
 
@@ -118,20 +126,12 @@ void manejar_crear_proceso(int socket_cliente) {
     list_add(lista_procesos, proceso);
     pthread_mutex_unlock(&mutex_procesos);
 
-    // Crear el contexto de ejecución del Proceso
     agregar_contexto(pid);
 
     log_info(logger, "## PID: %d - Proceso Creado Exitosamente", pid);
 
-    // 4. LA CLAVE DE LA SOLUCIÓN:
-    // Si list_destroy_and_destroy_elements(paquete, free) te daba error, 
-    // probá usando list_destroy(paquete) a secas. 
-    // Si adentro tenés un buffer único, deberías liberar el buffer contenedor (si tenés la referencia),
-    // pero destruir la estructura de la lista con list_destroy NO va a tocar los punteros internos y evitará el crash.
-    list_destroy(paquete);
 }
 
-}
 
 //FINALIZACION DE PROCESO
 //a partir de este PID recibido se deberán liberar todos los segmentos asociados al Proceso 
@@ -742,6 +742,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     int ok = 1;
     send(socket_cliente, &ok, sizeof(int), 0);
 }
+
 void eliminar_segmento(int pid, int id_segmento) {
     pthread_mutex_lock(&mutex_contextos);
     t_contexto* ctx = buscar_contexto(pid);

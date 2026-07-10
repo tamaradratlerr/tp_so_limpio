@@ -97,6 +97,14 @@ void atender_cpu(int cpu_fd) {
                 manejar_pedido_instruccion_cpu(cpu_fd);
                 
                 break;
+
+            case LEER_MEMORIA:
+                lectura_memoria(cpu_fd);
+                break;
+
+            case ESCRIBIR_MEMORIA:
+                escritura_memoria(cpu_fd);
+                 break;
                 
             case ENVIAR_PROCESO:
                 //rescibir proceso de ks
@@ -143,7 +151,7 @@ void atender_kernel(int kernel_fd) {
                 break;
             }
 
-            case NUEVO_ESPACIO: 
+            case NUEVO_ESPACIO:  //desuspendido
             {
                 int pid = recibir_pid(kernel_fd);
 
@@ -172,6 +180,7 @@ void atender_kernel(int kernel_fd) {
                 int id_segmento_mem = recibir_int (kernel_fd);
 
                 eliminar_segmento(pid_mem, id_segmento_mem);
+                enviar_op_code(OK, kernel_fd);
 
                 break;
 

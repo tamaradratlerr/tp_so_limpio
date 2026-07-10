@@ -70,6 +70,8 @@ int buscar_indice_contexto(int pid);
 void manejar_crear_proceso(int socket_cliente);
 void manejar_finalizar_proceso(int socket_cliente);
 void manejar_pedido_instruccion_cpu(int socket_cliente);
+void lectura_memoria(int socket_ks);
+void escritura_memoria(int socket_ks);
 void manejar_guardar_contexto(int socket_cliente);
 void enviar_contexto_cpu(int socket_cpu, int pid);
 void recibir_contexto_cpu(int socket_cpu);

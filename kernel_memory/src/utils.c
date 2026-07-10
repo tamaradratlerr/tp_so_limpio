@@ -526,6 +526,33 @@ void conexion_memory_stick(int socket_ms) {
 
 
 }
+static bool mem_corrupt_notificado = false;
+static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
+
+void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
+{
+    pthread_mutex_lock(&mutex_mem_corrupt);
+
+    if (!mem_corrupt_notificado) {
+        mem_corrupt_notificado = true;
+
+        log_error(logger,
+            "## Memory Stick desconectada. Memoria corrupta.");
+
+        if (socket_kernel_scheduler >= 0) {
+            enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_mem_corrupt);
+
+    pthread_mutex_lock(&mutex_ms);
+    list_remove_element(lista_memory_sticks, ms);
+    pthread_mutex_unlock(&mutex_ms);
+
+    close(ms->socket_fd);
+}
+
 
 
 t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global) {

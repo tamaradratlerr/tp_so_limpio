@@ -98,7 +98,8 @@ void manejar_crear_proceso(int socket_cliente) {
     
     // Si falló el archivo, liberamos de forma segura y salimos
     if (archivo == NULL) {
-        log_error(logger, "No se pudo abrir el archivo: %s", path);
+        log_error(logger, "No se pudo abrir el archivo: %s", path_completo);
+        enviar_op_code(NOTOK, socket_cliente);
         free(path);
         free(path_completo);
         return;
@@ -129,6 +130,10 @@ void manejar_crear_proceso(int socket_cliente) {
     agregar_contexto(pid);
 
     log_info(logger, "## PID: %d - Proceso Creado Exitosamente", pid);
+
+    enviar_op_code(OK, socket_cliente);
+    free(path);
+    free(path_completo);
 
 }
 
@@ -200,16 +205,6 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     t_contexto* contexto = NULL;
 
-//devolver la memoria a la lista de huecos y liberar bloques de SWAP.
-    for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
-    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
-
-    if (seg->en_swap) {
-        liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
-    } else {
-        liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
-    }
-}
 
     //libero todas las instrucciones del proceso pq antes use strdup(instruccion) y usa mem. dinam
     list_destroy_and_destroy_elements(proceso->instrucciones, free);
@@ -218,7 +213,6 @@ void manejar_finalizar_proceso(int socket_cliente) {
     free(proceso);
 
 
-    
     //buscar contexto del PID
     int indice_contexto = buscar_indice_contexto(pid);
 
@@ -231,6 +225,17 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
         pthread_mutex_unlock(&mutex_contextos);
 
+    //devolver la memoria a la lista de huecos y liberar bloques de SWAP.
+    for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
+    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+
+    if (seg->en_swap) {
+        liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
+    } else {
+        liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+    }
+
+
         //liberar tabla de segmentos
         list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
 
@@ -238,7 +243,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
         free(contexto);
     }
 
-
+ }
     //libero el paquete recibido por socket
     list_destroy_and_destroy_elements(paquete, free);
 }
@@ -1117,7 +1122,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
     for (int i = 0; i < seg->cantidad_bloques; i++) {
         int numero_bloque = seg->bloque_swap + i;
 
-        t_paquete * paquete = crear_paquete(ESCRITURA_BLOQUE);
+        t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
         agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
         enviar_paquete(paquete, socket_swap);
         eliminar_paquete(paquete);
@@ -1168,7 +1173,7 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 
 void enviar_a_swap(int nro_bloque, void* datos) {
     //  Crear y enviar el paquete
-    t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
+    t_paquete * paquete = crear_paquete(ESCRITURA_BLOQUE);
     
     agregar_a_paquete(paquete, &nro_bloque, sizeof(int));
     agregar_a_paquete(paquete, datos, block_size_swap);

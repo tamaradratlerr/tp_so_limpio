@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "utils.h"              
+#include "utils.h"        
 #include <sys/socket.h>
 #include <commons/string.h>
 #include <commons/collections/list.h>
@@ -15,15 +15,7 @@
 #include "../../utils/src/global_utils.h"
 
 
-//“almacenar un contexto de ejecución por PID”
-
-
-//“Este módulo deberá mantener el contexto de ejecución de cada Proceso del sistema”
-//-> tengo que guardar TODOS los contextos de TODOS los procesos
-// global pq la usan varias partes del programa:crear proceso, cpu, finalizar proceso.
-
-//inicializacion que va en el main EN UTILS.C
-// Al principio de tu utils.c, las variables globales van declaradas sin asignarles funciones:
+/*Declaracion de Variables*/
 pthread_mutex_t mutex_lista_libres;
 t_list* lista_huecos_libres;
 
@@ -37,6 +29,8 @@ t_list* lista_memory_sticks;
 pthread_mutex_t mutex_ms;
 uint32_t memoria_total_sistema = 0;
 
+/*Funciones*/
+
 // La función encierra TODO la creación de estructuras juntas
 void inicializar_utils(void)
 {
@@ -45,7 +39,7 @@ void inicializar_utils(void)
     pthread_mutex_init(&mutex_contextos, NULL);
 
     lista_procesos = list_create();
-    pthread_mutex_init(&mutex_procesos, NULL); // Acá tenías un cierre '}' extra que rompía todo
+    pthread_mutex_init(&mutex_procesos, NULL); 
 
     lista_memory_sticks = list_create();
     pthread_mutex_init(&mutex_ms, NULL);
@@ -546,43 +540,44 @@ void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
 }
 
 
-bool desconectada;
+// bool desconectada;
 
-void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
-{
-    bool avisar_ks = false;
-    int fd_a_cerrar = -1;
+// void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
+// {
+//     bool avisar_ks = false;
+//     int fd_a_cerrar = -1;
 
-    pthread_mutex_lock(&mutex_ms);
+//     pthread_mutex_lock(&mutex_ms);
 
-    if (!ms->desconectada) {
-        ms->desconectada = true;
-        fd_a_cerrar = ms->socket_fd;
-        ms->socket_fd = -1;
+//     if (!ms->desconectada) 
+//     {
+//         ms->desconectada = true;
+//         fd_a_cerrar = ms->socket_fd;
+//         ms->socket_fd = -1;
 
-        list_remove_element(lista_memory_sticks, ms);
-    }
+//         list_remove_element(lista_memory_sticks, ms);
+//     }
 
-    pthread_mutex_unlock(&mutex_ms);
+//     pthread_mutex_unlock(&mutex_ms);
 
-    if (fd_a_cerrar != -1) {
-        close(fd_a_cerrar);
-    }
+//     if (fd_a_cerrar != -1) {
+//         close(fd_a_cerrar);
+//     }
 
-    pthread_mutex_lock(&mutex_mem_corrupt);
+//     pthread_mutex_lock(&mutex_mem_corrupt);
 
-    if (!mem_corrupt_notificado) {
-        mem_corrupt_notificado = true;
-        avisar_ks = true;
-    }
+//     if (!mem_corrupt_notificado) {
+//         mem_corrupt_notificado = true;
+//         avisar_ks = true;
+//     }
 
-    pthread_mutex_unlock(&mutex_mem_corrupt);
+//     pthread_mutex_unlock(&mutex_mem_corrupt);
 
-    if (avisar_ks && socket_kernel_scheduler >= 0) {
-        log_error(logger, "## Memory Stick desconectada. Memoria corrupta.");
-        enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
-    }
-}
+//     if (avisar_ks && socket_kernel_scheduler >= 0) {
+//         log_error(logger, "## Memory Stick desconectada. Memoria corrupta.");
+//         enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
+//     }
+// }
 
 
 t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global) {
@@ -748,19 +743,20 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
 
     int max_segment_size = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
 
-    if (tamanio_segmento > (uint32_t) max_segment_size) {
-    log_error(
-        logger,
-        "## PID: %d - Segmento %d excede tamaño máximo permitido: %u > %d",
-        pid,
-        id_segmento,
-        tamanio_segmento,
-        max_segment_size
-    );
+    if (tamanio_segmento > (uint32_t) max_segment_size) 
+    {
+        log_error(
+            logger,
+            "## PID: %d - Segmento %d excede tamaño máximo permitido: %u > %d",
+            pid,
+            id_segmento,
+            tamanio_segmento,
+            max_segment_size
+        );
 
-    int error = -1;
-    send(socket_cliente, &error, sizeof(int), 0);
-    return;
+        int error = -1;
+        enviar_op_code(NOTOK,socket_cliente);
+        return;
     }
     
     pthread_mutex_lock(&mutex_lista_libres);
@@ -770,7 +766,8 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     if (bache_elegido == NULL) {
         int espacio_total_disponible = calcular_espacio_libre_total();
 
-        if (espacio_total_disponible >= tamanio_segmento) {
+        if (espacio_total_disponible >= tamanio_segmento) 
+        {
             // No está lleno, está fragmentado -> SE LANZA TODO EL FLUJO AUTOMÁTICO
             solicitar_y_ejecutar_compactacion(socket_ks);
 
@@ -778,7 +775,9 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
             pthread_mutex_lock(&mutex_lista_libres);
             bache_elegido = seleccionar_hueco_segun_algoritmo(tamanio_segmento);
             pthread_mutex_unlock(&mutex_lista_libres);
-        } else {
+        } 
+        else 
+        {
             log_error(logger, "## Out of Memory real - PID: %d - Tamaño: %u", pid, tamanio_segmento);
             int error = -1;
             send(socket_cliente, &error, sizeof(int), 0);
@@ -812,8 +811,10 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
 
     log_info(logger, "## PID: %d - Segmento Creado %d - Tamaño: %u", pid, id_segmento, tamanio_segmento);
 
+
+
     int ok = 1;
-    send(socket_cliente, &ok, sizeof(int), 0);
+    enviar_op_code(OK,socket_cliente);
 }
 
 void eliminar_segmento(int pid, int id_segmento) {

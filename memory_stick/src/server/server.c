@@ -1,6 +1,6 @@
 #include "utils.h"
 
-bool mock = true;
+bool mock = false;
 t_log* logger;
 t_config* config;
 t_memory_stick_global ms_globals;

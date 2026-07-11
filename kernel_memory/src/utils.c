@@ -489,18 +489,17 @@ void conexion_memory_stick(int socket_ms) {
 
     // Inicializamos o expandimos el espacio libre mapeado en KM
     pthread_mutex_lock(&mutex_lista_libres);
-    if (list_is_empty(lista_huecos_libres)) 
-    {
-        t_hueco* primer_hueco = malloc(sizeof(t_hueco));
-        primer_hueco->direccion_base = 0;
-        primer_hueco->tamanio = tamanio_recibido;
-        list_add(lista_huecos_libres, primer_hueco);
-    } 
-    else 
-    {
-        t_hueco* ultimo_hueco = list_get(lista_huecos_libres, list_size(lista_huecos_libres) - 1);
-        ultimo_hueco->tamanio += tamanio_recibido;
-    }
+   
+
+    t_hueco* nuevo_hueco = malloc(sizeof(t_hueco));
+    nuevo_hueco->direccion_base = nuevo_ms->base_global;
+    nuevo_hueco->tamanio = nuevo_ms->tamanio;
+
+    list_add(lista_huecos_libres, nuevo_hueco);
+
+    // Mantener los huecos ordenados por dirección base
+    list_sort(lista_huecos_libres, _ordenar_huecos_por_base);
+
 
     pthread_mutex_unlock(&mutex_lista_libres);
 
@@ -518,6 +517,8 @@ void conexion_memory_stick(int socket_ms) {
 
 
 }
+
+
 static bool mem_corrupt_notificado = false;
 static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
 
@@ -753,6 +754,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
 
     int max_segment_size = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
 
+
     if (tamanio_segmento > (uint32_t) max_segment_size) 
     {
         log_error(
@@ -777,6 +779,12 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
         
         int espacio_total_disponible = calcular_espacio_libre_total();
 
+
+        log_debug(logger,
+        "Espacio libre total: %d - Pedido: %u",
+        espacio_total_disponible,
+        tamanio_segmento);
+        
         if (espacio_total_disponible >= tamanio_segmento) 
         {
             // No está lleno, está fragmentado -> SE LANZA TODO EL FLUJO AUTOMÁTICO

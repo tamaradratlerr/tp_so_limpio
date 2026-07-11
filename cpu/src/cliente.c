@@ -1018,8 +1018,14 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     char* tamanio = instr->params[1];
     op_code err;
 
-    log_info (logger, "## PID:[%d] - Ejecutando [MUTEX CREATE] - ID [%s] - tamanio [%s]",contexto_actual->pid, id_segmento, tamanio);/*Logger Obligatorio*/
-    
+    log_info(
+        logger,
+        "## PID: [%d] - Ejecutando: [MEM_ALLOC] - ID Segmento: [%s] - Tamaño: [%s]",
+        contexto_actual->pid,
+        id_segmento,
+        tamanio
+    );    
+
     enviar_op_code (gl_MEM_ALLOC, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
     if(err != OK)  log_error(logger, "Error en operacion: %d", (int)err); //MARCAR ERROR
@@ -1045,7 +1051,7 @@ void ejecutar_mem_alloc (t_instruccion* instr){
         base
     );
 
-    log_info (logger, "ok"); //Completar LOG
+    log_debug (logger, "[CPU] Se creó el segmento y se envió a KM"); //Completar LOG
             
 }
 

@@ -30,7 +30,9 @@ typedef struct {
 typedef struct {
     int socket_fd;           // Socket de conexión física a esta Memory Stick
     uint32_t base_global;    // Dónde arranca en el mapa globalizado
-    uint32_t tamanio;        // Cuánto espacio aporta
+    uint32_t tamanio; 
+    char* port;
+    char* ip;       // Cuánto espacio aporta
 } t_memory_stick_nodo;
 
 

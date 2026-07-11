@@ -8,7 +8,7 @@ int delay_memoria;
 pthread_mutex_t mutex_memoria;
 
 extern void arrancar_cliente_km(void);
-
+extern int socket_km;
 
 int main(int argc, char** argv)
 {
@@ -55,6 +55,8 @@ int main(int argc, char** argv)
     // Conexión con Kernel Memory
     arrancar_cliente_km();
 
+    ms_globals.base = recibir_int(socket_km);
+    ms_globals.tamanio = recibir_int(socket_km);
 
     // Servidor para CPUs
     int server_fd = iniciar_servidor(server_port, logger);

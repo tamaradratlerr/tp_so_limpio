@@ -383,6 +383,8 @@ void enviar_mensaje(char *mensaje, int socket_cliente)
 {
     int size = strlen(mensaje) + 1;   // +1 para incluir el '\0'
     enviar_buffer(mensaje, size, socket_cliente);
+
+    log_debug(logger, "Se envio el Mensaje:[%s]",mensaje);
 }
 
 void enviar_buffer(void *buffer, int size, int socket_cliente)

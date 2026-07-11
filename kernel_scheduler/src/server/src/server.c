@@ -90,6 +90,7 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
         
 
         switch (opcode) {
+            
             case NUEVA_CPU:
                 nueva_cpu(cliente_fd);
                 break;
@@ -108,6 +109,14 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 break;
             case DESALOJO: /*Consulta de la CPU por si debe desalojar*/
                 desalojo(cliente_fd);
+                break;
+
+            case gl_MEM_ALLOC:
+                mem_alloc(cliente_fd);
+                break;
+
+            case gl_MEM_FREE:
+                mem_free(cliente_fd);
                 break;
 
             case MEM_CORRUPT:
@@ -1008,68 +1017,39 @@ void compactacion (int socket_cliente){
 //NUEVA_MEMORY_STICK
 void recibir_nueva_memory_stick(int socket_km)
 {
-    int size;
-
-    void* buffer = recibir_buffer(&size, socket_km);
-
 
     t_mem_stick* ms = malloc(sizeof(t_mem_stick));
 
-    int offset = 0;
 
     if(mock)
     {
         log_info(logger,
             "========== MOCK MEMORY STICK ==========");
     }
-    else{
+    else
+    {
 
-    // IP
-    ms->ip = strdup(buffer + offset);
-    offset += strlen(ms->ip) + 1;
-
-
-    // Puerto
-    ms->puerto = strdup(buffer + offset);
-    offset += strlen(ms->puerto) + 1;
+        ms->ip = recibir_mensaje(socket_km,logger);
+        ms->puerto = recibir_mensaje(socket_km,logger);
+        ms->base = recibir_int(socket_km);
+        ms->tamanio = recibir_int(socket_km);
 
 
-    // Base
-    memcpy(
-        &ms->base,
-        buffer + offset,
-        sizeof(uint32_t)
-    );
-
-    offset += sizeof(uint32_t);
+        list_add(list_suplementarias->ms, ms);
 
 
-    // Tamaño
-    memcpy(
-        &ms->tamanio,
-        buffer + offset,
-        sizeof(uint32_t)
-    );
+
+        log_info(logger,
+            "Nueva Memory Stick recibida: IP=%s PUERTO=%s BASE=%u TAM=%u",
+            ms->ip,
+            ms->puerto,
+            ms->base,
+            ms->tamanio
+        );
 
 
-    ms->socket = -1; // KS no se conecta
-
-    list_add(list_suplementarias->ms, ms);
-
-    free(buffer);
-
-
-    log_info(logger,
-        "Nueva Memory Stick recibida: IP=%s PUERTO=%s BASE=%u TAM=%u",
-        ms->ip,
-        ms->puerto,
-        ms->base,
-        ms->tamanio
-    );
-
-
-    enviar_memory_stick_a_cpus(ms);
-    nuevo_espacio();
+        enviar_memory_stick_a_cpus(ms);
+        nuevo_espacio();
     
     } 
 }
@@ -2079,17 +2059,17 @@ void mem_alloc (int socket_cliente){
 
     enviar_pid(pid, info_km.conexion_km);
    
-    t_paquete* paquete = crear_paquete(gl_MEM_ALLOC);
-    enviar_int((int) tamanio, info_km.conexion_km);
-    enviar_int ((int) tamanio, info_km.conexion_km);
+    enviar_int(atoi(tamanio), info_km.conexion_km);
+
+    enviar_int(atoi(id_segmento),info_km.conexion_km);
 
 
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
     }
 
-    int base = recibir_pid(info_km.conexion_km);
-    enviar_pid(base, socket_cliente);
+    int base = recibir_int(info_km.conexion_km);
+    enviar_int(base, socket_cliente);
 
 }; 
 
@@ -2111,7 +2091,7 @@ void mem_free (int socket_cliente){
     enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
 
     enviar_pid(pid,info_km.conexion_km);
-    enviar_int((int) id_segmento, info_km.conexion_km);
+    enviar_int(atoi(id_segmento), info_km.conexion_km);
 
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);

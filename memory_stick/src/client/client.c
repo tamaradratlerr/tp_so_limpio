@@ -1,11 +1,14 @@
 #include "client.h"
 
 extern bool mock;
+int socket_km;
 
 void arrancar_cliente_km(void) {
 
     char* ip_km = config_get_string_value(config, "IP_KERNEL_MEMORY");
     char* puerto_km = config_get_string_value(config, "KERNEL_MEMORY_PORT");
+    char* ip = config_get_string_value(config, "IP_MEMORY_STICK");
+    char* port = config_get_string_value(config, "MEMORY_STICK_PORT");
 
 
     if(mock){
@@ -17,7 +20,7 @@ void arrancar_cliente_km(void) {
     }
 
 
-    int socket_km = crear_conexion(
+    socket_km = crear_conexion(
         ip_km,
         puerto_km,
         logger,
@@ -37,30 +40,18 @@ void arrancar_cliente_km(void) {
     log_info(logger,
         "## Conectado a Kernel Memory");
 
+    enviar_op_code(NUEVA_MEMORY_STICK,socket_km);
 
-    t_paquete* p_handshake =
-        crear_paquete(NUEVA_MEMORY_STICK);
+    enviar_int(ms_globals.tamanio,socket_km);
 
+    enviar_mensaje(ip,socket_km);
 
-    agregar_a_paquete(
-        p_handshake,
-        &(ms_globals.tamanio),
-        sizeof(uint32_t)
-    );
+    enviar_mensaje(port,socket_km);
+
 
     log_info(logger,
     "Enviando a Kernel Memory: tamaño=%u",
     ms_globals.tamanio);
-
-
-    enviar_paquete(
-        p_handshake,
-        socket_km
-    );
-
-
-    eliminar_paquete(p_handshake);
-
 
 
     pthread_t thread_km;
@@ -78,6 +69,7 @@ void arrancar_cliente_km(void) {
 
 
     pthread_detach(thread_km);
+
 }
 
 void* atender_kernel_memory(void* arg) {

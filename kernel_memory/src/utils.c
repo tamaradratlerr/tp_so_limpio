@@ -90,8 +90,10 @@ void manejar_crear_proceso(int socket_cliente) {
     char* path = recibir_mensaje(socket_cliente, logger);
 
     char* base_path = config_get_string_value(config_km, "SCRIPTS_BASEPATH");
-    char* path_completo = string_from_format("%s/%s", base_path, path);
+    char* path_completo = string_from_format("%s%s", base_path, path);
 
+    log_debug(logger, "BASE:[%s] - PATH COMPLETO:[%s]",base_path,path_completo);
+    
     FILE* archivo = fopen(path_completo, "r");
     
     // Si falló el archivo, liberamos de forma segura y salimos
@@ -443,74 +445,73 @@ bool _ordenar_por_base(void* seg1, void* seg2) {
 }
 
 void conexion_memory_stick(int socket_ms) {
+    
     uint32_t tamanio_recibido = 0;
 
-    t_list* paquete = recibir_paquete(socket_ms);
-    if (paquete == NULL || list_size(paquete) < 1) {
-        log_error(logger, "Error al recibir el tamaño del Memory Stick.");
-        close(socket_ms);
-        if (paquete != NULL) list_destroy_and_destroy_elements(paquete, free);
-        return;
-    }
-
-    tamanio_recibido = *(uint32_t*) list_get(paquete, 0);
-    list_destroy_and_destroy_elements(paquete, free);
+    tamanio_recibido = recibir_int(socket_ms);
+    char* ip = recibir_mensaje(socket_ms,logger);
+    char* port = recibir_mensaje(socket_ms,logger);
 
     t_memory_stick_nodo* nuevo_ms = malloc(sizeof(t_memory_stick_nodo));
     nuevo_ms->socket_fd = socket_ms;
     nuevo_ms->tamanio = tamanio_recibido;
+    nuevo_ms->ip = ip;
+    nuevo_ms->port = port;
+
 
     pthread_mutex_lock(&mutex_ms);
-    nuevo_ms->base_global = memoria_total_sistema;
-    memoria_total_sistema += tamanio_recibido;
-    list_add(lista_memory_sticks, nuevo_ms);
+        nuevo_ms->base_global = memoria_total_sistema;
+        memoria_total_sistema += tamanio_recibido;
+        list_add(lista_memory_sticks, nuevo_ms);
     pthread_mutex_unlock(&mutex_ms);
 
 
     //TEMA DE LA BASE
-    t_paquete* paquete_info = crear_paquete(INFO_MEMORY_STICK);
-
     t_info_memory_stick info;
 
     info.base = nuevo_ms->base_global;
     info.tamanio = nuevo_ms->tamanio;
 
-    agregar_a_paquete(paquete_info, &info.base, sizeof(uint32_t));
-    agregar_a_paquete(paquete_info, &info.tamanio, sizeof(uint32_t));
+    enviar_int(info.base,socket_ms);
+    enviar_int(info.tamanio,socket_ms);
 
-    enviar_paquete(paquete_info, socket_ms);
 
     log_info(logger,
     "MS conectado: base=%u tamaño=%u",
     nuevo_ms->base_global,
     nuevo_ms->tamanio);
 
-    eliminar_paquete(paquete_info);
 
     // Inicializamos o expandimos el espacio libre mapeado en KM
     pthread_mutex_lock(&mutex_lista_libres);
-    if (list_is_empty(lista_huecos_libres)) {
+    if (list_is_empty(lista_huecos_libres)) 
+    {
         t_hueco* primer_hueco = malloc(sizeof(t_hueco));
         primer_hueco->direccion_base = 0;
         primer_hueco->tamanio = tamanio_recibido;
         list_add(lista_huecos_libres, primer_hueco);
-    } else {
+    } 
+    else 
+    {
         t_hueco* ultimo_hueco = list_get(lista_huecos_libres, list_size(lista_huecos_libres) - 1);
         ultimo_hueco->tamanio += tamanio_recibido;
     }
+
     pthread_mutex_unlock(&mutex_lista_libres);
 
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    t_paquete* paquete_notificacion = crear_paquete(NUEVO_ESPACIO);
+    enviar_op_code(NUEVA_MEMORY_STICK,socket_kernel_scheduler);
 
-    agregar_a_paquete(
-    paquete_notificacion,
-    &memoria_total_sistema,
-    sizeof(uint32_t)); 
+    enviar_mensaje(nuevo_ms->ip,socket_kernel_scheduler);
 
-    enviar_paquete(paquete_notificacion , socket_kernel_scheduler);
-    eliminar_paquete (paquete_notificacion);
+    enviar_mensaje(nuevo_ms->port,socket_kernel_scheduler);
+
+    enviar_int(nuevo_ms->base_global,socket_kernel_scheduler);
+    
+    enviar_int(nuevo_ms->tamanio,socket_kernel_scheduler);
+
+
 }
 static bool mem_corrupt_notificado = false;
 static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
@@ -638,13 +639,17 @@ int calcular_espacio_libre_total() {
     return acumulado;
 }
 
-t_hueco* seleccionar_hueco_segun_algoritmo(uint32_t tamanio_solicitado) {
+t_hueco* seleccionar_hueco_segun_algoritmo(uint32_t tamanio_solicitado) 
+{
+    
     char* estrategia = config_get_string_value(config_km, "ALLOCATION_STRATEGY"); // Lee "BEST" de tu config
     t_hueco* elegido = NULL;
 
     t_list* huecos_validos = list_create();
+
     for(int i = 0; i < list_size(lista_huecos_libres); i++) {
         t_hueco* h = list_get(lista_huecos_libres, i);
+       
         if(h->tamanio >= tamanio_solicitado) {
             list_add(huecos_validos, h);
         }
@@ -764,6 +769,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     pthread_mutex_unlock(&mutex_lista_libres);
 
     if (bache_elegido == NULL) {
+        
         int espacio_total_disponible = calcular_espacio_libre_total();
 
         if (espacio_total_disponible >= tamanio_segmento) 
@@ -780,9 +786,10 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
         {
             log_error(logger, "## Out of Memory real - PID: %d - Tamaño: %u", pid, tamanio_segmento);
             int error = -1;
-            send(socket_cliente, &error, sizeof(int), 0);
+            enviar_op_code(NOTOK,socket_cliente);
             return;
         }
+
     }
 
     // Recortamos el bache que tomamos para el nuevo segmento
@@ -815,6 +822,8 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
 
     int ok = 1;
     enviar_op_code(OK,socket_cliente);
+
+    enviar_int(nuevo_segmento->direccion_base,socket_cliente);
 }
 
 void eliminar_segmento(int pid, int id_segmento) {

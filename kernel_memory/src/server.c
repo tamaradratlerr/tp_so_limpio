@@ -175,8 +175,9 @@ void atender_kernel(int kernel_fd) {
             case gl_MEM_ALLOC:
 
                 int pid_a = recibir_pid(kernel_fd);
-                int id_segmento = recibir_int(kernel_fd); 
                 int tamanio = recibir_int(kernel_fd);
+                int id_segmento = recibir_int(kernel_fd); 
+                
 
                 creacion_segmento(kernel_fd,socket_kernel_scheduler,pid_a,id_segmento,tamanio);
 

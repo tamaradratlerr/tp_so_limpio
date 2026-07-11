@@ -118,7 +118,7 @@ void manejar_crear_proceso(int socket_cliente) {
         string_trim(&instruccion_duplicada); 
         list_add(instrucciones, instruccion_duplicada);
     }
-    
+
     fclose(archivo);
     
     t_proceso* proceso = malloc(sizeof(t_proceso));
@@ -135,7 +135,6 @@ void manejar_crear_proceso(int socket_cliente) {
     log_info(logger, "## PID: %d - Proceso Creado Exitosamente", pid);
 
 }
-
 
 //FINALIZACION DE PROCESO
 //a partir de este PID recibido se deberán liberar todos los segmentos asociados al Proceso 
@@ -180,7 +179,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     t_list* paquete = recibir_paquete(socket_cliente); //recibe el pid
 
-    int pid = atoi(list_get(paquete, 0)); //obtiene el pid del paquete (atoi= convierte texto a número)
+    int pid = *(int*) list_get(paquete, 0);
 
     //ahora identifico que proceso debe eliminar
 
@@ -203,6 +202,7 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
     pthread_mutex_unlock(&mutex_procesos);
 
+    t_contexto* contexto = NULL;
 
 //devolver la memoria a la lista de huecos y liberar bloques de SWAP.
     for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
@@ -518,6 +518,33 @@ void conexion_memory_stick(int socket_ms) {
     enviar_paquete(paquete_notificacion , socket_kernel_scheduler);
     eliminar_paquete (paquete_notificacion);
 }
+static bool mem_corrupt_notificado = false;
+static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
+
+void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
+{
+    pthread_mutex_lock(&mutex_mem_corrupt);
+
+    if (!mem_corrupt_notificado) {
+        mem_corrupt_notificado = true;
+
+        log_error(logger,
+            "## Memory Stick desconectada. Memoria corrupta.");
+
+        if (socket_kernel_scheduler >= 0) {
+            enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
+        }
+    }
+
+    pthread_mutex_unlock(&mutex_mem_corrupt);
+
+    pthread_mutex_lock(&mutex_ms);
+    list_remove_element(lista_memory_sticks, ms);
+    pthread_mutex_unlock(&mutex_ms);
+
+    close(ms->socket_fd);
+}
+
 
 bool desconectada;
 

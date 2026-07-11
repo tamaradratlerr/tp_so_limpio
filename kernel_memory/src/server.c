@@ -128,11 +128,15 @@ void atender_kernel(int kernel_fd) {
     log_info(logger, "--- Hilo KERNEL SCHEDULER [%d] iniciado ---", kernel_fd);
 
     while (1) {
+
+        log_info(logger,"*****     Esperando Por nuevas Solicitudes de Kernel Scheduler     *****");
+
         int cod_op = recibir_op_code(kernel_fd);
 
         switch (cod_op) 
         {
             case ENVIAR_PROCESO:
+            
             case ks_INIT_PROC:
                 manejar_crear_proceso(kernel_fd);
                 break;
@@ -146,34 +150,35 @@ void atender_kernel(int kernel_fd) {
                 break;
            
             case SUSPENDIDO: 
-            {
-                int pid = recibir_pid(kernel_fd);
+                
+                int pid_s = recibir_pid(kernel_fd);
 
-                suspender_proceso(pid);
-                enviar_op_code(OK, kernel_fd);
-                break;
-            }
+                    suspender_proceso(pid_s);
+                    enviar_op_code(OK, kernel_fd);
+                    break;
 
             case NUEVO_ESPACIO:  //desuspendido
-            {
-                int pid = recibir_pid(kernel_fd);
+                
+                int pid_e = recibir_pid(kernel_fd);
 
-                if (desuspender_proceso(pid) == 0) {
+                if (desuspender_proceso(pid_e) == 0) 
+                {
                     enviar_op_code(OK, kernel_fd);
-                } else {
+                } 
+                else 
+                {
                     enviar_op_code(NOTOK, kernel_fd);
                 }
                 
                 break;
-            }
 
             case gl_MEM_ALLOC:
 
-                int pid = recibir_pid(kernel_fd);
+                int pid_a = recibir_pid(kernel_fd);
                 int id_segmento = recibir_int(kernel_fd); 
                 int tamanio = recibir_int(kernel_fd);
 
-                creacion_segmento(kernel_fd,socket_kernel_scheduler,pid,id_segmento,tamanio);
+                creacion_segmento(kernel_fd,socket_kernel_scheduler,pid_a,id_segmento,tamanio);
 
                 break;
             
@@ -187,11 +192,17 @@ void atender_kernel(int kernel_fd) {
 
                 break;
 
-            case ks_EXIT:
-                
+            case gl_EXIT: 
                 manejar_finalizar_proceso(kernel_fd);
-                
                 break;
+
+            case km_IO_STDOUT:
+                lectura_memoria(kernel_fd);
+                break;
+
+            case km_IO_STDIN:
+                escritura_memoria(kernel_fd);
+                 break;
 
             case -1:
                 log_warning(logger, "Kernel (ks) en socket %d se desconectó.", kernel_fd);

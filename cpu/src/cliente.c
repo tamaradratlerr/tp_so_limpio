@@ -699,9 +699,13 @@ void* obtener_registro(char* nombre) {
 }
 
 bool es_registro_32bits(char* nombre) {
-    
-    // si empieza con E o es SI o DI o PC  es de 32 bits
-    return (nombre[0] == 'E' || strcmp(nombre, "SI") == 0 || strcmp(nombre, "DI") == 0 || strcmp(nombre, "PC") == 0);
+    return strcmp(nombre, "EAX") == 0 ||
+           strcmp(nombre, "EBX") == 0 ||
+           strcmp(nombre, "ECX") == 0 ||
+           strcmp(nombre, "EDX") == 0 ||
+           strcmp(nombre, "SI") == 0 ||
+           strcmp(nombre, "DI") == 0 ||
+           strcmp(nombre, "PC") == 0;
 }
 
 /* ---------------- FUNCIONES DE EXECUTE POR INTRUCCION ---------------- */
@@ -1160,9 +1164,15 @@ void ejecutar_stdin(t_instruccion* instr) {
 
     log_debug(logger,"Obteniendo direccion y tamaño");
     
-    tamanio = obtener_tamanio_del_registro(reg_tam);
-    direccion_logica = obtener_direccion_del_registro(instr->params[1]);
     uint32_t pid_actual = proceso_en_ejecucion->pid; 
+
+    log_debug(logger,
+        "Registro dir=%s valor=%u | Registro tam=%s valor=%u",
+        reg_dir,
+        direccion_logica,
+        reg_tam,
+        tamanio
+    );
 
     log_info (logger, "## PID:[%d] - Ejecutando [STDIN] - Destino [%d] - tamanio [%d]",contexto_actual->pid, direccion_logica, tamanio);/*Logger Obligatorio*/
 
@@ -1330,9 +1340,20 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
 }
 
 
-uint32_t obtener_direccion_del_registro(char* reg) {
-    uint32_t* ptr = (uint32_t*)obtener_registro(reg);
-    return (ptr != NULL) ? *ptr : 0;
+uint32_t obtener_direccion_del_registro(char* reg)
+{
+    void* registro = obtener_registro(reg);
+
+    if(registro == NULL)
+    {
+        log_error(logger, "Registro inexistente: %s", reg);
+        return 0;
+    }
+
+    if(es_registro_32bits(reg))
+        return *(uint32_t*)registro;
+    else
+        return (uint32_t)(*(uint8_t*)registro);
 }
 
 uint32_t obtener_tamanio_del_registro(char* reg)

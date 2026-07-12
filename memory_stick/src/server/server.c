@@ -213,13 +213,13 @@ else if (cop == ESCRIBIR_MEMORIA) {
     uint32_t dir_fisica = recibir_int(socket_cliente);
     uint32_t tamanio = recibir_int(socket_cliente);
 
-    int size_buffer;
-    void* datos_escribir = recibir_buffer(&size_buffer, socket_cliente);
-
-    if(size_buffer != tamanio) {
-        log_error(logger, "Tamaño recibido distinto al esperado");
+    void* datos_escribir = malloc(tamanio);
+        
+    if (recv(socket_cliente, datos_escribir, tamanio, MSG_WAITALL) != tamanio) {
+        log_error(logger, "Error recibiendo datos de escritura");
+        free(datos_escribir);
+        break;
     }
-
     uint32_t dir_local = dir_fisica;
 
     escribir_en_bloque_memoria(

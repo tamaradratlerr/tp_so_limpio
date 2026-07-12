@@ -1,4 +1,5 @@
 #include "client.h"
+#include "../server/server.h"
 
 extern bool mock;
 int socket_km;
@@ -91,6 +92,29 @@ void* atender_kernel_memory(void* arg) {
                 log_info(logger, "Kernel Memory solicita desconexion");
                 close(socket_km);
                 return NULL;
+
+            case ESCRIBIR_MEMORIA: {
+
+                uint32_t dir_fisica = recibir_int(socket_km);
+                uint32_t tamanio = recibir_int(socket_km);
+
+                void* datos = malloc(tamanio);
+
+                if (recv(socket_km, datos, tamanio, MSG_WAITALL) != tamanio) {
+                    log_error(logger, "Error recibiendo datos");
+                    free(datos);
+                    break;
+                }
+
+                escribir_en_bloque_memoria(dir_fisica, datos, tamanio);
+
+                free(datos);
+
+                enviar_op_code(OK, socket_km);
+
+                break;
+            }
+
 
             default:
                 log_warning(logger, "Operacion no soportada recibida de KM: %d", cop);

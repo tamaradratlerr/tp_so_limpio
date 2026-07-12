@@ -673,3 +673,7 @@ char* opcode_to_string(op_code codigo)
             return "OP_CODE: DESCONOCIDO";
     }
 }
+
+
+//MS
+

@@ -12,6 +12,5 @@ extern int delay_memoria;
 extern pthread_mutex_t mutex_memoria;
 
 
-void iterator(char* value);
 void validar_argumentos(int, char**);
 #endif /* SERVER_H_ */

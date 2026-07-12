@@ -202,6 +202,7 @@ void atender_kernel(int kernel_fd) {
                 break;
 
             case km_IO_STDIN:
+                log_debug(logger, "[KM] Llego OP_CODE para STDIN desde KS a KM");
                 escritura_memoria(kernel_fd);
                  break;
 

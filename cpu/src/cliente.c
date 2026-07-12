@@ -602,51 +602,45 @@ void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
     
     return; // Simplemente salimos de la función void sin retornar un valor
 }
-
 void enviar_contexto_a_kernel_memory() {
 
     int err;
-    
-    enviar_op_code (cpu_GUARDAR_CONTEXTO, sockets->conexion_kernel_memory);
 
-    t_paquete* paquete = crear_paquete(cpu_GUARDAR_CONTEXTO);
+    enviar_op_code(cpu_GUARDAR_CONTEXTO, sockets->conexion_kernel_memory);
 
-    agregar_a_paquete(paquete, &contexto_actual->pid, sizeof(int));
-    agregar_a_paquete(paquete, &contexto_actual->pc, sizeof(uint32_t));
-    
-    // Registros 8 bits
-    agregar_a_paquete(paquete, &contexto_actual->ax, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->bx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->cx, sizeof(uint8_t));
-    agregar_a_paquete(paquete, &contexto_actual->dx, sizeof(uint8_t));
-    
-    // Registros 32 bits
-    agregar_a_paquete(paquete, &contexto_actual->eax, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->ebx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->ecx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->edx, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->si, sizeof(uint32_t));
-    agregar_a_paquete(paquete, &contexto_actual->di, sizeof(uint32_t));
+    enviar_int(contexto_actual->pid, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->pc, sockets->conexion_kernel_memory);
+
+    // Registros de 8 bits
+    enviar_buffer(&contexto_actual->ax, sizeof(uint8_t), sockets->conexion_kernel_memory);
+    enviar_buffer(&contexto_actual->bx, sizeof(uint8_t), sockets->conexion_kernel_memory);
+    enviar_buffer(&contexto_actual->cx, sizeof(uint8_t), sockets->conexion_kernel_memory);
+    enviar_buffer(&contexto_actual->dx, sizeof(uint8_t), sockets->conexion_kernel_memory);
+
+    // Registros de 32 bits
+    enviar_int(contexto_actual->eax, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->ebx, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->ecx, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->edx, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->si, sockets->conexion_kernel_memory);
+    enviar_int(contexto_actual->di, sockets->conexion_kernel_memory);
 
     int cantidad = list_size(contexto_actual->tabla_segmentos);
+    enviar_int(cantidad, sockets->conexion_kernel_memory);
 
-    agregar_a_paquete(paquete, &cantidad, sizeof(int));
+    for (int i = 0; i < cantidad; i++) {
 
-    for(int i = 0; i < cantidad; i++)
-    {
         t_segmento* seg = list_get(contexto_actual->tabla_segmentos, i);
 
-        agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
-        agregar_a_paquete(paquete, &seg->base, sizeof(uint32_t));
-        agregar_a_paquete(paquete, &seg->tamanio, sizeof(uint32_t));
+        enviar_int(seg->id_segmento, sockets->conexion_kernel_memory);
+        enviar_int(seg->base, sockets->conexion_kernel_memory);
+        enviar_int(seg->tamanio, sockets->conexion_kernel_memory);
     }
 
-    enviar_paquete(paquete, sockets->conexion_kernel_memory);
-    eliminar_paquete(paquete);
+    err = recibir_op_code(sockets->conexion_kernel_memory);
 
-    err = recibir_op_code (sockets->conexion_kernel_memory);
-    if (err != OK) log_error(logger, "Error en operacion: %d", (int)err);
-
+    if (err != OK)
+        log_error(logger, "Error en operacion: %d", err);
 }
 
 t_instruccion_code identificar_codigo(char* token) { 

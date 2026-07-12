@@ -210,34 +210,17 @@ void* atender_cliente(void* arg) {
 }
 else if (cop == ESCRIBIR_MEMORIA) {
 
-    uint32_t dir_fisica;
-    uint32_t tamanio;
+    uint32_t dir_fisica = recibir_int(socket_cliente);
+    uint32_t tamanio = recibir_int(socket_cliente);
 
+    int size_buffer;
+    void* datos_escribir = recibir_buffer(&size_buffer, socket_cliente);
 
-    recv(socket_cliente,
-         &dir_fisica,
-         sizeof(uint32_t),
-         MSG_WAITALL);
+    if(size_buffer != tamanio) {
+        log_error(logger, "Tamaño recibido distinto al esperado");
+    }
 
-
-    recv(socket_cliente,
-         &tamanio,
-         sizeof(uint32_t),
-         MSG_WAITALL);
-
-
-    void* datos_escribir = malloc(tamanio);
-
-
-    recv(socket_cliente,
-         datos_escribir,
-         tamanio,
-         MSG_WAITALL);
-
-
-
-    uint32_t dir_local = dir_fisica - ms_globals.base;
-
+    uint32_t dir_local = dir_fisica;
 
     escribir_en_bloque_memoria(
         dir_local,
@@ -245,14 +228,9 @@ else if (cop == ESCRIBIR_MEMORIA) {
         tamanio
     );
 
-
     free(datos_escribir);
 
-
-    enviar_op_code(
-        OK_ESCRITURA,
-        socket_cliente
-    );
+    enviar_op_code(OK, socket_cliente);
 }
     }
 

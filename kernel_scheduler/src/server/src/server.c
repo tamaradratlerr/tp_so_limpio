@@ -2354,17 +2354,13 @@ void rta_io_stdin(int socket_io){
             return;
         }
 
+        enviar_int(direccion_logica, info_km.conexion_km);
 
-        t_paquete* paquete_mem = crear_paquete(km_IO_STDIN);
+        enviar_int(tam_datos, info_km.conexion_km);
 
-        agregar_a_paquete(paquete_mem,&direccion_logica,sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem,&tam_datos,sizeof(uint32_t));
-        agregar_a_paquete(paquete_mem,datos_recibidos,tam_datos);
-        agregar_a_paquete(paquete_mem,&pid,sizeof(int));
+        enviar_buffer(datos_recibidos, tam_datos, info_km.conexion_km);
 
-        enviar_paquete(paquete_mem,info_km.conexion_km);
-
-        eliminar_paquete(paquete_mem);
+        enviar_int(pid, info_km.conexion_km);
     }
 
 

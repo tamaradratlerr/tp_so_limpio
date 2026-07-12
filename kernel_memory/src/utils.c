@@ -347,51 +347,59 @@ void lectura_memoria(int socket_ks) {
 
     list_destroy_and_destroy_elements(paquete, free);
 }
-
 void escritura_memoria(int socket_ks) {
-    t_list* paquete = recibir_paquete(socket_ks);
-    
-    if (paquete == NULL || list_size(paquete) < 4) {
-        log_error(logger, "## Error: Paquete de escritura inválido");
-        int error = -1;
-        send(socket_ks, &error, sizeof(int), 0);
-        if (paquete) list_destroy_and_destroy_elements(paquete, free);
-        return;
-    }
 
-    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
-    uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
-    void* datos = list_get(paquete, 3); 
+    log_debug(logger, "[KM] entró a la funcion de escritura ");
+
+    uint32_t dir_fisica = recibir_int(socket_ks);
+    uint32_t tamanio = recibir_int(socket_ks);
+
+    int size_buffer;
+    void* datos = recibir_buffer(&size_buffer, socket_ks);
+
+    int pid = recibir_int(socket_ks);
+
+    log_debug(logger,
+        "KM_IO_STDIN recibido -> PID:%d | DirFisica:%u | Tamaño:%u | SizeBuffer:%d | Datos:\"%s\"",
+        pid,
+        dir_fisica,
+        tamanio,
+        size_buffer,
+        (char*)datos);
 
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
+
     int confirmacion = -1;
 
     if (ms != NULL) {
+
         uint32_t dir_local = dir_fisica - ms->base_global;
 
-        // PROTECCIÓN: Validar límites
         if (dir_local + tamanio <= ms->tamanio) {
+
             usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
 
-            t_paquete* paquete_ms = crear_paquete(ESCRIBIR_MEMORIA);
-            agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
-            agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
-            agregar_a_paquete(paquete_ms, datos, tamanio);
-            
-            enviar_paquete(paquete_ms, ms->socket_fd);
-            eliminar_paquete(paquete_ms);
+            enviar_op_code(ESCRIBIR_MEMORIA, ms->socket_fd);
+            enviar_int(dir_local, ms->socket_fd);
+            enviar_int(tamanio, ms->socket_fd);
+            send(ms->socket_fd, datos, tamanio, 0);
 
             op_code respuesta;
-            if (recv(ms->socket_fd, &respuesta, sizeof(op_code), MSG_WAITALL) > 0 && respuesta == OK) {
+
+            if (recv(ms->socket_fd, &respuesta, sizeof(op_code), MSG_WAITALL) > 0 &&
+                respuesta == OK) {
+
                 log_info(logger, "## Escritura Exitosa - Dir Global: %u", dir_fisica);
                 confirmacion = 1;
             }
         }
     }
 
-    send(socket_ks, &confirmacion, sizeof(int), 0);
-    list_destroy_and_destroy_elements(paquete, free);
+    enviar_int(confirmacion, socket_ks);
+
+    free(datos);
 }
+
 
 //VER NOTION PONER ENVIAR CONTEXTTO Y GUARDAR CONTEXTO
 void manejar_guardar_contexto(int socket_cliente) {
@@ -970,82 +978,73 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
 }
 
 void recibir_contexto_cpu(int socket_cpu) {
+    log_debug(logger, "[recibir_contexto_cpu] llegó aca");
 
-    t_list* paquete = recibir_paquete(socket_cpu);
+    int size;
 
-    int pid = *(int*)list_get(paquete, 0);
+    int pid = recibir_int(socket_cpu);
 
     t_contexto* contexto = buscar_contexto(pid);
 
-    if(contexto == NULL) {
+    if (contexto == NULL) {
 
         log_error(logger, "No existe contexto para PID %d", pid);
 
         enviar_op_code(NOTOK, socket_cpu);
-
-        list_destroy_and_destroy_elements(paquete, free);
         return;
     }
 
     // PC
-    contexto->pc = *(uint32_t*)list_get(paquete, 1);
+    contexto->pc = recibir_int(socket_cpu);
 
-    // Registros 8 bits
-    contexto->ax = *(uint8_t*)list_get(paquete, 2);
-    contexto->bx = *(uint8_t*)list_get(paquete, 3);
-    contexto->cx = *(uint8_t*)list_get(paquete, 4);
-    contexto->dx = *(uint8_t*)list_get(paquete, 5);
+    // Registros de 8 bits
+    uint8_t* ax = recibir_buffer(&size, socket_cpu);
+    uint8_t* bx = recibir_buffer(&size, socket_cpu);
+    uint8_t* cx = recibir_buffer(&size, socket_cpu);
+    uint8_t* dx = recibir_buffer(&size, socket_cpu);
 
-    // Registros 32 bits
-    contexto->eax = *(uint32_t*)list_get(paquete, 6);
-    contexto->ebx = *(uint32_t*)list_get(paquete, 7);
-    contexto->ecx = *(uint32_t*)list_get(paquete, 8);
-    contexto->edx = *(uint32_t*)list_get(paquete, 9);
-    contexto->si  = *(uint32_t*)list_get(paquete, 10);
-    contexto->di  = *(uint32_t*)list_get(paquete, 11);
+    contexto->ax = *ax;
+    contexto->bx = *bx;
+    contexto->cx = *cx;
+    contexto->dx = *dx;
 
+    free(ax);
+    free(bx);
+    free(cx);
+    free(dx);
 
-    // Cantidad de segmentos
-    int cantidad_segmentos = *(int*)list_get(paquete, 12);
+    // Registros de 32 bits
+    contexto->eax = recibir_int(socket_cpu);
+    contexto->ebx = recibir_int(socket_cpu);
+    contexto->ecx = recibir_int(socket_cpu);
+    contexto->edx = recibir_int(socket_cpu);
+    contexto->si  = recibir_int(socket_cpu);
+    contexto->di  = recibir_int(socket_cpu);
 
+    int cantidad_segmentos = recibir_int(socket_cpu);
 
-    // Limpiamos la tabla vieja si ya existía
-    if(contexto->tabla_segmentos != NULL) {
+    if (contexto->tabla_segmentos != NULL)
         list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
-    }
 
     contexto->tabla_segmentos = list_create();
 
-
-    // Segmentos empiezan desde posición 13
-    int posicion = 13;
-
-    for(int i = 0; i < cantidad_segmentos; i++) {
+    for (int i = 0; i < cantidad_segmentos; i++) {
 
         t_segmento* segmento = malloc(sizeof(t_segmento));
 
-        segmento->id_segmento = *(int*)list_get(paquete, posicion);
-        posicion++;
-
-        segmento->base = *(uint32_t*)list_get(paquete, posicion);
-        posicion++;
-
-        segmento->tamanio = *(uint32_t*)list_get(paquete, posicion);
-        posicion++;
+        segmento->id_segmento = recibir_int(socket_cpu);
+        segmento->base        = recibir_int(socket_cpu);
+        segmento->tamanio     = recibir_int(socket_cpu);
 
         list_add(contexto->tabla_segmentos, segmento);
     }
 
-
-    log_info(logger, 
+    log_info(logger,
              "Contexto actualizado PID %d con %d segmentos",
              pid,
              cantidad_segmentos);
 
-
     enviar_op_code(OK, socket_cpu);
-
-    list_destroy_and_destroy_elements(paquete, free);
 }
 
 

@@ -2409,19 +2409,25 @@ void io_stdout(int cpu_socket) {
     espera_io* io_pcb = NULL;
     
     if(!mock){
-        /*Le solicitamos los Datos de la KM*/
+        /* Le solicitamos los datos a Kernel Memory */
+
         enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
 
-        t_paquete* req_mem = crear_paquete(km_IO_STDOUT);
-        agregar_a_paquete(req_mem, &pid_a_bloquear, sizeof(uint32_t));
-        agregar_a_paquete(req_mem, &dir, sizeof(uint32_t));
-        agregar_a_paquete(req_mem, &tam, sizeof(uint32_t));
-        enviar_paquete(req_mem, info_km.conexion_km); 
-        eliminar_paquete(req_mem);
+        recibir_op_code(info_km.conexion_km);   // OK
 
-        // recibir de km
-        t_list* lista_mem = recibir_paquete(info_km.conexion_km);
-        char* datos_leidos = (char*)list_get(lista_mem, 0);
+        enviar_pid(pid_a_bloquear, info_km.conexion_km);
+
+        recibir_op_code(info_km.conexion_km);   // OK
+
+        enviar_int(dir, info_km.conexion_km);
+
+        recibir_op_code(info_km.conexion_km);   // OK
+
+        enviar_int(tam, info_km.conexion_km);
+
+        /* Recibir los datos desde KM */
+
+        char* datos_leidos = recibir_mensaje(info_km.conexion_km, logger);
 
         io_pcb = malloc(sizeof(espera_io));
 
@@ -2429,8 +2435,6 @@ void io_stdout(int cpu_socket) {
         io_pcb->io_op_code = gl_IO_STDOUT;
         io_pcb->iostdout.length = tam;
         io_pcb->iostdout.info = datos_leidos;
-
- 
     }
     else {
         

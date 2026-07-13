@@ -98,23 +98,70 @@ void* atender_kernel_memory(void* arg) {
                 uint32_t dir_fisica = recibir_int(socket_km);
                 uint32_t tamanio = recibir_int(socket_km);
 
-                void* datos = malloc(tamanio);
+                void* datos_escribir = malloc(tamanio);
 
-                if (recv(socket_km, datos, tamanio, MSG_WAITALL) != tamanio) {
-                    log_error(logger, "Error recibiendo datos");
-                    free(datos);
+                if (recv(socket_km,
+                        datos_escribir,
+                        tamanio,
+                        MSG_WAITALL) != tamanio) {
+
+                    log_error(logger, "Error recibiendo datos de escritura");
+                    free(datos_escribir);
                     break;
                 }
 
-                escribir_en_bloque_memoria(dir_fisica, datos, tamanio);
+                uint32_t dir_local = dir_fisica - ms_globals.base;
 
-                free(datos);
+                escribir_en_bloque_memoria(
+                    dir_local,
+                    datos_escribir,
+                    tamanio
+                );
+
+                free(datos_escribir);
 
                 enviar_op_code(OK, socket_km);
-
                 break;
             }
 
+            case LEER_MEMORIA:
+            {
+                uint32_t dir_fisica;
+                uint32_t tamanio;
+
+                recv(socket_km,
+                    &dir_fisica,
+                    sizeof(uint32_t),
+                    MSG_WAITALL);
+
+                recv(socket_km,
+                    &tamanio,
+                    sizeof(uint32_t),
+                    MSG_WAITALL);
+
+                uint32_t dir_local = dir_fisica - ms_globals.base;
+
+                log_debug(logger, "antes de leer");
+
+                void* bytes = leer_de_bloque_memoria(
+                    dir_local,
+                    tamanio
+                );
+
+                log_debug(logger, "antes del send");
+
+                send(socket_km,
+                    bytes,
+                    tamanio,
+                    0);
+
+                log_debug(logger, "despues del send");
+
+                free(bytes);
+                
+                log_debug(logger, "despues del free");
+
+            }
 
             default:
                 log_warning(logger, "Operacion no soportada recibida de KM: %d", cop);

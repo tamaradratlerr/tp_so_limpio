@@ -121,11 +121,21 @@ void escribir_en_bloque_memoria(uint32_t dir_fisica, void* datos_a_escribir, uin
 }
 
 void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
+    log_debug(logger, "llegó a leer bloque de memoria");
+    
     usleep(delay_memoria * 1000);
 
     void* buffer_lectura = malloc(tamanio);
 
     pthread_mutex_lock(&mutex_memoria);
+
+    log_info(logger,
+    "base=%u dir_global=%u tam=%u memoria=%p",
+    ms_globals.base,
+    dir_fisica,
+    tamanio,
+    ms_globals.memoria);
+
     memcpy(buffer_lectura, ms_globals.memoria + dir_fisica, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
@@ -177,61 +187,64 @@ void* atender_cliente(void* arg) {
 
         continue;
     }
+    if (cop == LEER_MEMORIA) {
 
-        if(cop == LEER_MEMORIA){
+        uint32_t dir_fisica;
+        uint32_t tamanio;
 
-    uint32_t dir_fisica;
-    uint32_t tamanio;
+        recv(socket_cliente,
+            &dir_fisica,
+            sizeof(uint32_t),
+            MSG_WAITALL);
 
-    recv(socket_cliente,
-         &dir_fisica,
-         sizeof(uint32_t),
-         MSG_WAITALL);
+        recv(socket_cliente,
+            &tamanio,
+            sizeof(uint32_t),
+            MSG_WAITALL);
 
-    recv(socket_cliente,
-         &tamanio,
-         sizeof(uint32_t),
-         MSG_WAITALL);
+        uint32_t dir_local = dir_fisica - ms_globals.base;
 
+        void* bytes = leer_de_bloque_memoria(
+            dir_local,
+            tamanio
+        );
 
-    uint32_t dir_local = dir_fisica - ms_globals.base;
+        send(socket_cliente,
+            bytes,
+            tamanio,
+            0);
 
-
-    void* bytes = leer_de_bloque_memoria(dir_local, tamanio);
-
-
-    send(socket_cliente,
-         bytes,
-         tamanio,
-         0);
-
-
-    free(bytes);
-}
-else if (cop == ESCRIBIR_MEMORIA) {
-
-    uint32_t dir_fisica = recibir_int(socket_cliente);
-    uint32_t tamanio = recibir_int(socket_cliente);
-
-    void* datos_escribir = malloc(tamanio);
-        
-    if (recv(socket_cliente, datos_escribir, tamanio, MSG_WAITALL) != tamanio) {
-        log_error(logger, "Error recibiendo datos de escritura");
-        free(datos_escribir);
-        break;
+        free(bytes);
     }
-    uint32_t dir_local = dir_fisica;
+    else if (cop == ESCRIBIR_MEMORIA) {
 
-    escribir_en_bloque_memoria(
-        dir_local,
-        datos_escribir,
-        tamanio
-    );
+        uint32_t dir_fisica = recibir_int(socket_cliente);
+        uint32_t tamanio = recibir_int(socket_cliente);
 
-    free(datos_escribir);
+        void* datos_escribir = malloc(tamanio);
 
-    enviar_op_code(OK, socket_cliente);
-}
+        if (recv(socket_cliente,
+                datos_escribir,
+                tamanio,
+                MSG_WAITALL) != tamanio) {
+
+            log_error(logger, "Error recibiendo datos de escritura");
+            free(datos_escribir);
+            break;
+        }
+
+        uint32_t dir_local = dir_fisica - ms_globals.base;
+
+        escribir_en_bloque_memoria(
+            dir_local,
+            datos_escribir,
+            tamanio
+        );
+
+        free(datos_escribir);
+
+        enviar_op_code(OK, socket_cliente);
+    }
     }
 
     close(socket_cliente);

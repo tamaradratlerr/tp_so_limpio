@@ -294,62 +294,74 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
 //Se conecta con ks: stdout
 
 //Se conecta con ks: stdin
-//yo (tami) puse tambien el pid (te mando el pid)
 void lectura_memoria(int socket_ks) {
-    t_list* paquete = recibir_paquete(socket_ks);
 
-    if (paquete == NULL || list_size(paquete) < 3) {
-        log_error(logger, "## Error: Paquete de lectura inválido");
-        int error = -1;
-        send(socket_ks, &error, sizeof(int), 0);
-        if (paquete) list_destroy_and_destroy_elements(paquete, free);
-        return;
-    }
+    enviar_op_code(OK, socket_ks);
 
-    uint32_t dir_fisica = *(uint32_t*)list_get(paquete, 1);
-    uint32_t tamanio    = *(uint32_t*)list_get(paquete, 2);
+    int pid = recibir_pid(socket_ks);
+
+    enviar_op_code(OK, socket_ks);
+
+    uint32_t dir_fisica = recibir_int(socket_ks);
+
+    enviar_op_code(OK, socket_ks);
+
+    uint32_t tamanio = recibir_int(socket_ks);
 
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
 
-    if (ms != NULL) {
-        uint32_t dir_local = dir_fisica - ms->base_global;
-
-        // PROTECCIÓN: Validar que el pedido no se salga de los límites de la MS
-        if (dir_local + tamanio > ms->tamanio) {
-            log_error(logger, "## Error: Intento de lectura fuera de límites en MS (FD: %d)", ms->socket_fd);
-            int error = -1;
-            send(socket_ks, &error, sizeof(int), 0);
-        } else {
-            // Aplicar delay si lo requiere tu configuración
-            usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
-
-            t_paquete* paquete_ms = crear_paquete(LEER_MEMORIA);
-            agregar_a_paquete(paquete_ms, &dir_local, sizeof(uint32_t));
-            agregar_a_paquete(paquete_ms, &tamanio, sizeof(uint32_t));
-            
-            enviar_paquete(paquete_ms, ms->socket_fd);
-            eliminar_paquete(paquete_ms);
-
-            void* buffer_datos = malloc(tamanio);
-            if (recv(ms->socket_fd, buffer_datos, tamanio, MSG_WAITALL) > 0) {
-                log_info(logger, "## Lectura Exitosa - Dir Global: %u", dir_fisica);
-                send(socket_ks, buffer_datos, tamanio, 0);
-            } else {
-                log_error(logger, "## Error de comunicación con MS");
-            }
-            free(buffer_datos);
-        }
-    } else {
+    if (ms == NULL) {
         log_error(logger, "## Error: Dirección %u inexistente", dir_fisica);
-        int error = -1;
-        send(socket_ks, &error, sizeof(int), 0);
+        enviar_mensaje("", socket_ks);
+        return;
     }
 
-    list_destroy_and_destroy_elements(paquete, free);
+    uint32_t dir_local = dir_fisica - ms->base_global;
+
+    if (dir_local + tamanio > ms->tamanio) {
+        log_error(logger,
+                  "## Error: Intento de lectura fuera de límites en MS");
+        enviar_mensaje("", socket_ks);
+        return;
+    }
+
+    usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
+
+    /* ----------  comunicación con Memory Stick ---------- */
+
+    enviar_op_code(LEER_MEMORIA, ms->socket_fd);
+    enviar_int(dir_fisica, ms->socket_fd);
+    enviar_int(tamanio, ms->socket_fd);
+
+    void* buffer = malloc(tamanio);
+
+    if (recv(ms->socket_fd, buffer, tamanio, MSG_WAITALL) != tamanio) {
+        log_error(logger, "## Error de comunicación con Memory Stick");
+        free(buffer);
+        enviar_mensaje("", socket_ks);
+        return;
+    }
+
+    log_info(logger,
+             "## Lectura Exitosa - PID:%d - Dir Global:%u",
+             pid,
+             dir_fisica);
+
+    /* ---------- Respuesta a Kernel Scheduler ---------- */
+
+    char* datos = malloc(tamanio + 1);
+    memcpy(datos, buffer, tamanio);
+    datos[tamanio] = '\0';
+
+    enviar_mensaje(datos, socket_ks);
+
+    free(datos);
+    free(buffer);
 }
+
 void escritura_memoria(int socket_ks) {
 
-    log_debug(logger, "[KM] entró a la funcion de escritura ");
+    log_debug(logger, "[KM] entró a la funcion de escritura");
 
     uint32_t dir_fisica = recibir_int(socket_ks);
     uint32_t tamanio = recibir_int(socket_ks);
@@ -380,16 +392,16 @@ void escritura_memoria(int socket_ks) {
             usleep(config_get_int_value(config_km, "INSTRUCTION_DELAY") * 1000);
 
             enviar_op_code(ESCRIBIR_MEMORIA, ms->socket_fd);
-            enviar_int(dir_local, ms->socket_fd);
+            enviar_int(dir_fisica, ms->socket_fd);
             enviar_int(tamanio, ms->socket_fd);
             send(ms->socket_fd, datos, tamanio, 0);
 
-            op_code respuesta;
+            op_code respuesta = recibir_op_code(ms->socket_fd);
 
-            if (recv(ms->socket_fd, &respuesta, sizeof(op_code), MSG_WAITALL) > 0 &&
-                respuesta == OK) {
-
-                log_info(logger, "## Escritura Exitosa - Dir Global: %u", dir_fisica);
+            if (respuesta == OK) {
+                log_info(logger,
+                         "## Escritura Exitosa - Dir Global: %u",
+                         dir_fisica);
                 confirmacion = 1;
             }
         }
@@ -399,6 +411,8 @@ void escritura_memoria(int socket_ks) {
 
     free(datos);
 }
+
+
 
 
 //VER NOTION PONER ENVIAR CONTEXTTO Y GUARDAR CONTEXTO

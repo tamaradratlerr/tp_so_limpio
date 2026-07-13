@@ -148,7 +148,15 @@ void* atender_kernel_memory(void* arg) {
                     tamanio
                 );
 
-                log_debug(logger, "antes del send");
+                unsigned char* p = bytes;
+
+                printf("bytes=%p\n", bytes);
+
+                for(int i=0;i<tamanio;i++)
+                    printf("%02X ", p[i]);
+
+                printf("\n");
+                fflush(stdout);
 
                 send(socket_km,
                     bytes,

@@ -2434,6 +2434,17 @@ void io_stdout(int cpu_socket) {
             free(datos_leidos);
             datos_leidos = strdup("");
         } else {
+
+            log_debug(logger,
+                "KS recibió: %.*s",
+                (int)tam,
+                datos_leidos);
+
+            printf("KS bytes: ");
+            for (int i = 0; i < tam; i++)
+                printf("%02X ", (unsigned char)datos_leidos[i]);
+            printf("\n");
+
             datos_leidos[tam] = '\0';
         }
 

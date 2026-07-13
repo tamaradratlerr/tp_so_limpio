@@ -15,4 +15,7 @@ extern pthread_mutex_t mutex_memoria;
 void arrancar_cliente_km(void);
 void* atender_kernel_memory(void* arg);
 
+void* leer_de_bloque_memoria(uint32_t, uint32_t);
+void escribir_en_bloque_memoria(uint32_t, void*, uint32_t);
+
 #endif

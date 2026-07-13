@@ -129,7 +129,7 @@ void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
 
     pthread_mutex_lock(&mutex_memoria);
 
-    log_info(logger,
+    log_debug(logger,
     "base=%u dir_global=%u tam=%u memoria=%p",
     ms_globals.base,
     dir_fisica,
@@ -139,7 +139,8 @@ void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
     memcpy(buffer_lectura, ms_globals.memoria + dir_fisica, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
-    log_info(logger, "## Lectura de %u bytes", tamanio);
+    log_debug(logger, "## Lectura de %u bytes", tamanio);
+    log_debug(logger, "## Datos leídos: %.*s", (int)tamanio, (char*)buffer_lectura);
 
     return buffer_lectura; 
 }

@@ -292,8 +292,6 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
 }
 
 //Se conecta con ks: stdout
-
-//Se conecta con ks: stdin
 void lectura_memoria(int socket_ks) {
 
     enviar_op_code(OK, socket_ks);
@@ -343,19 +341,16 @@ void lectura_memoria(int socket_ks) {
     }
 
     log_info(logger,
-             "## Lectura Exitosa - PID:%d - Dir Global:%u",
-             pid,
-             dir_fisica);
+         "## Lectura Exitosa - PID:%d - Dir Global:%u",
+         pid,
+         dir_fisica);
 
     /* ---------- Respuesta a Kernel Scheduler ---------- */
 
-    char* datos = malloc(tamanio + 1);
-    memcpy(datos, buffer, tamanio);
-    datos[tamanio] = '\0';
+    if (send(socket_ks, buffer, tamanio, 0) != (ssize_t)tamanio) {
+        log_error(logger, "Error enviando datos a Kernel Scheduler");
+    }
 
-    enviar_mensaje(datos, socket_ks);
-
-    free(datos);
     free(buffer);
 }
 

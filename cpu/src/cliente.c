@@ -1111,9 +1111,12 @@ void ejecutar_stdout(t_instruccion* instr) {
     void* ptr_tam = obtener_registro(reg_tam);
     tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
-    log_info (logger, "## PID:[%d] - Ejecutando [STDOUT] -  Registro [%p] - tamanio [%p]",contexto_actual->pid, ptr_dir, ptr_tam);/*Logger Obligatorio*/
-    log_info(logger, "PID: %u", pid_actual);
-
+    log_debug(logger,
+    "## PID:[%d] - Ejecutando STDOUT - Direccion Logica: %u - Tamaño: %u",
+    contexto_actual->pid,
+    direccion_logica,
+    tamanio);
+    
     enviar_op_code(gl_IO_STDOUT,sockets->conexion_kernel_scheduler);
 
     enviar_int((int)tamanio,sockets->conexion_kernel_scheduler);

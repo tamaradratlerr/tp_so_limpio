@@ -2427,7 +2427,15 @@ void io_stdout(int cpu_socket) {
 
         /* Recibir los datos desde KM */
 
-        char* datos_leidos = recibir_mensaje(info_km.conexion_km, logger);
+        char* datos_leidos = malloc(tam + 1);
+
+        if (recv(info_km.conexion_km, datos_leidos, tam, MSG_WAITALL) != tam) {
+            log_error(logger, "Error recibiendo datos desde Kernel Memory");
+            free(datos_leidos);
+            datos_leidos = strdup("");
+        } else {
+            datos_leidos[tam] = '\0';
+        }
 
         io_pcb = malloc(sizeof(espera_io));
 

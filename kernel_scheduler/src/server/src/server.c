@@ -2107,18 +2107,28 @@ void mem_free (int socket_cliente){
 } 
 
 //INIT PROC
-void init_proc(int socket_cliente){
-    
-    t_list* lista = recibir_paquete(socket_cliente);
-    char* path = (char*)list_get(lista, 0);
-    int prioridad = *(int*)list_get(lista, 1);
 
-    int pid = recibir_pid(socket_cliente); //Agregar esto en CPU para poder completar el logger
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Init Proc]", pid); /*Logger Obligatorio*/
+void init_proc(int socket_cliente) {
 
-    /*Bloqueo y Desalojo*/
+    enviar_op_code(OK, socket_cliente);
+
+    char* path = recibir_mensaje(socket_cliente, logger);
+
+    enviar_op_code(OK, socket_cliente);
+
+    int prioridad = recibir_int(socket_cliente);
+
+    enviar_op_code(OK, socket_cliente);
+
+    int pid = recibir_pid(socket_cliente);
+
+    log_info(logger,
+        "## PID:[%d] Solicito Syscall: [Init Proc]",
+        pid);
+
     PCB* pcb = buscar_pcb_por_pid(pid);
-    cambiar_estado_pcb(pcb,BCK);
+
+    cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
 
@@ -2126,39 +2136,39 @@ void init_proc(int socket_cliente){
     list_add(list_suplementarias->desalojo, pcb);
     pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
-    enviar_op_code(OK,socket_cliente);
+    log_info(logger,
+        "Solicitud INIT_PROC: %s (Prioridad: %d)",
+        path, prioridad);
 
-    log_info(logger, "Solicitud INIT_PROC: %s (Prioridad: %d)", path, prioridad);
+    PCB* nuevo_pcb;
 
-    PCB* nuevo_pcb; 
-    if(!mock){
-        
+    if (!mock) {
+
         nuevo_pcb = crearNuevoProceso(path, prioridad, info_km.conexion_km);
-        
+
         if (recibir_op_code(info_km.conexion_km) == OK) {
-                cambiar_estado_pcb(nuevo_pcb, RDY);
-                agregar_proceso_lista (nuevo_pcb);
-                eliminar_proceso_Lista(nuevo_pcb);           
+            cambiar_estado_pcb(nuevo_pcb, RDY);
+            agregar_proceso_lista(nuevo_pcb);
+            eliminar_proceso_Lista(nuevo_pcb);
         }
-    
-    }
-    else{
-        
+
+    } else {
+
         nuevo_pcb = crearNuevoProceso_mock(path, prioridad, info_km.conexion_km);
+
         cambiar_estado_pcb(nuevo_pcb, RDY);
-        agregar_proceso_lista (nuevo_pcb);
-        eliminar_proceso_Lista(nuevo_pcb);   
+        agregar_proceso_lista(nuevo_pcb);
+        eliminar_proceso_Lista(nuevo_pcb);
     }
 
-    cambiar_estado_pcb(pcb,RDY);
+    cambiar_estado_pcb(pcb, RDY);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
 
-    list_destroy(lista);
-    
-                
-}
+    enviar_op_code(OK, socket_cliente);
 
+    free(path);
+}
 //EXIT
 void exit_proceso(int socket_cpu){ /*OK*/
 

@@ -52,6 +52,7 @@ pthread_mutex_t mutex_ios = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_simulados = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_conexion_km = PTHREAD_MUTEX_INITIALIZER;
 
 sem_t sem_hay_ready;
 sem_t sem_hay_s_ready;

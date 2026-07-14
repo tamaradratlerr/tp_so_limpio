@@ -168,6 +168,7 @@ void* atender_kernel_memory(void* arg) {
                 free(bytes);
                 
                 log_debug(logger, "despues del free");
+                break;
 
             }
 

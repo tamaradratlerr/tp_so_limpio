@@ -149,13 +149,16 @@ void atender_kernel(int kernel_fd) {
                 escritura_memoria(kernel_fd);
                 break;
            
-            case SUSPENDIDO: 
-                
+                case SUSPENDIDO:
+
                 int pid_s = recibir_pid(kernel_fd);
 
-                    suspender_proceso(pid_s);
+                if (suspender_proceso(pid_s)) {
                     enviar_op_code(OK, kernel_fd);
-                    break;
+                } else {
+                    enviar_op_code(NOTOK, kernel_fd);
+                }
+                break;
 
             case NUEVO_ESPACIO:  //desuspendido
                 
@@ -269,10 +272,11 @@ void* atender_cliente_inicial(void* arg)
             socket_swap = cliente_fd;
             total_bloques_swap = total_size_swap / block_size_swap;
 
-            char* bitarray_data = calloc(1, ceil((double) total_bloques_swap / 8));
+            int bytes_bitmap_swap = ceil((double) total_bloques_swap / 8);
+            char* bitarray_data = calloc(1, bytes_bitmap_swap);
             bitmap_swap = bitarray_create_with_mode(
                 bitarray_data,
-                total_bloques_swap,
+                bytes_bitmap_swap,
                 LSB_FIRST
             );
 

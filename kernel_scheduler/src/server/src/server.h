@@ -30,6 +30,8 @@ void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
 bool usa_quantum (PCB* pcb);
 void mediano_plazo_bck(PCB* pcb);
 void mediano_plazo_rdy (PCB* pcb);
+void* hilo_reintentar_desuspension(void* arg);
+
 
 /*----- GESTION DE IOs -----*/
 

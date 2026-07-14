@@ -104,12 +104,18 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	
 	PCB* nuevo_pcb;
 
-	log_debug(logger,"Iniciando Proceso Inicial");
+		log_debug(logger,"Iniciando Proceso Inicial");
 	nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);	
-	
-	cambiar_estado_pcb(nuevo_pcb, RDY);
-	agregar_proceso_lista(nuevo_pcb);
-	eliminar_proceso_Lista(nuevo_pcb);
+
+	int resp_init_proc = recibir_op_code(info_km.conexion_km);
+
+	if (resp_init_proc == OK) {
+		cambiar_estado_pcb(nuevo_pcb, RDY);
+		agregar_proceso_lista(nuevo_pcb);
+		eliminar_proceso_Lista(nuevo_pcb);
+	} else {
+		log_error(logger, "Error al crear el Proceso Inicial en Kernel Memory");
+	}
 	
 	return 0; //Fin de Main
 	

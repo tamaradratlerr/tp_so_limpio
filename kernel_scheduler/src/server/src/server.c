@@ -31,7 +31,11 @@ int main(int argc, char *argv[]) /*OK*/
     }
     
 
-    int server_fd = iniciar_servidor(config_get_string_value(config, "PUERTO_ESCUCHA"),logger); 
+   int server_fd = iniciar_servidor(config_get_string_value(config, "PUERTO_ESCUCHA"),logger);
+
+    pthread_t hilo_reintento;
+    pthread_create(&hilo_reintento, NULL, hilo_reintentar_desuspension, NULL);
+    pthread_detach(hilo_reintento);
 
     while (scheduler_control_loop == 1) {
         
@@ -195,13 +199,14 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
 PCB* buscar_pcb_por_pid(int pid_recibido) /*OK*/
 { 
     
-    t_list* listas_a_revisar[] = { 
+     t_list* listas_a_revisar[] = { 
         listasProcesos-> new, listasProcesos->rdy, 
         listasProcesos-> rnn, listasProcesos->bck, 
-        listasProcesos-> ext 
+        listasProcesos-> ext, listasProcesos->s_bck,
+        listasProcesos-> s_rdy
     };
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 7; i++) {
         t_list* lista_actual = listas_a_revisar[i];
         
         t_list_iterator* it = list_iterator_create(lista_actual);
@@ -501,33 +506,45 @@ void mediano_plazo_bck(PCB* pcb){
 
     usleep(info_config.tiempo_suspencion * 1000);
 
-    if (pcb->estado_pcb == BCK){ 
-        
-        cambiar_estado_pcb(pcb,S_BCK);
-        agregar_proceso_lista(pcb);
-        eliminar_proceso_Lista(pcb);
+        if (pcb->estado_pcb == BCK){
 
-        log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+        bool suspension_ok = true;
 
-        if(!mock){
+            if(!mock){
+            pthread_mutex_lock(&mutex_conexion_km);
             enviar_op_code(SUSPENDIDO,info_km.conexion_km);
             enviar_pid(pcb->data.PID, info_km.conexion_km);
             int err = recibir_op_code(info_km.conexion_km);
-            if( err != OK){log_info (logger, "ERROR al Comunicar Suspension del PID: [%d]",pcb->data.PID);}
+            pthread_mutex_unlock(&mutex_conexion_km);
+            if(err != OK){
+                suspension_ok = false;
+                log_error(logger, "ERROR al Comunicar Suspension del PID: [%d] - Se reintentará más adelante", pcb->data.PID);
+            }
         }
         else{
             log_info(logger,
             "[MOCK] KM suspendió el proceso PID [%d]",
             pcb->data.PID);
         }
+
+        // Solo transicionamos de estado si el Kernel Memory confirmó la suspensión;
+        // si no, el proceso queda en BCK (KM no liberó su memoria realmente).
+        if (suspension_ok) {
+            cambiar_estado_pcb(pcb,S_BCK);
+            agregar_proceso_lista(pcb);
+            eliminar_proceso_Lista(pcb);
+
+            log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
+        }
     }
 
 }
 
+
 void mediano_plazo_rdy (PCB* pcb){
     if(pcb->estado_pcb == BCK){
 
-        cambiar_estado_pcb(pcb,RDY);
+        cambiar_estado_pcb(pcb,RDY);-
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
     }
@@ -917,7 +934,9 @@ else
         sem_wait(&sem_rnn_vacio);
     }
 
+    pthread_mutex_lock(&mutex_conexion_km);
     enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
+    pthread_mutex_unlock(&mutex_conexion_km);
 
     log_info(logger, "Blue Screen");
 
@@ -993,11 +1012,13 @@ void compactacion (int socket_cliente){
             sem_wait(&sem_rnn_vacio);
         }
 
+        pthread_mutex_lock(&mutex_conexion_km);
         enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
 
         log_info(logger,"## Inicio de Compactacion");/*Logger Obligatorio*/
 
         err = recibir_op_code(info_km.conexion_km);
+        pthread_mutex_unlock(&mutex_conexion_km);
     }
 
     if (err == COMPACTACION_FINALIZADA){
@@ -1110,10 +1131,12 @@ void nuevo_espacio()
         }
         else
         {
+            pthread_mutex_lock(&mutex_conexion_km);
             enviar_op_code(NUEVO_ESPACIO, info_km.conexion_km);
             enviar_pid(pcb->data.PID, info_km.conexion_km);
 
             respuesta = recibir_op_code(info_km.conexion_km);
+            pthread_mutex_unlock(&mutex_conexion_km);
         }
 
         if (respuesta != OK)
@@ -1145,6 +1168,8 @@ void nuevo_espacio()
         log_info(logger,
             "## PID [%d] desuspendido correctamente",
             pcb->data.PID);
+
+            
     }
 }
 
@@ -1338,6 +1363,8 @@ void enviar_memory_stick_a_cpus(t_mem_stick* ms)
 
 void enviar_proceso_finalizar_KM(int pid){ 
     
+    pthread_mutex_lock(&mutex_conexion_km);
+
     enviar_op_code (gl_EXIT, info_km.conexion_km);
     
     t_paquete* paquete = crear_paquete(gl_EXIT);
@@ -1346,18 +1373,21 @@ void enviar_proceso_finalizar_KM(int pid){
     
     enviar_paquete(paquete, info_km.conexion_km);
     
+    pthread_mutex_unlock(&mutex_conexion_km);
+
     eliminar_paquete(paquete);
     
     log_info(logger, " Enviado a KM, PID: %u", pid);
 }
-
 void enviar_proceso_KM(uint32_t pid, op_code opCode) { 
   
     t_paquete* paquete = crear_paquete(opCode);
     
     agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
     
+    pthread_mutex_lock(&mutex_conexion_km);
     enviar_paquete(paquete, info_km.conexion_km);
+    pthread_mutex_unlock(&mutex_conexion_km);
     
     eliminar_paquete(paquete);
     
@@ -2055,6 +2085,8 @@ void mem_alloc (int socket_cliente){
 
     /*Le envamos la DATA a la Kernel Memory*/
 
+    pthread_mutex_lock(&mutex_conexion_km);
+
     enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
 
     enviar_pid(pid, info_km.conexion_km);
@@ -2069,6 +2101,9 @@ void mem_alloc (int socket_cliente){
     }
 
     int base = recibir_int(info_km.conexion_km);
+
+    pthread_mutex_unlock(&mutex_conexion_km);
+
     enviar_int(base, socket_cliente);
 
 }; 
@@ -2088,6 +2123,8 @@ void mem_free (int socket_cliente){
 
     /*Le enviamos la DATA a la Kernel Memory*/
 
+    pthread_mutex_lock(&mutex_conexion_km);
+
     enviar_op_code(gl_MEM_FREE,info_km.conexion_km);
 
     enviar_pid(pid,info_km.conexion_km);
@@ -2096,6 +2133,8 @@ void mem_free (int socket_cliente){
     if (recibir_op_code(info_km.conexion_km) == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] PID:[%d] fue enviado a liberarse a KM.",id_segmento,pid);
     }
+
+    pthread_mutex_unlock(&mutex_conexion_km);
     
 } 
 
@@ -2126,9 +2165,15 @@ void init_proc(int socket_cliente){
     PCB* nuevo_pcb; 
     if(!mock){
         
+        pthread_mutex_lock(&mutex_conexion_km);
+
         nuevo_pcb = crearNuevoProceso(path, prioridad, info_km.conexion_km);
         
-        if (recibir_op_code(info_km.conexion_km) == OK) {
+        int resp_init_proc = recibir_op_code(info_km.conexion_km);
+
+        pthread_mutex_unlock(&mutex_conexion_km);
+
+        if (resp_init_proc == OK) {
                 cambiar_estado_pcb(nuevo_pcb, RDY);
                 agregar_proceso_lista (nuevo_pcb);
                 eliminar_proceso_Lista(nuevo_pcb);           
@@ -2345,14 +2390,11 @@ void rta_io_stdin(int socket_io){
 
     log_debug(logger, "Texto Recibifo [%s]",(char*)datos_recibidos);
 
-    if(!mock){
+        if(!mock){
+
+        pthread_mutex_lock(&mutex_conexion_km);
 
         enviar_op_code(km_IO_STDIN, info_km.conexion_km);
-
-        if(recibir_op_code(info_km.conexion_km)!=OK){
-            log_error(logger,"Error al enviar STDIN a KM");
-            return;
-        }
 
         enviar_int(direccion_logica, info_km.conexion_km);
 
@@ -2361,6 +2403,14 @@ void rta_io_stdin(int socket_io){
         enviar_buffer(datos_recibidos, tam_datos, info_km.conexion_km);
 
         enviar_int(pid, info_km.conexion_km);
+
+        int confirmacion_km = recibir_int(info_km.conexion_km);
+
+        if (confirmacion_km != 1) {
+            log_error(logger, "Error al escribir STDIN en Kernel Memory");
+        }
+
+        pthread_mutex_unlock(&mutex_conexion_km);
     }
 
 
@@ -2411,6 +2461,11 @@ void io_stdout(int cpu_socket) {
     if(!mock){
         /* Le solicitamos los datos a Kernel Memory */
 
+            if(!mock){
+        /* Le solicitamos los datos a Kernel Memory */
+
+        pthread_mutex_lock(&mutex_conexion_km);
+
         enviar_op_code(km_IO_STDOUT, info_km.conexion_km);
 
         recibir_op_code(info_km.conexion_km);   // OK
@@ -2429,7 +2484,11 @@ void io_stdout(int cpu_socket) {
 
         char* datos_leidos = malloc(tam + 1);
 
-        if (recv(info_km.conexion_km, datos_leidos, tam, MSG_WAITALL) != tam) {
+        int recv_ok = (recv(info_km.conexion_km, datos_leidos, tam, MSG_WAITALL) == (int)tam);
+
+        pthread_mutex_unlock(&mutex_conexion_km);
+
+        if (!recv_ok) {
             log_error(logger, "Error recibiendo datos desde Kernel Memory");
             free(datos_leidos);
             datos_leidos = strdup("");
@@ -2472,6 +2531,9 @@ void io_stdout(int cpu_socket) {
     pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
     pthread_detach(hilo1);
 }
+}
+
+
 
 void rta_io_stdout(int socket_io){
 

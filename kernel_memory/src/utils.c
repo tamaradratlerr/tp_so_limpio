@@ -519,21 +519,14 @@ void conexion_memory_stick(int socket_ms) {
 
 
     pthread_mutex_unlock(&mutex_lista_libres);
-
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    enviar_op_code(NUEVA_MEMORY_STICK,socket_kernel_scheduler);
-
-    enviar_mensaje(nuevo_ms->ip,socket_kernel_scheduler);
-
-    enviar_mensaje(nuevo_ms->port,socket_kernel_scheduler);
-
-    enviar_int(nuevo_ms->base_global,socket_kernel_scheduler);
-    
-    enviar_int(nuevo_ms->tamanio,socket_kernel_scheduler);
-
-
+    // No le avisamos a Kernel Scheduler por este socket: es la misma conexión
+    // que KS usa para sus propios pedidos, y nadie del lado de KS está leyendo
+    // avisos espontáneos ahí — mandarlo corrompía el protocolo. KS se entera
+    // solo, reintentando la desuspensión periódicamente.
 }
+
 
 
 static bool mem_corrupt_notificado = false;
@@ -621,31 +614,22 @@ void* leer_bytes_globales(uint32_t dir_global, uint32_t tamanio) {
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_global);
     if (!ms) return NULL;
 
-    uint32_t dir_local = dir_global - ms->base_global; // La resta clave traductora
-
-    t_paquete* paquete_lectura = crear_paquete(LEER_MEMORIA);
-    agregar_a_paquete(paquete_lectura, &dir_local, sizeof(uint32_t));
-    agregar_a_paquete(paquete_lectura, &tamanio, sizeof(uint32_t));
-    enviar_paquete(paquete_lectura, ms->socket_fd);
-    eliminar_paquete(paquete_lectura);
+    enviar_op_code(LEER_MEMORIA, ms->socket_fd);
+    enviar_int(dir_global, ms->socket_fd);
+    enviar_int(tamanio, ms->socket_fd);
 
     void* buffer = malloc(tamanio);
     recv(ms->socket_fd, buffer, tamanio, MSG_WAITALL); // Trae los bytes de la MS remota
     return buffer;
 }
-
 void escribir_bytes_globales(uint32_t dir_global, uint32_t tamanio, void* datos) {
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_global);
     if (!ms) return;
 
-    uint32_t dir_local = dir_global - ms->base_global;
-
-    t_paquete* paquete_escritura = crear_paquete(ESCRIBIR_MEMORIA);
-    agregar_a_paquete(paquete_escritura, &dir_local, sizeof(uint32_t));
-    agregar_a_paquete(paquete_escritura, &tamanio, sizeof(uint32_t));
-    agregar_a_paquete(paquete_escritura, datos, tamanio);
-    enviar_paquete(paquete_escritura, ms->socket_fd);
-    eliminar_paquete(paquete_escritura);
+    enviar_op_code(ESCRIBIR_MEMORIA, ms->socket_fd);
+    enviar_int(dir_global, ms->socket_fd);
+    enviar_int(tamanio, ms->socket_fd);
+    send(ms->socket_fd, datos, tamanio, 0);
 
     op_code res;
     recv(ms->socket_fd, &res, sizeof(op_code), MSG_WAITALL); // Espera el OK de guardado de la MS
@@ -1032,22 +1016,15 @@ void recibir_contexto_cpu(int socket_cpu) {
 
     int cantidad_segmentos = recibir_int(socket_cpu);
 
-    if (contexto->tabla_segmentos != NULL)
-        list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
-
-    contexto->tabla_segmentos = list_create();
-
+    // La tabla de segmentos la administra Kernel Memory (creacion_segmento /
+    // eliminar_segmento), no la CPU. Drenamos estos enteros del socket para
+    // no romper el protocolo, pero NO pisamos contexto->tabla_segmentos
+    // (que ya tiene los t_segmento_aux correctos).
     for (int i = 0; i < cantidad_segmentos; i++) {
-
-        t_segmento* segmento = malloc(sizeof(t_segmento));
-
-        segmento->id_segmento = recibir_int(socket_cpu);
-        segmento->base        = recibir_int(socket_cpu);
-        segmento->tamanio     = recibir_int(socket_cpu);
-
-        list_add(contexto->tabla_segmentos, segmento);
+        recibir_int(socket_cpu); // id_segmento (no usado)
+        recibir_int(socket_cpu); // base (no usado)
+        recibir_int(socket_cpu); // tamanio (no usado)
     }
-
     log_info(logger,
              "Contexto actualizado PID %d con %d segmentos",
              pid,
@@ -1089,13 +1066,16 @@ void liberar_bloques_swap(int nro_bloque, int cantidad) {
     }
 }
 
-void mover_segmento_a_swap(t_segmento_aux* seg) {
+bool mover_segmento_a_swap(t_segmento_aux* seg) {
     int bloques_necesarios = ceil((double)seg->limite / block_size_swap);
     int primer_bloque = obtener_n_bloques_libres(bloques_necesarios);
 
+    log_error(logger, "DEBUG SWAP: seg->limite=%u block_size_swap=%d bloques_necesarios=%d total_bloques_swap=%d primer_bloque=%d",
+        seg->limite, block_size_swap, bloques_necesarios, total_bloques_swap, primer_bloque);
+
     if (primer_bloque == -1) {
-        log_error(logger, "SWAP LLENO: No se pudo suspender PID %d", seg->id_segmento);
-        return;
+        log_error(logger, "SWAP LLENO: No se pudo suspender el Segmento %d", seg->id_segmento);
+        return false;
     }
 
     void* buffer = leer_bytes_globales(seg->direccion_base, seg->limite);
@@ -1118,18 +1098,29 @@ void mover_segmento_a_swap(t_segmento_aux* seg) {
     
     liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
     free(buffer);
-}
-void suspender_proceso(int pid) {
-    t_contexto* ctx = buscar_contexto(pid); 
-    if (!ctx) return;
+    return true;
+}bool suspender_proceso(int pid) {
+    t_contexto* ctx = buscar_contexto(pid);
+    if (!ctx) return false;
+
+    bool exito_total = true;
 
     for (int i = 0; i < list_size(ctx->tabla_segmentos); i++) {
         t_segmento_aux* seg = list_get(ctx->tabla_segmentos, i);
         if (!seg->en_swap) {
-            mover_segmento_a_swap(seg);
+            if (!mover_segmento_a_swap(seg)) {
+                exito_total = false;
+            }
         }
     }
-    log_info(logger, "Proceso %d movido totalmente a SWAP", pid);
+
+    if (exito_total) {
+        log_info(logger, "Proceso %d movido totalmente a SWAP", pid);
+    } else {
+        log_error(logger, "Proceso %d NO pudo suspenderse por completo (SWAP lleno)", pid);
+    }
+
+    return exito_total;
 }
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 {

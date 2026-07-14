@@ -806,9 +806,16 @@ void io_libre(int io_socket){ //Copia de atender CPU
 
             t_paquete* paquete_io = crear_paquete(PAQUETE);
     
+            log_debug(logger, "length = %u", pcb_a_ejecutar->iostdout.length);
+
+            printf("bytes: ");
+            for (int i = 0; i < pcb_a_ejecutar->iostdout.length; i++)
+                printf("%02X ", (unsigned char)pcb_a_ejecutar->iostdout.info[i]);
+            printf("\n");
+
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->pid, sizeof(uint32_t));
             agregar_a_paquete(paquete_io, &pcb_a_ejecutar->iostdout.length, sizeof(uint32_t));
-            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, strlen(pcb_a_ejecutar->iostdout.info)+1); // Los datos que vinieron de memoria
+            agregar_a_paquete(paquete_io, pcb_a_ejecutar->iostdout.info, pcb_a_ejecutar->iostdout.length); // Los datos que vinieron de memoria
             
             
             enviar_solo_buffer(paquete_io->buffer, io_socket);

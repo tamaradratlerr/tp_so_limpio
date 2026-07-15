@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
             
             decode(instruccion_raw); /* Fase Decode */
 
-            contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
+           
             
             if(instruccion_decodificada == NULL) {
                 log_error(logger,"No hay instruccion decodificada");
@@ -207,6 +207,19 @@ int main(int argc, char *argv[])
 
             execute(); /* Fase Execute */
 
+             if(control_loop == 0){
+                log_debug(logger, "entre aca lpm");
+                liberar_instruccion(instruccion_decodificada);
+                instruccion_decodificada = NULL;
+                break;
+            }
+
+            if (control_loop == 1) {
+                log_debug(logger, "Antes de incrementar PC: %d", contexto_actual->pc);
+                contexto_actual->pc++;
+                log_debug(logger, "Después de incrementar PC: %d", contexto_actual->pc);
+            }
+            
             interrupt();/* Fase Interrupt */
             
         }
@@ -663,7 +676,7 @@ t_instruccion_code identificar_codigo(char* token) {
     if (strcmp(token, "STDOUT") == 0)        return STDOUT;
     if (strcmp(token, "STDIN") == 0)         return STDIN;
     if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
-    if (strcmp(token, "EXIT_PROC") == 0)          return EXIT_PROC;
+    if (strcmp(token, "EXIT") == 0)          return EXIT_PROC;
 
     // caso por defecto si no reconoce el comando
     if (token == NULL) return EXIT_FAILURE;
@@ -1229,8 +1242,9 @@ void ejecutar_exit() {
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         exit_control = 1;
-        limpiar_contexto_actual();
         control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
+        limpiar_contexto_actual();
+
     }
 }
 

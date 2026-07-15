@@ -73,7 +73,8 @@ void atender_cpu(int cpu_fd) {
         
         log_info(logger,"*****     Esperando Por nuevas Solicitudes de CPU     *****");
         int cod_op = recibir_op_code(cpu_fd);
-        
+        log_debug(logger, "OPCODE RECIBIDO DEL CPU: %d", cod_op);
+
         switch (cod_op) {
             
             case CONTEXTO: 
@@ -91,6 +92,12 @@ void atender_cpu(int cpu_fd) {
             case cpu_GUARDAR_CONTEXTO:
 
                 log_debug(logger, "CPU manda para guardar contexto");
+                log_debug(logger,
+                    "CONTEXTO=%d cpu_GUARDAR_CONTEXTO=%d km_GUARDAR_CONTEXTO=%d FETCH=%d",
+                    CONTEXTO,
+                    cpu_GUARDAR_CONTEXTO,
+                    km_GUARDAR_CONTEXTO,
+                    FETCH);
 
                 recibir_contexto_cpu(cpu_fd);
 
@@ -132,6 +139,8 @@ void atender_kernel(int kernel_fd) {
         log_info(logger,"*****     Esperando Por nuevas Solicitudes de Kernel Scheduler     *****");
 
         int cod_op = recibir_op_code(kernel_fd);
+
+        log_debug(logger, "OPCODE RECIBIDO DEL CPU: %d", cod_op);
 
         switch (cod_op) 
         {
@@ -297,6 +306,7 @@ void* atender_cliente_inicial(void* arg)
             enviar_op_code(OK,cliente_fd);
 
             atender_cpu(cliente_fd);
+            
             break;
 
         case NUEVO_KERNEL:

@@ -52,6 +52,8 @@ extern pthread_mutex_t mutex_contextos;
 extern pthread_mutex_t mutex_ms;
 extern pthread_mutex_t mutex_procesos;
 
+extern pthread_mutex_t mutex_cpu;
+
 extern t_log* logger; 
 extern t_config* config_km;
 extern int socket_kernel_scheduler;

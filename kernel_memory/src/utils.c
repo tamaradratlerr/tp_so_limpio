@@ -29,6 +29,10 @@ t_list* lista_memory_sticks;
 pthread_mutex_t mutex_ms;
 uint32_t memoria_total_sistema = 0;
 
+pthread_mutex_t mutex_cpu;
+
+
+
 /*Funciones*/
 
 // La función encierra TODO la creación de estructuras juntas

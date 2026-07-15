@@ -1203,7 +1203,7 @@ void ejecutar_stdin(t_instruccion* instr) {
 void ejecutar_init_proc(t_instruccion* instr) {
 
     char* path = instr->params[0];
-    int prioridad = atoi(instr->params[1]);
+    int prioridad = atoi(instr->params[1]) - 1;
 
     log_info(logger,
         "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%s] - Prioridad [%d]",

@@ -2397,6 +2397,8 @@ void io_sleep(int socket_cpu) {
 
 
     loguear_lista_suplementaria("BCK_IO", logger);
+
+    
 }
 
 void rta_io_sleep(int socket_io){ 
@@ -2415,6 +2417,28 @@ void rta_io_sleep(int socket_io){
         "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready",
         pcb->data.PID
     );
+
+    
+    pthread_mutex_lock(&mutex_ios);
+
+    loguear_lista_suplementaria("IO", logger);
+
+    t_IO *io = list_find_with_context(
+        list_suplementarias->io,
+        es_la_io_buscada,
+        &socket_io
+    );
+
+    if(io != NULL){
+        io->enUso = false;
+        log_info(logger, "IO liberada");
+    }
+    else{
+        log_error(logger, "No se encontró IO finalizada");
+    }
+
+    pthread_mutex_unlock(&mutex_ios);
+    
 }
 
 // STDIN

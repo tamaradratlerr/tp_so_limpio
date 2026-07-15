@@ -1176,8 +1176,26 @@ void nuevo_espacio()
             "## PID [%d] desuspendido correctamente",
             pcb->data.PID);
 
-            
+
     }
+}
+
+// Reintenta la desuspensión periódicamente. Reemplaza al aviso roto que
+// mandaba Kernel Memory por el socket compartido (nadie lo leía del lado
+// de KS). Cubre los 3 casos del enunciado: se liberó memoria, se conectó
+// un memory stick nuevo, o terminó una compactación.
+void* hilo_reintentar_desuspension(void* arg) {
+    (void) arg;
+
+    while (scheduler_control_loop == 1) {
+        sleep(2);
+
+        if (!mock) {
+            nuevo_espacio();
+        }
+    }
+
+    return NULL;
 }
 
 

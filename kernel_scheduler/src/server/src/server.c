@@ -195,35 +195,69 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
 }
 
 /*-----                     GESTION DE PCBs                     -----*/
+PCB* buscar_pcb_por_pid(int pid_recibido)
+{
+    log_info(logger, "===== Buscando PID %d =====", pid_recibido);
 
-PCB* buscar_pcb_por_pid(int pid_recibido) /*OK*/
-{ 
-    
-     t_list* listas_a_revisar[] = { 
-        listasProcesos-> new, listasProcesos->rdy, 
-        listasProcesos-> rnn, listasProcesos->bck, 
-        listasProcesos-> ext, listasProcesos->s_bck,
-        listasProcesos-> s_rdy
+    t_list* listas_a_revisar[] = {
+        listasProcesos->new,
+        listasProcesos->rdy,
+        listasProcesos->rnn,
+        listasProcesos->bck,
+        listasProcesos->ext,
+        listasProcesos->s_bck,
+        listasProcesos->s_rdy
+    };
+
+    char* nombres[] = {
+        "NEW",
+        "READY",
+        "RUNNING",
+        "BLOCK",
+        "EXIT",
+        "S_BLOCK",
+        "S_READY"
     };
 
     for (int i = 0; i < 7; i++) {
-        t_list* lista_actual = listas_a_revisar[i];
-        
-        t_list_iterator* it = list_iterator_create(lista_actual);
+
+        log_info(logger,
+                 "Revisando lista %s (size=%d)",
+                 nombres[i],
+                 list_size(listas_a_revisar[i]));
+
+        t_list_iterator* it = list_iterator_create(listas_a_revisar[i]);
+
         while (list_iterator_has_next(it)) {
-            PCB* pcb = (PCB*) list_iterator_next(it);
+
+            PCB* pcb = list_iterator_next(it);
+
+            log_info(logger,
+                     "  -> PID %d",
+                     pcb->data.PID);
+
             if (pcb->data.PID == pid_recibido) {
+
+                log_info(logger,
+                         "PID %d encontrado en %s",
+                         pid_recibido,
+                         nombres[i]);
+
                 list_iterator_destroy(it);
-                return pcb; 
+                return pcb;
             }
         }
+
         list_iterator_destroy(it);
     }
 
-    log_error(logger, "Error al identificar PCB en listas de estados (funcion buscar_pcb_por_pid)");
-    return NULL;
+    log_error(logger,
+              "PID %d NO encontrado en ninguna lista",
+              pid_recibido);
 
+    return NULL;
 }
+
 
 PCB* encontrar_pcb_rnn_por_pid(int pid) /*OK*/
 {
@@ -654,48 +688,64 @@ void desalojo(int socket_cliente)
     }
 
     err = recibir_op_code(socket_cliente);
-    if(err == OK){
 
-        if(desalojado == 1){
-            
+    if (err == OK) {
+
+        if (desalojado == 1) {
+
             log_debug(logger, "Entro a IF de DESALOJADO");
+
             PCB* pcb = buscar_pcb_por_pid(pid);
-        
-            if(pcb->estado_pcb == RNN){
 
-                cambiar_estado_pcb(pcb,RDY);
+            if (pcb == NULL) {
 
-                if (compactacion_value == 1){
-                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0){
-                        actualizar_prioridad_pcb(pcb,0);
+                log_error(logger, "PID %d no encontrado", pid);
+
+                log_info(logger, "NEW: %d", list_size(listasProcesos->new));
+                log_info(logger, "READY: %d", list_size(listasProcesos->rdy));
+                log_info(logger, "RUNNING: %d", list_size(listasProcesos->rnn));
+                log_info(logger, "BLOCK: %d", list_size(listasProcesos->bck));
+                log_info(logger, "EXIT: %d", list_size(listasProcesos->ext));
+                log_info(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
+                log_info(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
+
+                return;
+            }
+
+            if (pcb->estado_pcb == BCK) {
+
+                cambiar_estado_pcb(pcb, RDY);
+
+                if (compactacion_value == 1) {
+
+                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0) {
+                        actualizar_prioridad_pcb(pcb, 0);
                     }
-                    
+
                     pthread_mutex_lock(&mutex_ready);
                     list_add_in_index(listasProcesos->rdy, 0, pcb);
-                    pthread_mutex_lock(&mutex_ready);
+                    pthread_mutex_unlock(&mutex_ready);
 
                     sem_post(&sem_hay_ready);
-                }
-            
-                else
-                {
+
+                } else {
+
                     agregar_proceso_lista(pcb);
                 }
-            
-                    eliminar_proceso_Lista(pcb);
-                    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
-                    cpu_libre->enUso = false;
+
+                eliminar_proceso_Lista(pcb);
             }
-        
 
-            log_info(logger,"Proceso Desalojado PID:[%d] de CPU:[%s]",pid,cpu_id);
-
+            log_info(logger,
+                    "Proceso Desalojado PID:[%d] de CPU:[%s]",
+                    pid,
+                    cpu_id);
         }
+
+    } else {
+
+        log_error(logger, "Error de coordinacion en la comunicacion [desalojo]");
     }
-    else {
-            log_error(logger, "Error de condinacion en la comunicacion [desalojo]");
-        }
-    
     
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
@@ -2224,14 +2274,16 @@ void init_proc(int socket_cliente) {
         eliminar_proceso_Lista(nuevo_pcb);
     }
 
-    cambiar_estado_pcb(pcb, RDY);
-    agregar_proceso_lista(pcb);
-    eliminar_proceso_Lista(pcb);
+    //ESTO NO VA porque me modifica la planificacion
+    // cambiar_estado_pcb(pcb, RDY);
+    // agregar_proceso_lista(pcb);
+    // eliminar_proceso_Lista(pcb);
 
     enviar_op_code(OK, socket_cliente);
 
     free(path);
 }
+
 //EXIT
 void exit_proceso(int socket_cpu){ /*OK*/
 

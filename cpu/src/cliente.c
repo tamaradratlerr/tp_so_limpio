@@ -1190,22 +1190,30 @@ void ejecutar_stdin(t_instruccion* instr) {
 }
 
 void ejecutar_init_proc(t_instruccion* instr) {
-   
+
     char* path = instr->params[0];
     int prioridad = atoi(instr->params[1]);
 
-    log_info (logger, "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%s] - Prioridad [%d]",contexto_actual->pid, path, prioridad);/*Logger Obligatorio*/
-    log_info(logger, "PID %d solicitando crear nuevo proceso: %s", contexto_actual->pid, path);
+    log_info(logger,
+        "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%s] - Prioridad [%d]",
+        contexto_actual->pid, path, prioridad);
 
     enviar_op_code(gl_INIT_PROC, sockets->conexion_kernel_scheduler);
 
-    t_paquete* paquete = crear_paquete(gl_INIT_PROC);
-    agregar_a_paquete(paquete, path, strlen(path) + 1);
-    agregar_a_paquete(paquete, &prioridad, sizeof(int));
-    enviar_paquete(paquete, sockets->conexion_kernel_scheduler);
-    eliminar_paquete(paquete);
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK)
+        return;
 
-    enviar_pid(contexto_actual->pid,sockets->conexion_kernel_scheduler);
+    enviar_mensaje(path, sockets->conexion_kernel_scheduler);
+
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK)
+        return;
+
+    enviar_int(prioridad, sockets->conexion_kernel_scheduler);
+
+    if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK)
+        return;
+
+    enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
 
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "Proceso creado exitosamente por el Kernel.");

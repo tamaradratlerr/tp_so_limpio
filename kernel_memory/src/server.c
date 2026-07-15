@@ -338,6 +338,3 @@ void* atender_cliente_inicial(void* arg)
 
 
 
-
-
-

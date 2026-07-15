@@ -181,10 +181,8 @@ int buscar_indice_contexto(int pid) {
 void manejar_finalizar_proceso(int socket_cliente) {
     
     
+    int pid = recibir_pid(socket_cliente);
 
-    t_list* paquete = recibir_paquete(socket_cliente); //recibe el pid
-
-    int pid = *(int*) list_get(paquete, 0);
 
     //ahora identifico que proceso debe eliminar
 
@@ -194,7 +192,6 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
         log_error(logger, "No se encontró el proceso PID: %d", pid);
 
-        list_destroy_and_destroy_elements(paquete, free); //recibir paquete usa memoria dinamica, libero el paquete pq no me sirve
         //evito memory leak
         //se deberia hacer la parte de borrar del memory stick
         return;
@@ -249,7 +246,6 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
  }
     //libero el paquete recibido por socket
-    list_destroy_and_destroy_elements(paquete, free);
 }
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {

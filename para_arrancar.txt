@@ -1,0 +1,13 @@
+./bin/cpu cpu.config cpu1
+
+ ./bin/kernel_memory src/kernel_memory.config 
+
+./bin/memory_stick memory_stick.config 1024
+
+./bin/io IO.config io1
+
+./bin/kernel_scheduler src/client/cliente.config PCP.prc
+
+./bin/swap client.config
+
+

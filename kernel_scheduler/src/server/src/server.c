@@ -1440,20 +1440,16 @@ void enviar_proceso_finalizar_KM(int pid){
     
     pthread_mutex_lock(&mutex_conexion_km);
 
-    enviar_op_code (gl_EXIT, info_km.conexion_km);
+    enviar_op_code(gl_EXIT, socket);
     
-    t_paquete* paquete = crear_paquete(gl_EXIT);
-    
-    agregar_a_paquete(paquete, &pid, sizeof(uint32_t));    
-    
-    enviar_paquete(paquete, info_km.conexion_km);
+    enviar_pid(pid, socket);
     
     pthread_mutex_unlock(&mutex_conexion_km);
-
-    eliminar_paquete(paquete);
     
     log_info(logger, " Enviado a KM, PID: %u", pid);
 }
+
+
 void enviar_proceso_KM(uint32_t pid, op_code opCode) { 
   
     t_paquete* paquete = crear_paquete(opCode);

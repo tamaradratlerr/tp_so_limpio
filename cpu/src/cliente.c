@@ -4,6 +4,7 @@
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 
 bool mock = false; 
+static int id_buscado =0; 
 
 /*-----                        MAIN                        -----*/
 
@@ -197,7 +198,7 @@ int main(int argc, char *argv[])
             
             decode(instruccion_raw); /* Fase Decode */
 
-            contexto_actual->pc++; //La sumatoria en 1 del PC se hace en esta parte para evitar errores
+           
             
             if(instruccion_decodificada == NULL) {
                 log_error(logger,"No hay instruccion decodificada");
@@ -206,6 +207,19 @@ int main(int argc, char *argv[])
 
             execute(); /* Fase Execute */
 
+             if(control_loop == 0){
+                log_debug(logger, "entre aca lpm");
+                liberar_instruccion(instruccion_decodificada);
+                instruccion_decodificada = NULL;
+                break;
+            }
+
+            if (control_loop == 1) {
+                log_debug(logger, "Antes de incrementar PC: %d", contexto_actual->pc);
+                contexto_actual->pc++;
+                log_debug(logger, "Después de incrementar PC: %d", contexto_actual->pc);
+            }
+            
             interrupt();/* Fase Interrupt */
             
         }
@@ -662,7 +676,7 @@ t_instruccion_code identificar_codigo(char* token) {
     if (strcmp(token, "STDOUT") == 0)        return STDOUT;
     if (strcmp(token, "STDIN") == 0)         return STDIN;
     if (strcmp(token, "INIT_PROC") == 0)     return INIT_PROC;
-    if (strcmp(token, "EXIT_PROC") == 0)          return EXIT_PROC;
+    if (strcmp(token, "EXIT") == 0)          return EXIT_PROC;
 
     // caso por defecto si no reconoce el comando
     if (token == NULL) return EXIT_FAILURE;
@@ -796,17 +810,14 @@ void ejecutar_mov_in (t_instruccion* instr){
 
     }
 }
-
 void ejecutar_mov_out(t_instruccion* instr){
 
     char* reg_valor_nombre = instr->params[0];
-    char* reg_dir_nombre = instr->params[1];
 
     int tamanio = 0;
     void* buffer;
 
-
-    uint32_t direccion_logica = obtener_direccion_del_registro(reg_dir_nombre);
+    uint32_t direccion_logica = contexto_actual->di;
 
 
     if(es_registro_32bits(reg_valor_nombre)){
@@ -820,16 +831,11 @@ void ejecutar_mov_out(t_instruccion* instr){
 
         buffer = valor;
 
-
-       
-            escribir_en_memoria(dir_fisica,buffer,tamanio);
-        
-
+        escribir_en_memoria(dir_fisica,buffer,tamanio);
 
         log_info(logger,
-        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [%s] - Valor [%u]",
+        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [DI] - Valor [%u]",
         contexto_actual->pid,
-        reg_dir_nombre,
         *valor);
 
     }
@@ -841,7 +847,12 @@ void ejecutar_mov_out(t_instruccion* instr){
 
         uint32_t dir_fisica;
         dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
-  
+        if (dir_fisica == ERROR_SEGMENTATION_FAULT) {
+
+        return;
+
+        }
+
         buffer = valor;
 
         escribir_en_memoria(dir_fisica,buffer,tamanio);
@@ -1192,7 +1203,7 @@ void ejecutar_stdin(t_instruccion* instr) {
 void ejecutar_init_proc(t_instruccion* instr) {
 
     char* path = instr->params[0];
-    int prioridad = atoi(instr->params[1]);
+    int prioridad = atoi(instr->params[1]) - 1;
 
     log_info(logger,
         "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%s] - Prioridad [%d]",
@@ -1231,8 +1242,9 @@ void ejecutar_exit() {
     if (recibir_op_code(sockets->conexion_kernel_scheduler) == OK) {
         log_info(logger, "EXIT confirmado. Limpiando CPU.");
         exit_control = 1;
-        limpiar_contexto_actual();
         control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
+        limpiar_contexto_actual();
+
     }
 }
 
@@ -1250,7 +1262,7 @@ void crear_segmento(int id, int tamanio, int base){
 
 void eliminar_segmento(int id) {
 
-    int id_buscado = id;
+    id_buscado = id;
 
     t_segmento* segmento_a_eliminar = list_remove_by_condition(
         contexto_actual->tabla_segmentos,
@@ -1298,7 +1310,7 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
     uint32_t id_segmento = dir_logica / config_cpu->tam_max_segmento;
     uint32_t desplazamiento = dir_logica % config_cpu->tam_max_segmento;
 
-    int id_buscado = id_segmento;
+    id_buscado = id_segmento;
 
     log_info(logger, "Cantidad de segmentos: %d",
          list_size(contexto_actual->tabla_segmentos));
@@ -1561,7 +1573,7 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
         int resultado = recibir_op_code(ms->socket);
 
 
-        if(resultado != OK_ESCRITURA)
+        if(resultado != OK)
         {
             log_error(logger,
                 "Error escribiendo en Memory Stick"
@@ -1687,8 +1699,6 @@ bool rango_ocupado(t_mem_stick* nuevo)
 }
 
 /* ------------------ AUXILIARES  ------------------*/
-
-static int id_buscado = 0;
 
 bool tiene_mismo_id(void* elemento) {
     t_segmento* segmento = (t_segmento*) elemento;

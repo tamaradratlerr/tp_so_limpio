@@ -73,7 +73,8 @@ void atender_cpu(int cpu_fd) {
         
         log_info(logger,"*****     Esperando Por nuevas Solicitudes de CPU     *****");
         int cod_op = recibir_op_code(cpu_fd);
-        
+        log_debug(logger, "OPCODE RECIBIDO DEL CPU: %d", cod_op);
+
         switch (cod_op) {
             
             case CONTEXTO: 
@@ -91,6 +92,12 @@ void atender_cpu(int cpu_fd) {
             case cpu_GUARDAR_CONTEXTO:
 
                 log_debug(logger, "CPU manda para guardar contexto");
+                log_debug(logger,
+                    "CONTEXTO=%d cpu_GUARDAR_CONTEXTO=%d km_GUARDAR_CONTEXTO=%d FETCH=%d",
+                    CONTEXTO,
+                    cpu_GUARDAR_CONTEXTO,
+                    km_GUARDAR_CONTEXTO,
+                    FETCH);
 
                 recibir_contexto_cpu(cpu_fd);
 
@@ -133,6 +140,8 @@ void atender_kernel(int kernel_fd) {
 
         int cod_op = recibir_op_code(kernel_fd);
 
+        log_debug(logger, "OPCODE RECIBIDO DEL CPU: %d", cod_op);
+
         switch (cod_op) 
         {
             case ENVIAR_PROCESO:
@@ -149,13 +158,16 @@ void atender_kernel(int kernel_fd) {
                 escritura_memoria(kernel_fd);
                 break;
            
-            case SUSPENDIDO: 
-                
+                case SUSPENDIDO:
+
                 int pid_s = recibir_pid(kernel_fd);
 
-                    suspender_proceso(pid_s);
+                if (suspender_proceso(pid_s)) {
                     enviar_op_code(OK, kernel_fd);
-                    break;
+                } else {
+                    enviar_op_code(NOTOK, kernel_fd);
+                }
+                break;
 
             case NUEVO_ESPACIO:  //desuspendido
                 
@@ -269,10 +281,11 @@ void* atender_cliente_inicial(void* arg)
             socket_swap = cliente_fd;
             total_bloques_swap = total_size_swap / block_size_swap;
 
-            char* bitarray_data = calloc(1, ceil((double) total_bloques_swap / 8));
+            int bytes_bitmap_swap = ceil((double) total_bloques_swap / 8);
+            char* bitarray_data = calloc(1, bytes_bitmap_swap);
             bitmap_swap = bitarray_create_with_mode(
                 bitarray_data,
-                total_bloques_swap,
+                bytes_bitmap_swap,
                 LSB_FIRST
             );
 
@@ -293,6 +306,7 @@ void* atender_cliente_inicial(void* arg)
             enviar_op_code(OK,cliente_fd);
 
             atender_cpu(cliente_fd);
+            
             break;
 
         case NUEVO_KERNEL:
@@ -321,9 +335,6 @@ void* atender_cliente_inicial(void* arg)
 
     return NULL;
 }
-
-
-
 
 
 

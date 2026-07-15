@@ -52,6 +52,8 @@ extern pthread_mutex_t mutex_contextos;
 extern pthread_mutex_t mutex_ms;
 extern pthread_mutex_t mutex_procesos;
 
+extern pthread_mutex_t mutex_cpu;
+
 extern t_log* logger; 
 extern t_config* config_km;
 extern int socket_kernel_scheduler;
@@ -93,7 +95,7 @@ void manejar_caida_memory_stick(t_memory_stick_nodo* ms);
 bool _ordenar_huecos_por_base(void* h1, void* h2) ;
 
 // SWAP
-void suspender_proceso(int pid);
+bool suspender_proceso(int pid);
 int desuspender_proceso(int pid);
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino);
 void liberar_espacio_en_huecos(uint32_t direccion_base , uint32_t tamanio);

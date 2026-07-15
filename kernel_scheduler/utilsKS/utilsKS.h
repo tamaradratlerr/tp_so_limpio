@@ -157,6 +157,8 @@ extern pthread_mutex_t sem_procesos_s_block;
 extern pthread_mutex_t sem_procesos_s_ready;
 extern pthread_mutex_t sem_procesos_s_desalojo;
 
+
+extern pthread_mutex_t mutex_conexion_km;
 extern pthread_mutex_t mutex_cpus;
 extern pthread_mutex_t mutex_ios;
 extern pthread_t hilo_timer;

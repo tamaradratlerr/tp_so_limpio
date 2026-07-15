@@ -4,6 +4,7 @@
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 
 bool mock = false; 
+static int id_buscado =0; 
 
 /*-----                        MAIN                        -----*/
 
@@ -796,17 +797,14 @@ void ejecutar_mov_in (t_instruccion* instr){
 
     }
 }
-
 void ejecutar_mov_out(t_instruccion* instr){
 
     char* reg_valor_nombre = instr->params[0];
-    char* reg_dir_nombre = instr->params[1];
 
     int tamanio = 0;
     void* buffer;
 
-
-    uint32_t direccion_logica = obtener_direccion_del_registro(reg_dir_nombre);
+    uint32_t direccion_logica = contexto_actual->di;
 
 
     if(es_registro_32bits(reg_valor_nombre)){
@@ -820,16 +818,11 @@ void ejecutar_mov_out(t_instruccion* instr){
 
         buffer = valor;
 
-
-       
-            escribir_en_memoria(dir_fisica,buffer,tamanio);
-        
-
+        escribir_en_memoria(dir_fisica,buffer,tamanio);
 
         log_info(logger,
-        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [%s] - Valor [%u]",
+        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [DI] - Valor [%u]",
         contexto_actual->pid,
-        reg_dir_nombre,
         *valor);
 
     }
@@ -841,7 +834,12 @@ void ejecutar_mov_out(t_instruccion* instr){
 
         uint32_t dir_fisica;
         dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
-  
+        if (dir_fisica == ERROR_SEGMENTATION_FAULT) {
+
+        return;
+
+        }
+
         buffer = valor;
 
         escribir_en_memoria(dir_fisica,buffer,tamanio);
@@ -1250,7 +1248,7 @@ void crear_segmento(int id, int tamanio, int base){
 
 void eliminar_segmento(int id) {
 
-    int id_buscado = id;
+    id_buscado = id;
 
     t_segmento* segmento_a_eliminar = list_remove_by_condition(
         contexto_actual->tabla_segmentos,
@@ -1298,7 +1296,7 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
     uint32_t id_segmento = dir_logica / config_cpu->tam_max_segmento;
     uint32_t desplazamiento = dir_logica % config_cpu->tam_max_segmento;
 
-    int id_buscado = id_segmento;
+    id_buscado = id_segmento;
 
     log_info(logger, "Cantidad de segmentos: %d",
          list_size(contexto_actual->tabla_segmentos));
@@ -1561,7 +1559,7 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
         int resultado = recibir_op_code(ms->socket);
 
 
-        if(resultado != OK_ESCRITURA)
+        if(resultado != OK)
         {
             log_error(logger,
                 "Error escribiendo en Memory Stick"
@@ -1687,8 +1685,6 @@ bool rango_ocupado(t_mem_stick* nuevo)
 }
 
 /* ------------------ AUXILIARES  ------------------*/
-
-static int id_buscado = 0;
 
 bool tiene_mismo_id(void* elemento) {
     t_segmento* segmento = (t_segmento*) elemento;

@@ -735,6 +735,11 @@ void desalojo(int socket_cliente)
 
                 eliminar_proceso_Lista(pcb);
             }
+            else if( pcb->estado_pcb == RNN){
+                cambiar_estado_pcb(pcb, RDY);
+                agregar_proceso_lista(pcb);
+                eliminar_proceso_Lista(pcb);
+            }
 
             log_info(logger,
                     "Proceso Desalojado PID:[%d] de CPU:[%s]",
@@ -2389,6 +2394,9 @@ void io_sleep(int socket_cpu) {
     pthread_t hilo1;
     pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
     pthread_detach(hilo1);
+
+
+    loguear_lista_suplementaria("BCK_IO", logger);
 }
 
 void rta_io_sleep(int socket_io){ 
@@ -2458,6 +2466,9 @@ void io_stdin(int socket_cpu) {
     pthread_t hilo1;
     pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
     pthread_detach(hilo1);
+
+
+    loguear_lista_suplementaria("BCK_IO", logger);
 }    
 
 void rta_io_stdin(int socket_io){
@@ -2614,6 +2625,8 @@ void io_stdout(int cpu_socket) {
     pthread_create(&hilo1, NULL, (void*)mediano_plazo_bck, pcb);
     pthread_detach(hilo1);
 }
+
+    loguear_lista_suplementaria("BCK_IO", logger);
 }
 
 

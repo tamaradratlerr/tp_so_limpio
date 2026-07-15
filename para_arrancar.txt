@@ -2,11 +2,11 @@
 
 ./bin/kernel_memory src/kernel_memory.config 
 
-./bin/memory_stick memory_stick.config 1024
+./bin/memory_stick memory_stick.config 256
 
 ./bin/io IO.config io1
 
-./bin/kernel_scheduler src/client/cliente.config PCP.prc
+./bin/kernel_scheduler src/client/cliente.config PLANI_PRE_0.prc
 
 ./bin/swap client.config
 

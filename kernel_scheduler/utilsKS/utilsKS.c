@@ -210,17 +210,23 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
 	}
 
 }
- 
-op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp de agregar_proceso_lista (PCB* pcb)*/
-    bool removed = false; // Inicializamos
+ op_code eliminar_proceso_Lista(PCB* pcb)
+{
+    bool removed = false;
+
+    log_info(logger, "Intentando eliminar PID <%d> del estado <%d>", pcb->data.PID, pcb->estado_anterior);
 
     switch (pcb->estado_anterior) {
+
         case NEW:
             pthread_mutex_lock(&sem_procesos_new);
             removed = list_remove_element(listasProcesos->new, pcb);
             pthread_mutex_unlock(&sem_procesos_new);
+
+            log_info(logger, "PID <%d> eliminado de NEW: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
             break;
-            
+
         case RNN:
             pthread_mutex_lock(&sem_procesos_running);
             removed = list_remove_element(listasProcesos->rnn, pcb);
@@ -228,8 +234,11 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
             bool rnn_quedo_vacio = list_is_empty(listasProcesos->rnn);
             pthread_mutex_unlock(&sem_procesos_running);
 
-            if (rnn_quedo_vacio)
-            {
+            log_info(logger, "PID <%d> eliminado de RUNNING: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
+
+            if (rnn_quedo_vacio) {
+                log_info(logger, "RUNNING quedó vacío");
                 sem_post(&sem_rnn_vacio);
             }
 
@@ -237,28 +246,41 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
 
         case BCK:
             pthread_mutex_lock(&sem_procesos_block);
-            removed = list_remove_element(listasProcesos->bck, pcb); // Asegura que el nombre coincida con tu struct
+            removed = list_remove_element(listasProcesos->bck, pcb);
             pthread_mutex_unlock(&sem_procesos_block);
+
+            log_info(logger, "PID <%d> eliminado de BLOCK: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
             break;
 
         case EXT:
             pthread_mutex_lock(&sem_procesos_exit);
             removed = list_remove_element(listasProcesos->ext, pcb);
             pthread_mutex_unlock(&sem_procesos_exit);
+
+            log_info(logger, "PID <%d> eliminado de EXIT: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
             break;
-        
+
         case S_BCK:
             pthread_mutex_lock(&sem_procesos_s_block);
             removed = list_remove_element(listasProcesos->s_bck, pcb);
             pthread_mutex_unlock(&sem_procesos_s_block);
+
+            log_info(logger, "PID <%d> eliminado de S_BLOCK: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
             break;
-        
+
         case S_RDY:
             pthread_mutex_lock(&sem_procesos_s_ready);
             removed = list_remove_element(listasProcesos->s_rdy, pcb);
             pthread_mutex_unlock(&sem_procesos_s_ready);
 
-            sem_wait(&sem_hay_s_ready);
+            log_info(logger, "PID <%d> eliminado de S_READY: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
+
+            if (removed)
+                sem_wait(&sem_hay_s_ready);
 
             break;
 
@@ -267,21 +289,30 @@ op_code eliminar_proceso_Lista(PCB* pcb) { /*/Esta Funcion debe ser llamada dsp 
             removed = list_remove_element(listasProcesos->rdy, pcb);
             pthread_mutex_unlock(&sem_procesos_ready);
 
-            sem_wait(&sem_hay_ready);
+            log_info(logger, "PID <%d> eliminado de READY: %s",
+                     pcb->data.PID, removed ? "SI" : "NO");
+
+            if (removed)
+                sem_wait(&sem_hay_ready);
 
             break;
-    
+
         default:
-            log_error(logger, "Error: Estado anterior desconocido.");
-            return NOTOK; 
+            log_error(logger, "Estado anterior desconocido");
+            return NOTOK;
     }
 
     if (!removed) {
-        log_error(logger, "Error al remover PCB de lista");
+        log_error(logger,
+                  "No se pudo eliminar el PID <%d> del estado <%d>",
+                  pcb->data.PID,
+                  pcb->estado_anterior);
         return NOTOK;
     }
 
-    return OK; 
+    log_info(logger, "PID <%d> eliminado correctamente", pcb->data.PID);
+
+    return OK;
 }
 
 int agregar_lista_ready(PCB* pcb)

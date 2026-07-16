@@ -2,9 +2,10 @@
 
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
+bool esExit = false;
+bool mock = false;
 
-bool mock = false; 
-static int id_buscado =0; 
+static int id_buscado = 0;
 
 /*-----                        MAIN                        -----*/
 
@@ -607,8 +608,9 @@ void limpiar_contexto_actual() {
 
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
 
-    if(!mock){enviar_contexto_a_kernel_memory();}
-    else {enviar_contexto_a_kernel_memory_mock();} 
+
+    if(!esExit){enviar_contexto_a_kernel_memory();}
+    
     
     enviar_op_code(OK,sockets->conexion_kernel_scheduler);
 
@@ -829,6 +831,10 @@ void ejecutar_mov_out(t_instruccion* instr){
         uint32_t dir_fisica;
         dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
 
+        if (dir_fisica == ERROR_SEGMENTATION_FAULT) {
+            return;
+        }
+
         buffer = valor;
 
         escribir_en_memoria(dir_fisica,buffer,tamanio);
@@ -847,10 +853,9 @@ void ejecutar_mov_out(t_instruccion* instr){
 
         uint32_t dir_fisica;
         dir_fisica = pedir_direccion_mmu(direccion_logica,tamanio);
+
         if (dir_fisica == ERROR_SEGMENTATION_FAULT) {
-
-        return;
-
+            return;
         }
 
         buffer = valor;
@@ -1054,6 +1059,10 @@ void ejecutar_mem_alloc (t_instruccion* instr){
 
     int base = recibir_pid(sockets->conexion_kernel_scheduler); /*Uso esta aunque no sea para esto*/
 
+    if(base == -1){
+        log_info(logger, "ERROR al crear el proceso - Terminando proceso");
+        return;
+    }
     crear_segmento(
         atoi(id_segmento),
         atoi(tamanio),
@@ -1244,6 +1253,7 @@ void ejecutar_exit() {
         exit_control = 1;
         control_loop = 0; //hace que se vuelva a mandar CPU_LIBRE
         limpiar_contexto_actual();
+        esExit = true;
 
     }
 }
@@ -1349,6 +1359,7 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
 
         enviar_op_code(ERROR_SEGMENTATION_FAULT,
                        sockets->conexion_kernel_scheduler);   // o el socket que corresponda
+        enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
 
         return ERROR_SEGMENTATION_FAULT;
     }

@@ -150,16 +150,12 @@ int main(int argc, char **argv)
 					log_info(logger, "Error al responder STDIN");
 					return EXIT_FAILURE;
 				}
-
-				t_paquete *paquete_retorno = crear_paquete(IO_STDIN_RETORNO);
-				agregar_a_paquete(paquete_retorno, &direccion_logica, sizeof(uint32_t));
-				agregar_a_paquete(paquete_retorno, &bytes_a_leer, sizeof(uint32_t));
-				agregar_a_paquete(paquete_retorno, buffer_usuario, bytes_a_leer);
-				agregar_a_paquete(paquete_retorno, &pid, sizeof(u_int32_t));
-
-				enviar_solo_buffer(paquete_retorno->buffer, fd_conexion);
-				enviar_op_code(IO_FINALIZADA, fd_conexion);
-
+				
+				enviar_int(direccion_logica, fd_conexion);
+				enviar_int(bytes_a_leer, fd_conexion);
+				enviar_mensaje(buffer_usuario, fd_conexion);
+				enviar_int(pid, fd_conexion);
+				
 				if(recibir_op_code(fd_conexion) != OK)
 				{
 					return EXIT_FAILURE;
@@ -167,7 +163,7 @@ int main(int argc, char **argv)
 
 				free(buffer_usuario);
 				list_destroy_and_destroy_elements(lista, free);
-				eliminar_paquete(paquete_retorno);
+				
 				break;
 			}
 

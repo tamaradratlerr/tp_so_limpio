@@ -179,33 +179,22 @@ int buscar_indice_contexto(int pid) {
 
 
 void manejar_finalizar_proceso(int socket_cliente) {
-    
-    
-    int pid = recibir_pid(socket_cliente);
 
+    int pid = recibir_pid(socket_cliente);
 
     //ahora identifico que proceso debe eliminar
 
-    int indice = buscar_indice_proceso(pid); //utilizo la funcion con el pid que obtuve del paquete
+    pthread_mutex_lock(&mutex_procesos);
+    int indice = buscar_indice_proceso(pid);
 
     if(indice == -1) {
-
+        pthread_mutex_unlock(&mutex_procesos);
         log_error(logger, "No se encontró el proceso PID: %d", pid);
-
-        //evito memory leak
-        //se deberia hacer la parte de borrar del memory stick
         return;
     }
 
-    //caso en que si lo encontre “removerlo de la lista y liberar su memoria”
-    pthread_mutex_lock(&mutex_procesos); //no permito que otros hilos entren a la lista de procesos
-
-    t_proceso* proceso = list_remove(lista_procesos, indice); //devuelve el proceso removido, es de bib de commons
-
+    t_proceso* proceso = list_remove(lista_procesos, indice);
     pthread_mutex_unlock(&mutex_procesos);
-
-    t_contexto* contexto = NULL;
-
 
     //libero todas las instrucciones del proceso pq antes use strdup(instruccion) y usa mem. dinam
     list_destroy_and_destroy_elements(proceso->instrucciones, free);
@@ -213,40 +202,40 @@ void manejar_finalizar_proceso(int socket_cliente) {
     //libero la struct proceso
     free(proceso);
 
-
-    //buscar contexto del PID
+    //buscar contexto del PID (todo protegido por el mismo lock, para evitar la
+    //race condition con el hilo que guarda el contexto de la CPU en paralelo)
+    pthread_mutex_lock(&mutex_contextos);
     int indice_contexto = buscar_indice_contexto(pid);
 
-    if(indice_contexto != -1) { //valido que existe
-
-        pthread_mutex_lock(&mutex_contextos);
-
-        //remover contexto
-        t_contexto* contexto = list_remove(lista_contextos, indice_contexto); //sacar contexto de la lista.
-
+    if(indice_contexto == -1) { //no existe contexto para este PID
         pthread_mutex_unlock(&mutex_contextos);
+        return;
+    }
+
+    //remover contexto
+    t_contexto* contexto = list_remove(lista_contextos, indice_contexto); //sacar contexto de la lista.
+    pthread_mutex_unlock(&mutex_contextos);
 
     //devolver la memoria a la lista de huecos y liberar bloques de SWAP.
     for (int i = 0; i < list_size(contexto->tabla_segmentos); i++) {
-    t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
+        t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
 
-    if (seg->en_swap) {
-        liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
-    } else {
-        liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+        if (seg->en_swap) {
+            liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
+        } else {
+            liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
+        }
     }
 
+    //liberar tabla de segmentos
+    list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
 
-        //liberar tabla de segmentos
-        list_destroy_and_destroy_elements(contexto->tabla_segmentos, free);
+    //liberar contexto
+    free(contexto);
 
-        //liberar contexto
-        free(contexto);
-    }
-
- }
     //libero el paquete recibido por socket
 }
+
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
     // Recibimos el paquete de la CPU
@@ -529,22 +518,19 @@ void conexion_memory_stick(int socket_ms) {
 
 
 
-static bool mem_corrupt_notificado = false;
-static pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
+ bool mem_corrupt_notificado = false;
+ pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
 
 void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
 {
     pthread_mutex_lock(&mutex_mem_corrupt);
 
     if (!mem_corrupt_notificado) {
+       
         mem_corrupt_notificado = true;
 
         log_error(logger,
             "## Memory Stick desconectada. Memoria corrupta.");
-
-        if (socket_kernel_scheduler >= 0) {
-            enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
-        }
     }
 
     pthread_mutex_unlock(&mutex_mem_corrupt);
@@ -732,20 +718,18 @@ void ejecutar_compactacion_fisica_memory_stick() {
 void solicitar_y_ejecutar_compactacion(int socket_ks) {
     log_warning(logger, "## Memoria fragmentada. Solicitando desalojo al Kernel Scheduler...");
 
-    enviar_op_code(DESALOJO, socket_ks);
+    enviar_op_code(COMPACTACION, socket_ks);
 
     // Bloqueo de sincronización: Queda esperando que KS eche a los procesos de las CPU
     op_code respuesta_ks;
-    recv(socket_ks, &respuesta_ks, sizeof(op_code), MSG_WAITALL);
+    respuesta_ks = recibir_op_code(socket_ks);
 
     if (respuesta_ks == CPUS_DESALOJADAS_OK) {
         log_info(logger, "## Kernel Scheduler dio el OK. Iniciando mudanza física...");
         
         ejecutar_compactacion_fisica_memory_stick();
 
-        t_paquete* paquete_fin = crear_paquete(COMPACTACION_FINALIZADA);
-        enviar_paquete(paquete_fin, socket_ks);
-        eliminar_paquete(paquete_fin);
+        enviar_op_code(COMPACTACION_FINALIZADA, socket_ks);
         log_info(logger, "## Fin de compactación notificado. Sistema reactivado.");
     }
 }
@@ -807,9 +791,14 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
     }
 
     // Recortamos el bache que tomamos para el nuevo segmento
+
     pthread_mutex_lock(&mutex_lista_libres);
     t_segmento_aux* nuevo_segmento = malloc(sizeof(t_segmento_aux));
     nuevo_segmento->id_segmento = id_segmento;
+    nuevo_segmento->en_swap = false;
+    nuevo_segmento->bloque_swap = -1;
+    nuevo_segmento->id_ms = 0;
+    nuevo_segmento->cantidad_bloques = 0;
     nuevo_segmento->direccion_base = bache_elegido->direccion_base;
     nuevo_segmento->limite = tamanio_segmento;
 
@@ -928,9 +917,12 @@ t_contexto* buscar_contexto(int pid) {
 
 void enviar_contexto_cpu(int socket_cpu, int pid) {
 
+    pthread_mutex_lock(&mutex_contextos);
+
     t_contexto* contexto = buscar_contexto(pid);
 
     if(contexto == NULL) {
+        pthread_mutex_unlock(&mutex_contextos);
         log_error(logger, "No existe contexto PID %d", pid);
         return;
     }
@@ -939,12 +931,10 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
 
     agregar_a_paquete(paquete, &contexto->pid, sizeof(int));
     agregar_a_paquete(paquete, &contexto->pc, sizeof(uint32_t));
-
     agregar_a_paquete(paquete, &contexto->ax, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->bx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->cx, sizeof(uint8_t));
     agregar_a_paquete(paquete, &contexto->dx, sizeof(uint8_t));
-
     agregar_a_paquete(paquete, &contexto->eax, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ebx, sizeof(uint32_t));
     agregar_a_paquete(paquete, &contexto->ecx, sizeof(uint32_t));
@@ -956,13 +946,13 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
     agregar_a_paquete(paquete, &cantidad_segmentos, sizeof(int));
 
     for(int i = 0; i < cantidad_segmentos; i++) {
-
         t_segmento_aux* seg = list_get(contexto->tabla_segmentos, i);
-
         agregar_a_paquete(paquete, &seg->id_segmento, sizeof(int));
         agregar_a_paquete(paquete, &seg->direccion_base, sizeof(uint32_t));
         agregar_a_paquete(paquete, &seg->limite, sizeof(uint32_t));
     }
+
+    pthread_mutex_unlock(&mutex_contextos);
 
     enviar_paquete(paquete, socket_cpu);
     eliminar_paquete(paquete);
@@ -974,23 +964,21 @@ void recibir_contexto_cpu(int socket_cpu) {
     log_debug(logger, "[recibir_contexto_cpu] llegó aca");
 
     int size;
-
     int pid = recibir_int(socket_cpu);
+
+    pthread_mutex_lock(&mutex_contextos);
 
     t_contexto* contexto = buscar_contexto(pid);
 
     if (contexto == NULL) {
-
+        pthread_mutex_unlock(&mutex_contextos);
         log_error(logger, "No existe contexto para PID %d", pid);
-
         enviar_op_code(NOTOK, socket_cpu);
         return;
     }
 
-    // PC
     contexto->pc = recibir_int(socket_cpu);
 
-    // Registros de 8 bits
     uint8_t* ax = recibir_buffer(&size, socket_cpu);
     uint8_t* bx = recibir_buffer(&size, socket_cpu);
     uint8_t* cx = recibir_buffer(&size, socket_cpu);
@@ -1001,12 +989,8 @@ void recibir_contexto_cpu(int socket_cpu) {
     contexto->cx = *cx;
     contexto->dx = *dx;
 
-    free(ax);
-    free(bx);
-    free(cx);
-    free(dx);
+    free(ax); free(bx); free(cx); free(dx);
 
-    // Registros de 32 bits
     contexto->eax = recibir_int(socket_cpu);
     contexto->ebx = recibir_int(socket_cpu);
     contexto->ecx = recibir_int(socket_cpu);
@@ -1014,25 +998,22 @@ void recibir_contexto_cpu(int socket_cpu) {
     contexto->si  = recibir_int(socket_cpu);
     contexto->di  = recibir_int(socket_cpu);
 
+    pthread_mutex_unlock(&mutex_contextos);
+
     int cantidad_segmentos = recibir_int(socket_cpu);
 
     // La tabla de segmentos la administra Kernel Memory (creacion_segmento /
     // eliminar_segmento), no la CPU. Drenamos estos enteros del socket para
-    // no romper el protocolo, pero NO pisamos contexto->tabla_segmentos
-    // (que ya tiene los t_segmento_aux correctos).
+    // no romper el protocolo, pero NO pisamos contexto->tabla_segmentos.
     for (int i = 0; i < cantidad_segmentos; i++) {
-        recibir_int(socket_cpu); // id_segmento (no usado)
-        recibir_int(socket_cpu); // base (no usado)
-        recibir_int(socket_cpu); // tamanio (no usado)
+        recibir_int(socket_cpu);
+        recibir_int(socket_cpu);
+        recibir_int(socket_cpu);
     }
-    log_info(logger,
-             "Contexto actualizado PID %d con %d segmentos",
-             pid,
-             cantidad_segmentos);
 
+    log_info(logger, "Contexto actualizado PID %d con %d segmentos", pid, cantidad_segmentos);
     enviar_op_code(OK, socket_cpu);
 }
-
 
 
 // CONEXION CON SWAP
@@ -1099,9 +1080,16 @@ bool mover_segmento_a_swap(t_segmento_aux* seg) {
     liberar_espacio_en_huecos(seg->direccion_base, seg->limite);
     free(buffer);
     return true;
-}bool suspender_proceso(int pid) {
+}
+
+bool suspender_proceso(int pid) {
+    pthread_mutex_lock(&mutex_contextos);
+
     t_contexto* ctx = buscar_contexto(pid);
-    if (!ctx) return false;
+    if (!ctx) {
+        pthread_mutex_unlock(&mutex_contextos);
+        return false;
+    }
 
     bool exito_total = true;
 
@@ -1114,6 +1102,8 @@ bool mover_segmento_a_swap(t_segmento_aux* seg) {
         }
     }
 
+    pthread_mutex_unlock(&mutex_contextos);
+
     if (exito_total) {
         log_info(logger, "Proceso %d movido totalmente a SWAP", pid);
     } else {
@@ -1122,6 +1112,7 @@ bool mover_segmento_a_swap(t_segmento_aux* seg) {
 
     return exito_total;
 }
+
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 {
     int offset = 0;
@@ -1211,9 +1202,12 @@ void enviar_a_swap(int nro_bloque, void* datos) {
 }
 
 int desuspender_proceso(int pid) {
+    pthread_mutex_lock(&mutex_contextos);
+
     t_contexto* ctx = buscar_contexto(pid);
 
     if (!ctx) {
+        pthread_mutex_unlock(&mutex_contextos);
         log_error(logger, "No existe el proceso %d para desuspender", pid);
         return -1;
     }
@@ -1230,17 +1224,14 @@ int desuspender_proceso(int pid) {
 
             if (hueco == NULL) {
                 pthread_mutex_unlock(&mutex_lista_libres);
-                log_error(
-                    logger,
+                pthread_mutex_unlock(&mutex_contextos);
+                log_error(logger,
                     "ERROR: No hay espacio en RAM para el segmento %d del proceso %d",
-                    seg->id_segmento,
-                    pid
-                );
+                    seg->id_segmento, pid);
                 return -1;
             }
 
             int nueva_base = hueco->direccion_base;
-
             hueco->direccion_base += seg->limite;
             hueco->tamanio -= seg->limite;
 
@@ -1255,24 +1246,21 @@ int desuspender_proceso(int pid) {
             if (recibir_de_swap(seg, buffer) != 0) {
                 free(buffer);
                 liberar_espacio_en_huecos(nueva_base, seg->limite);
+                pthread_mutex_unlock(&mutex_contextos);
                 return -1;
             }
 
             escribir_bytes_globales(nueva_base, seg->limite, buffer);
-
             seg->direccion_base = nueva_base;
             seg->en_swap = false;
-
             free(buffer);
 
-            log_info(
-                logger,
-                "Segmento %d restaurado en dirección %d",
-                seg->id_segmento,
-                nueva_base
-            );
+            log_info(logger, "Segmento %d restaurado en dirección %d",
+                seg->id_segmento, nueva_base);
         }
     }
+
+    pthread_mutex_unlock(&mutex_contextos);
 
     log_info(logger, "Proceso %d des-suspendido exitosamente", pid);
     return 0;

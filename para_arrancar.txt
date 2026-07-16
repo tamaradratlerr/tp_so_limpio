@@ -6,7 +6,7 @@
 
 ./bin/io IO.config io1
 
-./bin/kernel_scheduler src/client/cliente.config PLANI_PRE_0.prc
+./bin/kernel_scheduler src/client/cliente.config MEMORIA_PRE_0.prc
 
 ./bin/swap client.config
 

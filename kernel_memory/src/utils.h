@@ -52,6 +52,9 @@ extern pthread_mutex_t mutex_contextos;
 extern pthread_mutex_t mutex_ms;
 extern pthread_mutex_t mutex_procesos;
 
+extern bool mem_corrupt_notificado;
+extern pthread_mutex_t mutex_mem_corrupt;
+
 extern pthread_mutex_t mutex_cpu;
 
 extern t_log* logger; 

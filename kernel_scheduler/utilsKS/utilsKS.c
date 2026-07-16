@@ -370,10 +370,37 @@ int ready_CMN(PCB* pcb_nuevo ){
 
     if(planificador->preemption)
     {
-        verificar_desalojo_por_prioridad(pcb_nuevo);
+        verificar_desalojo_por_prioridad_cmn(pcb_nuevo);
     }
 
     return nivel;
+}
+
+void verificar_desalojo_por_prioridad_cmn(PCB* pcb){
+    PCB* pcb_rnn;
+    for (int i = 0; i < listasProcesos->rnn; i++)
+    {
+        
+        pcb_rnn = list_get(listasProcesos->rnn, i);
+
+        if(pcb->data.prioridad_original < pcb_rnn->data.prioridad_original){
+            
+            cambiar_estado_pcb(pcb_rnn,BCK);
+            agregar_proceso_lista(pcb_rnn);
+            eliminar_proceso_Lista(pcb_rnn);
+
+            loguear_lista(listasProcesos->bck,logger);
+
+            pthread_mutex_lock(&sem_procesos_s_desalojo);
+            list_add(list_suplementarias->desalojo, pcb_rnn);
+            pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+            return;
+        }
+
+    }
+    
+
 }
 
 

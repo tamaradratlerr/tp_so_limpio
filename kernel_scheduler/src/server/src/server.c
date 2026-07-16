@@ -58,6 +58,7 @@ int main(int argc, char *argv[]) /*OK*/
             log_error(logger, "Error al crear el hilo");
             close(cliente_fd);
         }
+
         
     }
     
@@ -123,10 +124,6 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 mem_free(cliente_fd);
                 break;
 
-            case MEM_CORRUPT:
-                mem_corrupt(cliente_fd);
-                break;
-
             case COMPACTACION:
                 compactacion(cliente_fd);
                 break;
@@ -183,11 +180,26 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 rta_io_stdout(cliente_fd);
                 break;
 
+            case ERROR_SEGMENTATION_FAULT:
+                
+                segmentation_fault(cliente_fd);
+              
+                break;
+
             default:
                 log_warning(logger, "Operación desconocida.");
                 control_loop = 0; // Si hay basura, mejor cortar
-                break;
+            break;
         }
+
+        enviar_op_code(MEM_CORRUPT,info_km.conexion_km);
+            int err = recibir_op_code(info_km.conexion_km);
+
+            if(err == MEM_CORRUPT)
+            {
+                mem_corrupt(cliente_fd);
+            }
+
     }
 
     close(cliente_fd);
@@ -195,6 +207,53 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
 }
 
 /*-----                     GESTION DE PCBs                     -----*/
+
+
+
+void segmentation_fault(int socket_cpu){
+
+    int pid = recibir_pid(socket_cpu);
+
+    log_error(logger,
+            "## PID: %d - Finaliza por SEGMENTATION FAULT",
+            pid);
+
+    PCB* pcb = buscar_pcb_por_pid(pid);
+
+    if (pcb != NULL) {
+        cambiar_estado_pcb(pcb, EXT);
+        agregar_proceso_lista (pcb);
+        eliminar_proceso_Lista(pcb);
+    }
+    else{
+        log_error(logger, "PCB = NULL en EXIT_PROCESO");
+    }
+
+
+
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+    list_add(list_suplementarias->desalojo, pcb);
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+            
+    enviar_proceso_finalizar_KM(pcb->data.PID);
+
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
+            
+    if(cpu_libre == NULL){
+        log_error(logger,"Error al encontrar CPU en la lista");
+        return;
+    }
+
+    cpu_libre->enUso = false;
+
+    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pcb->data.PID);/*Logger Obligatorio*/
+    
+    nuevo_espacio();
+
+}
+
+
+
 PCB* buscar_pcb_por_pid(int pid_recibido)
 {
     log_info(logger, "===== Buscando PID %d =====", pid_recibido);
@@ -1007,7 +1066,8 @@ else
 }
 
 //COMPACTACION
-void compactacion (int socket_cliente){
+void compactacion (int socket_cliente)
+{
     int err = 0;
     compactacion_value = 1;
     sem_wait(&sem_compactacion);
@@ -1445,9 +1505,9 @@ void enviar_proceso_finalizar_KM(int pid){
     
     pthread_mutex_lock(&mutex_conexion_km);
 
-    enviar_op_code(gl_EXIT, socket);
+    enviar_op_code(gl_EXIT, info_km.conexion_km);
     
-    enviar_pid(pid, socket);
+    enviar_pid(pid, info_km.conexion_km);
     
     pthread_mutex_unlock(&mutex_conexion_km);
     
@@ -2171,9 +2231,62 @@ void mem_alloc (int socket_cliente){
 
     enviar_int(atoi(id_segmento),info_km.conexion_km);
 
+    int err = recibir_op_code(info_km.conexion_km);
 
-    if (recibir_op_code(info_km.conexion_km) == OK) {
+    if ( err == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
+    }
+    else if (err == COMPACTACION)
+    {
+        enviar_int(-1, socket_cliente);
+        compactacion(socket_cliente);
+
+        return;
+    }
+    else
+    {
+
+        log_error(logger,
+                "## PID: %d - Finaliza por Mortivo Falta de tamaño para Creación de segmento",
+                pid);
+
+        PCB* pcb = buscar_pcb_por_pid(pid);
+
+        if (pcb != NULL) {
+            cambiar_estado_pcb(pcb, EXT);
+            agregar_proceso_lista (pcb);
+            eliminar_proceso_Lista(pcb);
+        }
+        else{
+            log_error(logger, "PCB = NULL en EXIT_PROCESO");
+        }
+
+        
+        pthread_mutex_lock(&sem_procesos_s_desalojo);
+        list_add(list_suplementarias->desalojo, pcb);
+        pthread_mutex_unlock(&sem_procesos_s_desalojo);
+                
+        enviar_proceso_finalizar_KM(pcb->data.PID);
+
+        t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+                
+        if(cpu_libre == NULL){
+            log_error(logger,"Error al encontrar CPU en la lista");
+            return;
+        }
+
+        enviar_int(-1, socket_cliente);
+
+        cpu_libre->enUso = false;
+
+        log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pcb->data.PID);/*Logger Obligatorio*/
+        
+        pthread_mutex_unlock(&mutex_conexion_km);
+
+        nuevo_espacio();
+
+        return;
+
     }
 
     int base = recibir_int(info_km.conexion_km);
@@ -2499,12 +2612,11 @@ void rta_io_stdin(int socket_io){
 
     enviar_op_code(OK, socket_io);
 
-    t_list* lista = recibir_paquete(socket_io);
 
-    uint32_t direccion_logica = *(uint32_t*)list_get(lista,0);
-    uint32_t tam_datos = *(uint32_t*)list_get(lista,1);
-    void* datos_recibidos = list_get(lista,2);
-    int pid = *(int*)list_get(lista,3);
+    uint32_t direccion_logica = recibir_int(socket_io);
+    uint32_t tam_datos = recibir_int(socket_io);
+    char* datos_recibidos = recibir_mensaje(socket_io, logger);
+    int pid = recibir_int(socket_io);
 
     log_debug(logger, "Texto Recibifo [%s]",(char*)datos_recibidos);
 
@@ -2543,7 +2655,6 @@ void rta_io_stdin(int socket_io){
     );
 
 
-    list_destroy_and_destroy_elements(lista,free);
 }
 
 

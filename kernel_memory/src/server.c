@@ -218,10 +218,21 @@ void atender_kernel(int kernel_fd) {
                 escritura_memoria(kernel_fd);
                  break;
 
+            case MEM_CORRUPT:
+
+                if(mem_corrupt_notificado) 
+                {
+                    enviar_op_code(MEM_CORRUPT,kernel_fd);
+                }
+                else enviar_op_code(OK,kernel_fd);
+
+                break;
+
             case -1:
                 log_warning(logger, "Kernel (ks) en socket %d se desconectó.", kernel_fd);
                 close(kernel_fd);
                 return;
+                break;
 
             default:
                 log_error(logger, "Opcode desconocido (%d) enviado por Kernel.", cod_op);

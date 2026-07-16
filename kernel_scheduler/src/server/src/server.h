@@ -26,7 +26,6 @@ void* control_hilo_quantum(void* arg);
 PCB* obtener_siguiente_proceso();
 int ready_FIFO(PCB* pcb_nuevo);
 int ready_CMN(PCB* pcb_nuevo );
-void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
 bool usa_quantum (PCB* pcb);
 void mediano_plazo_bck(PCB* pcb);
 void mediano_plazo_rdy (PCB* pcb);
@@ -98,6 +97,7 @@ void rta_io_stdin (int socket_io);
 void io_stdout(int cpu_socket);
 void rta_io_stdout(int socket_io);
 void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
+void verificar_desalojo_por_prioridad_cmn(PCB* pcb_nuevo);
 void loguear_lista_suplementaria(char* tipo_lista, t_log* logger);
 
 

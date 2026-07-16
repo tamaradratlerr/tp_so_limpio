@@ -3,6 +3,7 @@
 
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 bool esExit = false;
+bool seg_fault_ocurrido = false;
 bool mock = false;
 
 static int id_buscado = 0;
@@ -11,7 +12,8 @@ static int id_buscado = 0;
 
 int main(int argc, char *argv[])
 {
-
+    esExit = false;
+    
     if(argc != 3){
         printf("ERROR: Usar: ./bin/cpu [Archivo Config] [Identificador]\n");
         return 1;
@@ -207,6 +209,15 @@ int main(int argc, char *argv[])
             }
 
             execute(); /* Fase Execute */
+            
+            if (seg_fault_ocurrido) {                 // NUEVO: cortar el ciclo, sin PC++, sin interrupt(), sin guardar contexto
+                seg_fault_ocurrido = false;
+                liberar_instruccion(instruccion_decodificada);
+                instruccion_decodificada = NULL;
+                limpiar_contexto_actual();
+                control_loop = 0;
+                break;                                // vuelve al while exterior → CPU_LIBRE
+            }
 
              if(control_loop == 0){
                 log_debug(logger, "entre aca lpm");
@@ -1344,23 +1355,19 @@ uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
 
     if(segmento == NULL)
     {
-        log_error(logger,
-                  "SEG_FAULT: Segmento %u inexistente",
-                  id_segmento);
-
+        log_error(logger, "SEG_FAULT: Segmento %u inexistente", id_segmento);
+        enviar_op_code(ERROR_SEGMENTATION_FAULT, sockets->conexion_kernel_scheduler);
+        enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
+        seg_fault_ocurrido = true;                       // NUEVO
         return ERROR_SEGMENTATION_FAULT;
     }
 
     if(desplazamiento + tamanio_solicitado > segmento->tamanio)
     {
-        log_error(logger,
-                  "SEG_FAULT: Acceso fuera de límites. PID: %u",
-                  contexto_actual->pid);
-
-        enviar_op_code(ERROR_SEGMENTATION_FAULT,
-                       sockets->conexion_kernel_scheduler);   // o el socket que corresponda
+        log_error(logger, "SEG_FAULT: Acceso fuera de límites. PID: %u", contexto_actual->pid);
+        enviar_op_code(ERROR_SEGMENTATION_FAULT, sockets->conexion_kernel_scheduler);
         enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
-
+        seg_fault_ocurrido = true;                       // NUEVO
         return ERROR_SEGMENTATION_FAULT;
     }
 

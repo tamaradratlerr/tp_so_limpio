@@ -54,6 +54,8 @@ void arrancar_cliente_km(void) {
     "Enviando a Kernel Memory: tamaño=%u",
     ms_globals.tamanio);
 
+    ms_globals.base    = recibir_int(socket_km);
+    ms_globals.tamanio = recibir_int(socket_km);
 
     pthread_t thread_km;
 

@@ -370,37 +370,10 @@ int ready_CMN(PCB* pcb_nuevo ){
 
     if(planificador->preemption)
     {
-        verificar_desalojo_por_prioridad_cmn(pcb_nuevo);
+        verificar_desalojo_por_prioridad(pcb_nuevo);
     }
 
     return nivel;
-}
-
-void verificar_desalojo_por_prioridad_cmn(PCB* pcb){
-    PCB* pcb_rnn;
-    for (int i = 0; i < listasProcesos->rnn; i++)
-    {
-        
-        pcb_rnn = list_get(listasProcesos->rnn, i);
-
-        if(pcb->data.prioridad_original < pcb_rnn->data.prioridad_original){
-            
-            cambiar_estado_pcb(pcb_rnn,BCK);
-            agregar_proceso_lista(pcb_rnn);
-            eliminar_proceso_Lista(pcb_rnn);
-
-            loguear_lista(listasProcesos->bck,logger);
-
-            pthread_mutex_lock(&sem_procesos_s_desalojo);
-            list_add(list_suplementarias->desalojo, pcb_rnn);
-            pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
-            return;
-        }
-
-    }
-    
-
 }
 
 
@@ -450,9 +423,7 @@ void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*), voi
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km){
 	
 	enviar_op_code(ks_INIT_PROC,info_km.conexion_km);
-    
-    t_paquete* paquete = crear_paquete(ENVIAR_PROCESO);
-	
+    	
     enviar_pid(pcb->data.PID,info_km.conexion_km);
     enviar_mensaje(path,info_km.conexion_km);
     

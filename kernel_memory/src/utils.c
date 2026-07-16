@@ -961,55 +961,53 @@ void enviar_contexto_cpu(int socket_cpu, int pid) {
 }
 
 void recibir_contexto_cpu(int socket_cpu) {
-    log_debug(logger, "[recibir_contexto_cpu] llegó aca");
 
     int size;
     int pid = recibir_int(socket_cpu);
 
-    pthread_mutex_lock(&mutex_contextos);
-
-    t_contexto* contexto = buscar_contexto(pid);
-
-    if (contexto == NULL) {
-        pthread_mutex_unlock(&mutex_contextos);
-        log_error(logger, "No existe contexto para PID %d", pid);
-        enviar_op_code(NOTOK, socket_cpu);
-        return;
-    }
-
-    contexto->pc = recibir_int(socket_cpu);
+    /* 1) SIEMPRE recibir el mensaje completo */
+    uint32_t pc  = recibir_int(socket_cpu);
 
     uint8_t* ax = recibir_buffer(&size, socket_cpu);
     uint8_t* bx = recibir_buffer(&size, socket_cpu);
     uint8_t* cx = recibir_buffer(&size, socket_cpu);
     uint8_t* dx = recibir_buffer(&size, socket_cpu);
 
-    contexto->ax = *ax;
-    contexto->bx = *bx;
-    contexto->cx = *cx;
-    contexto->dx = *dx;
-
-    free(ax); free(bx); free(cx); free(dx);
-
-    contexto->eax = recibir_int(socket_cpu);
-    contexto->ebx = recibir_int(socket_cpu);
-    contexto->ecx = recibir_int(socket_cpu);
-    contexto->edx = recibir_int(socket_cpu);
-    contexto->si  = recibir_int(socket_cpu);
-    contexto->di  = recibir_int(socket_cpu);
-
-    pthread_mutex_unlock(&mutex_contextos);
+    uint32_t eax = recibir_int(socket_cpu);
+    uint32_t ebx = recibir_int(socket_cpu);
+    uint32_t ecx = recibir_int(socket_cpu);
+    uint32_t edx = recibir_int(socket_cpu);
+    uint32_t si  = recibir_int(socket_cpu);
+    uint32_t di  = recibir_int(socket_cpu);
 
     int cantidad_segmentos = recibir_int(socket_cpu);
-
-    // La tabla de segmentos la administra Kernel Memory (creacion_segmento /
-    // eliminar_segmento), no la CPU. Drenamos estos enteros del socket para
-    // no romper el protocolo, pero NO pisamos contexto->tabla_segmentos.
-    for (int i = 0; i < cantidad_segmentos; i++) {
+    for (int i = 0; i < cantidad_segmentos; i++) {   // drenar tabla (la administra KM)
         recibir_int(socket_cpu);
         recibir_int(socket_cpu);
         recibir_int(socket_cpu);
     }
+
+    /* 2) Recién ahora validar y aplicar */
+    pthread_mutex_lock(&mutex_contextos);
+    t_contexto* contexto = buscar_contexto(pid);
+
+    if (contexto == NULL) {
+        pthread_mutex_unlock(&mutex_contextos);
+        log_error(logger, "No existe contexto para PID %d (descartado)", pid);
+        free(ax); free(bx); free(cx); free(dx);
+        enviar_op_code(NOTOK, socket_cpu);
+        return;                                      // el socket quedó limpio
+    }
+
+    contexto->pc = pc;
+    contexto->ax = *ax;  contexto->bx = *bx;
+    contexto->cx = *cx;  contexto->dx = *dx;
+    contexto->eax = eax; contexto->ebx = ebx;
+    contexto->ecx = ecx; contexto->edx = edx;
+    contexto->si = si;   contexto->di = di;
+    pthread_mutex_unlock(&mutex_contextos);
+
+    free(ax); free(bx); free(cx); free(dx);
 
     log_info(logger, "Contexto actualizado PID %d con %d segmentos", pid, cantidad_segmentos);
     enviar_op_code(OK, socket_cpu);

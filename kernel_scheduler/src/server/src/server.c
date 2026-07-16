@@ -214,42 +214,32 @@ void segmentation_fault(int socket_cpu){
 
     int pid = recibir_pid(socket_cpu);
 
-    log_error(logger,
-            "## PID: %d - Finaliza por SEGMENTATION FAULT",
-            pid);
+    log_error(logger, "## PID: %d - Finaliza por SEGMENTATION FAULT", pid);
 
     PCB* pcb = buscar_pcb_por_pid(pid);
 
-    if (pcb != NULL) {
-        cambiar_estado_pcb(pcb, EXT);
-        agregar_proceso_lista (pcb);
-        eliminar_proceso_Lista(pcb);
-    }
-    else{
-        log_error(logger, "PCB = NULL en EXIT_PROCESO");
+    if (pcb == NULL) {
+        log_error(logger, "PCB = NULL en SEGMENTATION_FAULT");
+        return;                                   // antes seguía y hacía pcb->data.PID
     }
 
+    cambiar_estado_pcb(pcb, EXT);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
 
+    // ELIMINADO: list_add(list_suplementarias->desalojo, pcb);
 
-    pthread_mutex_lock(&sem_procesos_s_desalojo);
-    list_add(list_suplementarias->desalojo, pcb);
-    pthread_mutex_unlock(&sem_procesos_s_desalojo);
-            
     enviar_proceso_finalizar_KM(pcb->data.PID);
 
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
-            
-    if(cpu_libre == NULL){
-        log_error(logger,"Error al encontrar CPU en la lista");
+    if (cpu_libre == NULL) {
+        log_error(logger, "Error al encontrar CPU en la lista");
         return;
     }
-
     cpu_libre->enUso = false;
 
-    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pcb->data.PID);/*Logger Obligatorio*/
-    
+    log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [SEG_FAULT]", pcb->data.PID);
     nuevo_espacio();
-
 }
 
 
@@ -517,57 +507,31 @@ PCB* obtener_siguiente_proceso() {
     return pcb;
 }
 
-void verificar_desalojo_por_prioridad(PCB* pcb_nuevo)
+void verificar_desalojo_por_prioridad(PCB* pcb)
 {
     pthread_mutex_lock(&sem_procesos_running);
+    int size = list_size(listasProcesos->rnn);   // FIX: antes comparaba i < listasProcesos->rnn (puntero)
 
-    int size = list_size(listasProcesos->rnn);
-
-    for(int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++)
     {
-        PCB* pcb_running = list_get(listasProcesos->rnn, i);
+        PCB* pcb_rnn = list_get(listasProcesos->rnn, i);
 
-        if(pcb_running == NULL)
-            continue;
+        if (pcb_rnn == pcb) continue;   // el pcb que estoy encolando puede seguir en RNN
 
-        if(pcb_nuevo->data.prioridad < pcb_running->data.prioridad)
-        {
+        if (pcb->data.prioridad_original < pcb_rnn->data.prioridad_original){
+            pthread_mutex_unlock(&sem_procesos_running);   // soltar antes de tocar otras listas
+
+            cambiar_estado_pcb(pcb_rnn, BCK);
+            agregar_proceso_lista(pcb_rnn);
+            eliminar_proceso_Lista(pcb_rnn);
+            loguear_lista(listasProcesos->bck, logger);
+
             pthread_mutex_lock(&sem_procesos_s_desalojo);
-
-            // Evitar duplicados por PID (NO por puntero)
-            bool existe = false;
-
-            for(int j = 0; j < list_size(list_suplementarias->desalojo); j++)
-            {
-                PCB* pcb_aux = list_get(list_suplementarias->desalojo, j);
-
-                if(pcb_aux != NULL &&
-                   pcb_aux->data.PID == pcb_running->data.PID)
-                {
-                    existe = true;
-                    break;
-                }
-            }
-
-            if(!existe)
-            {
-                list_add(list_suplementarias->desalojo, pcb_running);
-            }
-
+            list_add(list_suplementarias->desalojo, pcb_rnn);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
-            log_info(logger,
-                "## PID:[%d] Proprodad:[%d] Desalojado por cola mas prioritaria por el proceso PID:[%d] con Prioridad:[%d]",
-                pcb_running->data.PID,
-                pcb_running->data.prioridad,
-                pcb_nuevo->data.PID,
-                pcb_nuevo->data.prioridad
-            );
-
-            break;
+            return;
         }
     }
-
     pthread_mutex_unlock(&sem_procesos_running);
 }
 
@@ -697,6 +661,7 @@ void cpu_libre (int cliente_fd)/*OK*/
     sem_post(&sem_compactacion);
 }
 //DESALOJO
+//DESALOJO
 void desalojo(int socket_cliente)
 {
     int pid = recibir_pid(socket_cliente);
@@ -704,45 +669,60 @@ void desalojo(int socket_cliente)
     op_code err = OK;
     int desalojado = 0;
 
-    if(mem_corrupt_value == 1){
-        
+    if (mem_corrupt_value == 1) {
+
         log_debug(logger, "MEM CORRUPT");
         enviar_op_code(MEM_CORRUPT, socket_cliente);
-        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
         desalojado = 1;
-
-        log_info(logger,
-            "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",
-            pid,
-            cpu_id);
+        // FIX: había un segundo log_info idéntico acá, eliminado
     }
     else if (compactacion_value == 1) {
-        
+
         log_debug(logger, "COMPACTACION");
         enviar_op_code(COMPACTACION, socket_cliente);
-        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
+        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
         desalojado = 1;
-              
     }
-    else if (existe_pcb_con_pid(list_suplementarias->desalojo,pid)){
-        
-        log_debug(logger, "DESALOJO POR LISTA");
-        enviar_op_code(DESALOJO, socket_cliente);
-        log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]",pid,cpu_id);
-        
-        pthread_mutex_lock(&sem_procesos_s_desalojo);
-        sacar_pcb_por_pid(list_suplementarias->desalojo,pid);
-        pthread_mutex_unlock(&sem_procesos_s_desalojo);
-        desalojado = 1;
+    else if (existe_pcb_con_pid(list_suplementarias->desalojo, pid)) {
 
-        PCB* pcb = buscar_pcb_por_pid(pid);
+        // FIX: si el proceso ya está muerto (EXIT) o no existe, no hay nada
+        // que desalojar: se limpia la lista y se responde OK. Antes se le
+        // respondía DESALOJO a la CPU, que entonces intentaba guardar en KM
+        // un contexto que ya fue liberado por gl_EXIT → "No existe contexto
+        // para PID" + desincronización del socket CPU↔KM.
+        PCB* pcb_chequeo = buscar_pcb_por_pid(pid);
 
+        if (pcb_chequeo == NULL || pcb_chequeo->estado_pcb == EXT) {
+
+            log_debug(logger, "DESALOJO POR LISTA ignorado: PID %d ya finalizado", pid);
+
+            pthread_mutex_lock(&sem_procesos_s_desalojo);
+            sacar_pcb_por_pid(list_suplementarias->desalojo, pid);
+            pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+            enviar_op_code(OK, socket_cliente);
+            desalojado = 0;
+        }
+        else {
+
+            log_debug(logger, "DESALOJO POR LISTA");
+            enviar_op_code(DESALOJO, socket_cliente);
+            log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
+
+            pthread_mutex_lock(&sem_procesos_s_desalojo);
+            sacar_pcb_por_pid(list_suplementarias->desalojo, pid);
+            pthread_mutex_unlock(&sem_procesos_s_desalojo);
+            desalojado = 1;
+            // FIX: eliminado "PCB* pcb = buscar_pcb_por_pid(pid);" que estaba
+            // acá: era una variable local que no se usaba para nada
+        }
     }
     else {
 
         log_info(logger, "No es Necesario Relizar Acciones");
         log_debug(logger, "NO HAY DESAOLOJO");
-        enviar_op_code(OK,socket_cliente);
+        enviar_op_code(OK, socket_cliente);
         desalojado = 0;
     }
 
@@ -768,10 +748,11 @@ void desalojo(int socket_cliente)
                 log_info(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
                 log_info(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
 
-                return;
+                // FIX: antes había un "return;" acá. Se salteaba la
+                // liberación de la CPU (enUso quedaba en true para siempre
+                // y el planificador nunca más le mandaba procesos).
             }
-
-            if (pcb->estado_pcb == BCK) {
+            else if (pcb->estado_pcb == BCK) {
 
                 cambiar_estado_pcb(pcb, RDY);
 
@@ -793,34 +774,33 @@ void desalojo(int socket_cliente)
                 }
 
                 eliminar_proceso_Lista(pcb);
+
+                log_info(logger, "Proceso Desalojado PID:[%d] de CPU:[%s]", pid, cpu_id);
             }
-            else if( pcb->estado_pcb == RNN){
+            else if (pcb->estado_pcb == RNN) {
+
                 cambiar_estado_pcb(pcb, RDY);
                 agregar_proceso_lista(pcb);
                 eliminar_proceso_Lista(pcb);
-            }
 
-            log_info(logger,
-                    "Proceso Desalojado PID:[%d] de CPU:[%s]",
-                    pid,
-                    cpu_id);
+                log_info(logger, "Proceso Desalojado PID:[%d] de CPU:[%s]", pid, cpu_id);
+            }
         }
 
     } else {
 
         log_error(logger, "Error de coordinacion en la comunicacion [desalojo]");
     }
-    
+
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
-    cpu_libre->enUso = false;
-    
-    
+    if (cpu_libre != NULL)          // FIX: antes se desreferenciaba sin chequear NULL
+        cpu_libre->enUso = false;
+
+    free(cpu_id);                   // FIX: recibir_mensaje hace malloc, esto se perdía en cada llamada
+
     return;
-
-    
-}  
-
+}
  
 /*-----Con la IO-----*/
 

@@ -2604,7 +2604,8 @@ void rta_io_sleep(int socket_io){
         return;
     }
 
-   mediano_plazo_rdy (pcb);
+    pcb->esperando_io = false; 
+    mediano_plazo_rdy (pcb);
 
     log_info(logger,
         "## PID:[%d] Finalizo IO SLEEP y Pasa a estado Ready / Susp. Ready",

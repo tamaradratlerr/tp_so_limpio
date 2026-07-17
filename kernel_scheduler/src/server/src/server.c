@@ -2551,6 +2551,7 @@ void io_sleep(int socket_cpu) {
     if (pcb != NULL) {
         
         /*Bloqueamos el Proceso*/
+        pcb->esperando_io = true;
         cambiar_estado_pcb(pcb, BCK);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
@@ -2652,6 +2653,7 @@ void io_stdin(int socket_cpu) {
     if (pcb != NULL) {
         
         /*Bloqueamos el Proceso*/
+        pcb->esperando_io = true;
         cambiar_estado_pcb(pcb, BCK);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
@@ -2726,9 +2728,11 @@ void rta_io_stdin(int socket_io){
     PCB* pcb = buscar_pcb_por_pid(pid);
 
     if (pcb == NULL) {
-        log_error(logger, "STDIN finalizado para PID %d pero no se encontró su PCB", pid);
+        log_error(logger, "IO finalizado para PID %d pero no se encontró su PCB", pid);
         return;
     }
+
+    pcb->esperando_io = false;
 
     mediano_plazo_rdy (pcb);
 
@@ -2737,6 +2741,8 @@ void rta_io_stdin(int socket_io){
         "PID:[%d] Finalizo IO STDIN",
         pcb->data.PID
     );
+
+    enviar_op_code(OK, socket_io);
 
 
 }
@@ -2765,6 +2771,7 @@ void io_stdout(int cpu_socket) {
             }
 
     /*Bloqueamos el Proceso*/
+    pcb->esperando_io = true;
     cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
@@ -2865,6 +2872,14 @@ void rta_io_stdout(int socket_io){
     loguear_lista(listasProcesos->bck, logger);
 
     PCB* pcb = buscar_pcb_por_pid(pid);
+    
+    if (pcb == NULL) {
+        log_error(logger, "IO finalizada para PID %d pero no se encontró su PCB", pid);
+        return;
+    }
+
+
+    pcb->esperando_io = false;
 
     mediano_plazo_rdy (pcb);
 

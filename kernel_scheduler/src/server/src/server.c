@@ -905,7 +905,10 @@ void io_libre(int io_socket){ //Copia de atender CPU
         {
             io_libre->enUso = true;
         }
-        else return;
+        else{
+            sem_post(&sem_io_vacio); 
+            return;
+        }
 
         espera_io* pcb_a_ejecutar = list_remove(lista_bck_io,0);
         
@@ -2742,6 +2745,18 @@ void rta_io_stdin(int socket_io){
         "PID:[%d] Finalizo IO STDIN",
         pcb->data.PID
     );
+
+    pthread_mutex_lock(&mutex_ios);
+    t_IO *io = list_find_with_context(
+        list_suplementarias->io,
+        es_la_io_buscada,
+        &socket_io
+    );
+    if (io != NULL) {
+        io->enUso = false;
+        log_info(logger, "IO liberada");
+    }
+    pthread_mutex_unlock(&mutex_ios);
 
     enviar_op_code(OK, socket_io);
 

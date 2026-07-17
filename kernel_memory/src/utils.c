@@ -281,6 +281,7 @@ void manejar_pedido_instruccion_cpu(int socket_cliente) {
 }
 
 //Se conecta con ks: stdout
+//Se conecta con ks: stdout
 void lectura_memoria(int socket_ks) {
 
     enviar_op_code(OK, socket_ks);
@@ -289,11 +290,44 @@ void lectura_memoria(int socket_ks) {
 
     enviar_op_code(OK, socket_ks);
 
-    uint32_t dir_fisica = recibir_int(socket_ks);
+    uint32_t dir_logica = recibir_int(socket_ks);   // antes se llamaba dir_fisica: era la LÓGICA
 
     enviar_op_code(OK, socket_ks);
 
     uint32_t tamanio = recibir_int(socket_ks);
+
+    /* ---------- traducción MMU con la tabla del proceso ---------- */
+
+    int max_seg = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
+    uint32_t nro_segmento   = dir_logica / max_seg;
+    uint32_t desplazamiento = dir_logica % max_seg;
+
+    pthread_mutex_lock(&mutex_contextos);
+
+    t_contexto* ctx = buscar_contexto(pid);
+    t_segmento_aux* seg = NULL;
+
+    if (ctx != NULL) {
+        for (int i = 0; i < list_size(ctx->tabla_segmentos); i++) {
+            t_segmento_aux* s = list_get(ctx->tabla_segmentos, i);
+            if (s->id_segmento == (int)nro_segmento) { seg = s; break; }
+        }
+    }
+
+    if (seg == NULL || seg->en_swap || desplazamiento + tamanio > seg->limite) {
+        pthread_mutex_unlock(&mutex_contextos);
+        log_error(logger,
+                  "## PID: %d - Lectura IO inválida (dir lógica %u, tam %u)",
+                  pid, dir_logica, tamanio);
+        enviar_mensaje("", socket_ks);
+        return;
+    }
+
+    uint32_t dir_fisica = seg->direccion_base + desplazamiento;
+
+    pthread_mutex_unlock(&mutex_contextos);
+
+    /* -------------------------------------------------------------------- */
 
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
 
@@ -306,8 +340,7 @@ void lectura_memoria(int socket_ks) {
     uint32_t dir_local = dir_fisica - ms->base_global;
 
     if (dir_local + tamanio > ms->tamanio) {
-        log_error(logger,
-                  "## Error: Intento de lectura fuera de límites en MS");
+        log_error(logger, "## Error: Intento de lectura fuera de límites en MS");
         enviar_mensaje("", socket_ks);
         return;
     }
@@ -329,10 +362,7 @@ void lectura_memoria(int socket_ks) {
         return;
     }
 
-    log_info(logger,
-         "## Lectura Exitosa - PID:%d - Dir Global:%u",
-         pid,
-         dir_fisica);
+    log_info(logger, "## Lectura Exitosa - PID:%d - Dir Global:%u", pid, dir_fisica);
 
     /* ---------- Respuesta a Kernel Scheduler ---------- */
 
@@ -347,7 +377,7 @@ void escritura_memoria(int socket_ks) {
 
     log_debug(logger, "[KM] entró a la funcion de escritura");
 
-    uint32_t dir_fisica = recibir_int(socket_ks);
+    uint32_t dir_logica = recibir_int(socket_ks);
     uint32_t tamanio = recibir_int(socket_ks);
 
     int size_buffer;
@@ -356,16 +386,46 @@ void escritura_memoria(int socket_ks) {
     int pid = recibir_int(socket_ks);
 
     log_debug(logger,
-        "KM_IO_STDIN recibido -> PID:%d | DirFisica:%u | Tamaño:%u | SizeBuffer:%d | Datos:\"%s\"",
-        pid,
-        dir_fisica,
-        tamanio,
-        size_buffer,
-        (char*)datos);
-
-    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
+        "KM_IO_STDIN recibido -> PID:%d | DirLogica:%u | Tamaño:%u | SizeBuffer:%d | Datos:\"%s\"",
+        pid, dir_logica, tamanio, size_buffer, (char*)datos);
 
     int confirmacion = -1;
+
+    /* ---------- traducción MMU con la tabla del proceso ---------- */
+
+    int max_seg = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
+    uint32_t nro_segmento   = dir_logica / max_seg;
+    uint32_t desplazamiento = dir_logica % max_seg;
+
+    pthread_mutex_lock(&mutex_contextos);
+
+    t_contexto* ctx = buscar_contexto(pid);
+    t_segmento_aux* seg = NULL;
+
+    if (ctx != NULL) {
+        for (int i = 0; i < list_size(ctx->tabla_segmentos); i++) {
+            t_segmento_aux* s = list_get(ctx->tabla_segmentos, i);
+            if (s->id_segmento == (int)nro_segmento) { seg = s; break; }
+        }
+    }
+
+    if (seg == NULL || seg->en_swap || desplazamiento + tamanio > seg->limite) {
+        pthread_mutex_unlock(&mutex_contextos);
+        log_error(logger,
+                  "## PID: %d - Escritura IO inválida (dir lógica %u, tam %u)",
+                  pid, dir_logica, tamanio);
+        enviar_int(confirmacion, socket_ks);   // -1
+        free(datos);
+        return;
+    }
+
+    uint32_t dir_fisica = seg->direccion_base + desplazamiento;
+
+    pthread_mutex_unlock(&mutex_contextos);
+
+    /* -------------------------------------------------------------------- */
+
+    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
 
     if (ms != NULL) {
 
@@ -383,9 +443,7 @@ void escritura_memoria(int socket_ks) {
             op_code respuesta = recibir_op_code(ms->socket_fd);
 
             if (respuesta == OK) {
-                log_info(logger,
-                         "## Escritura Exitosa - Dir Global: %u",
-                         dir_fisica);
+                log_info(logger, "## Escritura Exitosa - Dir Global: %u", dir_fisica);
                 confirmacion = 1;
             }
         }
@@ -395,7 +453,6 @@ void escritura_memoria(int socket_ks) {
 
     free(datos);
 }
-
 
 
 

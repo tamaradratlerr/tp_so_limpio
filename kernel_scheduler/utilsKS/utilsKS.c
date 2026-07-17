@@ -289,6 +289,19 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
             removed = list_remove_element(listasProcesos->rdy, pcb);
             pthread_mutex_unlock(&sem_procesos_ready);
 
+            /* con CMN los procesos READY viven en las colas por
+               nivel del planificador, no en listasProcesos->rdy */
+               
+            if (!removed &&
+                strcmp(info_config.planificacion_algoritmo, "CMN") == 0) {
+
+                pthread_mutex_lock(&mutex_ready);
+                for (int n = 0; n < planificador->cantidad_niveles && !removed; n++) {
+                    removed = list_remove_element(planificador->niveles[n].cola, pcb);
+                }
+                pthread_mutex_unlock(&mutex_ready);
+            }
+
             log_info(logger, "PID <%d> eliminado de READY: %s",
                      pcb->data.PID, removed ? "SI" : "NO");
 

@@ -4,6 +4,7 @@
 /*--- Variable global para hacer pruebas sin KM y sin STICK ---*/
 bool esExit = false;
 bool seg_fault_ocurrido = false;
+bool pc_modificado = false;
 bool mock = false;
 
 static int id_buscado = 0;
@@ -228,11 +229,12 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            if (control_loop == 1) {
+            if (control_loop == 1 && !pc_modificado) {
                 log_debug(logger, "Antes de incrementar PC: %d", contexto_actual->pc);
                 contexto_actual->pc++;
                 log_debug(logger, "Después de incrementar PC: %d", contexto_actual->pc);
             }
+            pc_modificado = false;  
             
             interrupt();/* Fase Interrupt */
             
@@ -940,6 +942,7 @@ void ejecutar_jnz(t_instruccion* instr) {
     if(valor != 0)
     {
         contexto_actual->pc = atoi(instr->params[1]);
+        pc_modificado = true;
     }
 }
 

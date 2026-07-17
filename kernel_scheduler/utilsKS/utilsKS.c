@@ -388,7 +388,8 @@ PCB* iniciar_pcb (int PID, int prioridad){
     nuevo_pcb->data.prioridad_original = prioridad;
     nuevo_pcb->data.prioridad = prioridad;
     nuevo_pcb -> mutex_tomados = list_create();
-
+    nuevo_pcb->esperando_io = false;
+    
     agregar_proceso_lista(nuevo_pcb);
 
 	return nuevo_pcb;

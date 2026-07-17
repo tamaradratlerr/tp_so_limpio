@@ -223,7 +223,7 @@ typedef struct
     estado estado_pcb;
     estado estado_anterior;
     int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
-
+    bool esperando_io;
 }PCB;
 
 //Estructura de dato que identifica CPUs

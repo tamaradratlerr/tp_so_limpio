@@ -2218,9 +2218,19 @@ void mem_alloc (int socket_cliente){
     }
     else if (err == COMPACTACION)
     {
-        enviar_int(-1, socket_cliente);
+        pthread_mutex_unlock(&mutex_conexion_km);
         compactacion(socket_cliente);
+        pthread_mutex_lock(&mutex_conexion_km);
 
+        int err2 = recibir_op_code(info_km.conexion_km);
+        if (err2 == OK) {
+            int base = recibir_int(info_km.conexion_km);
+            pthread_mutex_unlock(&mutex_conexion_km);
+            enviar_int(base, socket_cliente);
+        } else {
+            pthread_mutex_unlock(&mutex_conexion_km);
+            enviar_int(-1, socket_cliente);
+        }
         return;
     }
     else

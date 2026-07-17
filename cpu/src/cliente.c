@@ -12,8 +12,8 @@ static int id_buscado = 0;
 
 int main(int argc, char *argv[])
 {
-    esExit = false;
-    
+
+
     if(argc != 3){
         printf("ERROR: Usar: ./bin/cpu [Archivo Config] [Identificador]\n");
         return 1;
@@ -174,6 +174,8 @@ int main(int argc, char *argv[])
         contexto_key++;
 
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
+
+        esExit = false; 
 
         control_loop = 1;
         while (control_loop == 1){

@@ -2071,6 +2071,7 @@ void mutex_lock (int socket_cliente){
     }
 
     PCB* pcb = buscar_pcb_por_pid(pid);
+
     if (pcb == NULL) {
         log_error(logger, "MUTEX_LOCK para PID %d pero no se encontró su PCB", pid);
         free(pid_guardado);
@@ -2078,7 +2079,29 @@ void mutex_lock (int socket_cliente){
         return;
     }
 
-    /* Siempre bloqueamos el proceso y pedimos desalojo (protocolo con CPU igual que antes) */
+    pthread_mutex_lock(&mutex_simulados);
+
+    bool libre = (mutex->valor == 1);
+
+    if (libre)
+    {
+        /* Mutex libre: lo toma directamente */
+        mutex->valor = 0;
+        mutex->dueño_actual = pcb;
+        list_add(pcb->mutex_tomados, mutex);
+    }
+    else
+    {
+        /* Mutex ocupado: queda en la cola de espera y bloqueado.
+           Marcamos esperando_io para que desalojo() NO lo pase a READY. */
+        list_add(mutex->cola_mutex, pid_guardado);
+        pcb->esperando_io = true;
+        actualizar_herencia(mutex);
+    }
+
+    pthread_mutex_unlock(&mutex_simulados);
+
+    /* Bloqueo y desalojo (protocolo con CPU igual que siempre) */
     cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
@@ -2089,19 +2112,11 @@ void mutex_lock (int socket_cliente){
 
     enviar_op_code(OK, socket_cliente);
 
-    pthread_mutex_lock(&mutex_simulados);
-
-    if (mutex->valor == 1)
+    if (libre)
     {
-        /* Mutex libre: lo toma y vuelve inmediatamente a READY */
-        mutex->valor = 0;
-        mutex->dueño_actual = pcb;
-        list_add(pcb->mutex_tomados, mutex);
-
-        pthread_mutex_unlock(&mutex_simulados);
-
         log_info(logger, "## PID:[%d] Toma el mutex:[%s]", pid, mutex_id);
 
+        /* Vuelve inmediatamente a READY */
         cambiar_estado_pcb(pcb, RDY);
         agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
@@ -2110,20 +2125,14 @@ void mutex_lock (int socket_cliente){
     }
     else
     {
-        /* Mutex ocupado: queda encolado y BLOQUEADO.
-           NO esperamos acá: lo va a despertar mutex_unlock. */
-        list_add(mutex->cola_mutex, pid_guardado);
-        actualizar_herencia(mutex);
-
-        pthread_mutex_unlock(&mutex_simulados);
-
         log_info(logger, "## PID:[%d] No pudo tomar el mutex:[%s] y queda bloqueado", pid, mutex_id);
+        /* NO esperamos acá: lo despierta mutex_unlock con el hand-off */
     }
 
     free(mutex_id);
 }
 
-//MUTEX_UNLOK,
+//MUTEX_UNLOCK,
 void mutex_unlock (int socket_cliente)
 {
     enviar_op_code(OK, socket_cliente);
@@ -2134,13 +2143,14 @@ void mutex_unlock (int socket_cliente)
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
 
     PCB* pcb = buscar_pcb_por_pid(pid);
+
     if (pcb == NULL) {
         log_error(logger, "MUTEX_UNLOCK para PID %d pero no se encontró su PCB", pid);
         free(mutex_id);
         return;
     }
 
-    /* Bloqueo y desalojo del que libera (protocolo igual que antes) */
+    /* Bloqueo y desalojo del que libera (protocolo con CPU igual que siempre) */
     cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
@@ -2188,6 +2198,8 @@ void mutex_unlock (int socket_cliente)
                     /* re-evaluar herencia del nuevo dueño con los que sigan esperando */
                     actualizar_herencia(mutex);
 
+                    pcb_sig->esperando_io = false;   /* ya no espera el mutex */
+
                     pthread_mutex_unlock(&mutex_simulados);
 
                     log_info(logger, "## PID:[%d] Toma el mutex:[%s]", pcb_sig->data.PID, mutex_id);
@@ -2208,13 +2220,14 @@ void mutex_unlock (int socket_cliente)
             }
             else
             {
+                /* Nadie espera: el mutex queda libre */
                 mutex->valor = 1;
                 pthread_mutex_unlock(&mutex_simulados);
             }
         }
     }
 
-    /* el que libero vuelve a READY */
+    /* El que liberó vuelve a READY */
     cambiar_estado_pcb(pcb, RDY);
     agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
@@ -2222,7 +2235,8 @@ void mutex_unlock (int socket_cliente)
     free(mutex_id);
 }
 
-//MEM_ALLOC,k
+
+//MEM_ALLOC
 void mem_alloc (int socket_cliente){
 
     enviar_op_code(OK,socket_cliente); //HandShake

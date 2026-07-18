@@ -84,6 +84,7 @@ typedef struct {
 
 typedef struct { // estructura para las cosasa que le mandamos al hilo
     PCB* pcb;
+    int version;
 } t_datos_quantum;
 
 /*-----     FUNCIONES      -----*/
@@ -171,6 +172,7 @@ extern sem_t sem_hay_s_ready;
 extern sem_t sem_compactacion;
 extern sem_t sem_rnn_vacio;
 extern sem_t sem_io_vacio;
+extern pthread_cond_t cond_rnn_vacio;
 
 
 

@@ -230,7 +230,6 @@ int esperar_cliente(int socket_servidor, t_log *logger)
 
 int iniciar_servidor(char *puerto, t_log *logger)
 {
-
     int socket_servidor;
 
     struct addrinfo hints, *servinfo;
@@ -240,20 +239,50 @@ int iniciar_servidor(char *puerto, t_log *logger)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    getaddrinfo(NULL, puerto, &hints, &servinfo);
+    // Resolvemos la direccion; si falla, servinfo queda indefinido y no podemos seguir
+    if (getaddrinfo(NULL, puerto, &hints, &servinfo) != 0)
+    {
+        log_error(logger, "Error en getaddrinfo para el puerto %s: %s", puerto, strerror(errno));
+        return -1;
+    }
 
     // Creamos el socket de escucha del servidor
     socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
 
+    if (socket_servidor == -1)
+    {
+        log_error(logger, "Error al crear el socket servidor: %s", strerror(errno));
+        freeaddrinfo(servinfo);
+        return -1;
+    }
+
+    // Permite reutilizar el puerto aunque haya quedado en TIME_WAIT de una corrida
+    // anterior. Esto evita el "Connection refused" al hacer pruebas seguidas.
+    int activado = 1;
+    setsockopt(socket_servidor, SOL_SOCKET, SO_REUSEADDR, &activado, sizeof(int));
+
     // Asociamos el socket a un puerto
-    bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen);
+    if (bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen) != 0)
+    {
+        log_error(logger, "Error en bind al puerto %s: %s", puerto, strerror(errno));
+        freeaddrinfo(servinfo);
+        close(socket_servidor);
+        return -1;
+    }
 
     // Escuchamos las conexiones entrantes
-    listen(socket_servidor, SOMAXCONN);
+    if (listen(socket_servidor, SOMAXCONN) != 0)
+    {
+        log_error(logger, "Error en listen sobre el puerto %s: %s", puerto, strerror(errno));
+        freeaddrinfo(servinfo);
+        close(socket_servidor);
+        return -1;
+    }
 
     freeaddrinfo(servinfo);
+
     log_info(logger, "Servidor Iniciado");
-    log_info(logger,"Esperando Por CLientes");
+    log_info(logger, "Esperando Por CLientes");
 
     return socket_servidor;
 }

@@ -753,6 +753,10 @@ void ejecutar_set (t_instruccion* instr){/*OK*/
         
         *dest = valor;
 
+        if (strcmp(reg_dest_nombre, "PC") == 0) {
+            pc_modificado = true;
+        }
+
         log_info (logger, "## PID:[%d] - Ejecutando [SET] - Destino [%s] - Valor [%d]",contexto_actual->pid, reg_dest_nombre, *dest);/*Logger Obligatorio*/
         log_info(logger, "[EXEC] SET 32b: %s = %u", reg_dest_nombre, *dest);
     }

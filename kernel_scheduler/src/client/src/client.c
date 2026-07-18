@@ -111,8 +111,9 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 
 	if (resp_init_proc == OK) {
 		cambiar_estado_pcb(nuevo_pcb, RDY);
-		agregar_proceso_lista(nuevo_pcb);
 		eliminar_proceso_Lista(nuevo_pcb);
+		agregar_proceso_lista(nuevo_pcb);
+		
 	} else {
 		log_error(logger, "Error al crear el Proceso Inicial en Kernel Memory");
 	}

@@ -53,12 +53,14 @@ pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_simulados = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_conexion_km = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond_rnn_vacio = PTHREAD_COND_INITIALIZER;
 
 sem_t sem_hay_ready;
 sem_t sem_hay_s_ready;
 sem_t sem_compactacion;
 sem_t sem_rnn_vacio;
 sem_t sem_io_vacio;
+
 
 
 /*-----                     CREACION Y DESTRUCCION DE LISTAS                     -----*/
@@ -210,6 +212,7 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
 	}
 
 }
+
  op_code eliminar_proceso_Lista(PCB* pcb)
 {
     bool removed = false;
@@ -232,6 +235,8 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
             removed = list_remove_element(listasProcesos->rnn, pcb);
 
             bool rnn_quedo_vacio = list_is_empty(listasProcesos->rnn);
+
+            pthread_cond_broadcast(&cond_rnn_vacio);   // avisa a compactacion/mem_corrupt
             pthread_mutex_unlock(&sem_procesos_running);
 
             log_info(logger, "PID <%d> eliminado de RUNNING: %s",
@@ -239,7 +244,6 @@ int agregar_proceso_lista (PCB* pcb){ /*Funcion que a AGREGA un PCB a su lista c
 
             if (rnn_quedo_vacio) {
                 log_info(logger, "RUNNING quedó vacío");
-                sem_post(&sem_rnn_vacio);
             }
 
             break;
@@ -402,6 +406,7 @@ PCB* iniciar_pcb (int PID, int prioridad){
     nuevo_pcb->data.prioridad = prioridad;
     nuevo_pcb -> mutex_tomados = list_create();
     nuevo_pcb->esperando_io = false;
+    nuevo_pcb->quantum_version = 0;
     
     agregar_proceso_lista(nuevo_pcb);
 

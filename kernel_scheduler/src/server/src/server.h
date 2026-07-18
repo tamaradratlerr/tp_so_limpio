@@ -52,7 +52,8 @@ void io_finalizada(int io_socket);
 /*--- KM ---*/
 
 void mem_corrupt(int fd);
-void compactacion (int socket_cliente);
+void compactacion (int socket_cliente, int pid_trigger);
+bool hay_otro_proceso_ejecutando(int pid_trigger);
 void recibir_nueva_memory_stick(int socket_km);
 void nuevo_espacio();
 /*----- HERENCIA -----*/

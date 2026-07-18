@@ -124,10 +124,6 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
                 mem_free(cliente_fd);
                 break;
 
-            case COMPACTACION:
-                compactacion(cliente_fd);
-                break;
-
             case gl_IO_SLEEP:
                 io_sleep(cliente_fd); 
                 break;
@@ -226,8 +222,9 @@ void segmentation_fault(int socket_cpu){
     }
 
     cambiar_estado_pcb(pcb, EXT);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
     // ELIMINADO: list_add(list_suplementarias->desalojo, pcb);
 
@@ -427,7 +424,7 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
 
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
         pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
-        agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
+        agregar_proceso_lista(pcb_a_ejecutar); 
         
         loguear_lista(listasProcesos->rnn,logger);
         
@@ -443,8 +440,9 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
             
             cambiar_estado_pcb(pcb_a_ejecutar, RDY);
             pcb_a_ejecutar->fd_cpu = 0;
-            agregar_proceso_lista(pcb_a_ejecutar); //ESTAS FUNCIONES YA TIENEN EL MUTEX DENTRO
             eliminar_proceso_Lista(pcb_a_ejecutar);
+            agregar_proceso_lista(pcb_a_ejecutar); 
+            
             return;
         }
 
@@ -452,7 +450,12 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
         {
             t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
 
-            datos->pcb = pcb_a_ejecutar;
+            // Invalida cualquier timer de quantum anterior de este PCB:
+            // a partir de acá, solo el timer con ESTA version podra desalojar.
+            pcb_a_ejecutar->quantum_version++;
+
+            datos->pcb     = pcb_a_ejecutar;
+            datos->version = pcb_a_ejecutar->quantum_version;
 
             pthread_create(
                 &hilo_timer,
@@ -491,11 +494,15 @@ void* control_hilo_quantum(void* arg)
 {
     t_datos_quantum* datos = (t_datos_quantum*) arg;
 
-    PCB* pcb = datos->pcb;
+    PCB* pcb    = datos->pcb;
+    int  version = datos->version;
 
     usleep(info_config.intervalo_tarea * 1000);
 
-    if(pcb->estado_pcb == RNN)
+    // Solo desaloja si el proceso sigue en RUNNING Y este timer es el del
+    // despacho vigente. Un timer de un despacho anterior trae una version
+    // desactualizada -> se ignora (era el bug de los desalojos espurios).
+    if(pcb->estado_pcb == RNN && version == pcb->quantum_version)
     {
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         list_add(list_suplementarias->desalojo, pcb);
@@ -557,13 +564,16 @@ void verificar_desalojo_por_prioridad(PCB* pcb)
             pthread_mutex_unlock(&sem_procesos_running);   // soltar antes de tocar otras listas
 
             cambiar_estado_pcb(pcb_rnn, BCK);
-            agregar_proceso_lista(pcb_rnn);
             eliminar_proceso_Lista(pcb_rnn);
+            agregar_proceso_lista(pcb_rnn);
+            
             loguear_lista(listasProcesos->bck, logger);
 
             pthread_mutex_lock(&sem_procesos_s_desalojo);
             list_add(list_suplementarias->desalojo, pcb_rnn);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+            log_info(logger,"## (<%d>) Prioridad: <%d> - Desalojado por cola más prioritaria por el proceso <%d> con prioridad <%d>",pcb_rnn->data.PID,pcb_rnn->data.prioridad,pcb->data.PID,pcb->data.prioridad);
             return;
         }
     }
@@ -623,8 +633,9 @@ void mediano_plazo_bck(PCB* pcb){
         // si no, el proceso queda en BCK (KM no liberó su memoria realmente).
         if (suspension_ok) {
             cambiar_estado_pcb(pcb,S_BCK);
-            agregar_proceso_lista(pcb);
             eliminar_proceso_Lista(pcb);
+            agregar_proceso_lista(pcb);
+            
 
             log_info(logger, "## PID: [%d] Suspendido Block",pcb->data.PID);
         }
@@ -637,14 +648,16 @@ void mediano_plazo_rdy (PCB* pcb){
     if(pcb->estado_pcb == BCK){
 
         cambiar_estado_pcb(pcb,RDY);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+        
     }
     else if (pcb->estado_pcb == S_BCK){
         
         cambiar_estado_pcb(pcb,S_RDY);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+        
     }  
 }
 
@@ -695,7 +708,7 @@ void cpu_libre (int cliente_fd)/*OK*/
 
     sem_post(&sem_compactacion);
 }
-//DESALOJO
+
 //DESALOJO
 void desalojo(int socket_cliente)
 {
@@ -775,13 +788,13 @@ void desalojo(int socket_cliente)
 
                 log_error(logger, "PID %d no encontrado", pid);
 
-                log_info(logger, "NEW: %d", list_size(listasProcesos->new));
-                log_info(logger, "READY: %d", list_size(listasProcesos->rdy));
-                log_info(logger, "RUNNING: %d", list_size(listasProcesos->rnn));
-                log_info(logger, "BLOCK: %d", list_size(listasProcesos->bck));
-                log_info(logger, "EXIT: %d", list_size(listasProcesos->ext));
-                log_info(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
-                log_info(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
+                log_debug(logger, "NEW: %d", list_size(listasProcesos->new));
+                log_debug(logger, "READY: %d", list_size(listasProcesos->rdy));
+                log_debug(logger, "RUNNING: %d", list_size(listasProcesos->rnn));
+                log_debug(logger, "BLOCK: %d", list_size(listasProcesos->bck));
+                log_debug(logger, "EXIT: %d", list_size(listasProcesos->ext));
+                log_debug(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
+                log_debug(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
             }
             else if (pcb->estado_pcb == BCK) {
 
@@ -825,7 +838,25 @@ void desalojo(int socket_cliente)
             else if (pcb->estado_pcb == RNN) {
 
                 cambiar_estado_pcb(pcb, RDY);
-                agregar_proceso_lista(pcb);
+
+                if (compactacion_value == 1) 
+                {
+                    // Desalojado por compactación → excepcionalmente al PRINCIPIO de READY
+                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0) 
+                    {
+                        actualizar_prioridad_pcb(pcb, 0);
+                    }
+
+                    pthread_mutex_lock(&mutex_ready);
+                    list_add_in_index(listasProcesos->rdy, 0, pcb);
+                    pthread_mutex_unlock(&mutex_ready);
+                    sem_post(&sem_hay_ready);
+                } 
+                else 
+                {
+                    agregar_proceso_lista(pcb);
+                }
+
                 eliminar_proceso_Lista(pcb);
 
                 log_info(logger,
@@ -1041,62 +1072,23 @@ void mem_corrupt(int socket_cliente)
     log_info(logger,
             "## Se Desalojaran todas las CPUs por Mem Corrupt");
 
-    if(mock)
-{
-    log_info(logger, "========== MOCK MEM CORRUPT ==========");
-
-    while(!list_is_empty(listasProcesos->rnn))
-    {
-        sem_wait(&sem_hay_ready);
-        pthread_mutex_lock(&sem_procesos_running);
-
-        PCB* pcb = list_remove(listasProcesos->rnn, 0);
-
-        bool rnn_quedo_vacio = list_is_empty(listasProcesos->rnn);
-
-        pthread_mutex_unlock(&sem_procesos_running);
-
-        if (rnn_quedo_vacio)
-        {
-            sem_post(&sem_rnn_vacio);
-        }
-
-
-        log_info(logger,
-                 "[MOCK] PID [%d] desalojado",
-                 pcb->data.PID);
-    }
-
-    log_info(logger, "[MOCK] Todas las CPUs fueron desalojadas");
-    log_info(logger, "[MOCK] Blue Screen");
-
-    scheduler_control_loop = 0;
-
-    return;
-}
-else
-{
     pthread_mutex_lock(&sem_procesos_running);
-    bool rnn_vacio = list_is_empty(listasProcesos->rnn);
+    
+    while (!list_is_empty(listasProcesos->rnn))
+        pthread_cond_wait(&cond_rnn_vacio, &sem_procesos_running);
+    
     pthread_mutex_unlock(&sem_procesos_running);
-
-    if (!rnn_vacio)
-    {
-        sem_wait(&sem_rnn_vacio);
-    }
 
     pthread_mutex_lock(&mutex_conexion_km);
     enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
     pthread_mutex_unlock(&mutex_conexion_km);
 
     log_info(logger, "Blue Screen");
-
     scheduler_control_loop = 0;
-}
 }
 
 //COMPACTACION
-void compactacion (int socket_cliente)
+void compactacion (int socket_cliente, int pid_trigger)
 {
     int err = 0;
     compactacion_value = 1;
@@ -1153,22 +1145,21 @@ void compactacion (int socket_cliente)
     }
     else
     {
+        // Esperar a que se desalojen las OTRAS CPUs. La que disparó la compactación
+        // (pid_trigger) NO se espera: quedó congelada en su MEM_ALLOC, no ejecuta ni
+        // toca memoria. Con 1 CPU el predicado da falso de entrada → no espera.
         pthread_mutex_lock(&sem_procesos_running);
-
-        bool rnn_vacio = list_is_empty(listasProcesos->rnn);
-
+        
+        while (hay_otro_proceso_ejecutando(pid_trigger))
+            pthread_cond_wait(&cond_rnn_vacio, &sem_procesos_running);
+        
         pthread_mutex_unlock(&sem_procesos_running);
-
-        if (!rnn_vacio)
-        {
-            sem_wait(&sem_rnn_vacio);
-        }
 
         pthread_mutex_lock(&mutex_conexion_km);
         enviar_op_code(CPUS_DESALOJADAS_OK, info_km.conexion_km);
-
-        log_info(logger,"## Inicio de Compactacion");/*Logger Obligatorio*/
-
+        
+        log_info(logger,"## Inicio de compactación");   // texto exacto de la consigna
+        
         err = recibir_op_code(info_km.conexion_km);
         pthread_mutex_unlock(&mutex_conexion_km);
     }
@@ -1185,6 +1176,17 @@ void compactacion (int socket_cliente)
         log_error(logger, "## error en resolver compactacion");
         sem_post(&sem_compactacion);
     }
+}
+
+// Se llama SIEMPRE con sem_procesos_running tomado.
+bool hay_otro_proceso_ejecutando(int pid_trigger)
+{
+    for (int i = 0; i < list_size(listasProcesos->rnn); i++) {
+        PCB* pcb = list_get(listasProcesos->rnn, i);
+        if (pcb->data.PID != pid_trigger)
+            return true;
+    }
+    return false;
 }
 
 //NUEVA_MEMORY_STICK
@@ -1244,9 +1246,7 @@ void nuevo_espacio()
 
         if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
         {
-            for (int prioridad = 1;
-                 prioridad <= planificador->cantidad_niveles && pcb == NULL;
-                 prioridad++)
+            for (int prioridad = 0; prioridad < planificador->cantidad_niveles && pcb == NULL; prioridad++)
             {
                 for (int i = 0; i < list_size(listasProcesos->s_rdy); i++)
                 {
@@ -1641,9 +1641,9 @@ void pruebas_cpu_ms(){
     PCB* pcb_mock = crearNuevoProceso_mock("proceso1", 1, 0);
 
     cambiar_estado_pcb(pcb_mock, RDY);
-
-    agregar_proceso_lista(pcb_mock);
     eliminar_proceso_Lista(pcb_mock);
+    agregar_proceso_lista(pcb_mock);
+    
 }
 
 
@@ -1989,9 +1989,9 @@ void mock_cpu(PCB* pcb)
 
     // Simulamos que la CPU ejecutó y se bloqueó por IO
     cambiar_estado_pcb(pcb, BCK);
-
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
     pthread_t hilo;
 
@@ -2035,8 +2035,9 @@ void mutex_create (int socket_cliente){ /*OK*/
             }
 
     cambiar_estado_pcb(pcb,BCK);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
     loguear_lista(listasProcesos->bck,logger);
 
@@ -2049,8 +2050,9 @@ void mutex_create (int socket_cliente){ /*OK*/
     enviar_op_code(OK, socket_cliente);
 
     cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
         
 }
 
@@ -2098,8 +2100,9 @@ void mutex_lock (int socket_cliente){
             }
         
         cambiar_estado_pcb(pcb,BCK);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+       
 
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         list_add(list_suplementarias->desalojo, pcb);
@@ -2163,8 +2166,9 @@ void mutex_lock (int socket_cliente){
 
 
     cambiar_estado_pcb(pcb,RDY);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
         free(mutex_id); 
 }
@@ -2189,8 +2193,9 @@ void mutex_unlock (int socket_cliente)
             }
 
         cambiar_estado_pcb(pcb,BCK);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+        
 
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         list_add(list_suplementarias->desalojo, pcb);
@@ -2249,8 +2254,11 @@ void mutex_unlock (int socket_cliente)
             log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
             
             cambiar_estado_pcb(pcb,RDY);
-            agregar_proceso_lista(pcb);
             eliminar_proceso_Lista(pcb);
+            agregar_proceso_lista(pcb);
+           
+            
+            
 
         }
         else{
@@ -2301,7 +2309,7 @@ void mem_alloc (int socket_cliente){
     else if (err == COMPACTACION)
     {
         pthread_mutex_unlock(&mutex_conexion_km);
-        compactacion(socket_cliente);
+        compactacion(socket_cliente, pid);
         pthread_mutex_lock(&mutex_conexion_km);
 
         int err2 = recibir_op_code(info_km.conexion_km);
@@ -2326,8 +2334,11 @@ void mem_alloc (int socket_cliente){
 
         if (pcb != NULL) {
             cambiar_estado_pcb(pcb, EXT);
-            agregar_proceso_lista (pcb);
             eliminar_proceso_Lista(pcb);
+            agregar_proceso_lista (pcb);
+            
+            
+            
         }
         else{
             log_error(logger, "PCB = NULL en EXIT_PROCESO");
@@ -2427,8 +2438,8 @@ void init_proc(int socket_cliente) {
     }
 
     cambiar_estado_pcb(pcb, BCK);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
 
     pthread_mutex_lock(&sem_procesos_s_desalojo);
     list_add(list_suplementarias->desalojo, pcb);
@@ -2452,8 +2463,9 @@ void init_proc(int socket_cliente) {
 
         if (resp_init_proc == OK) {
             cambiar_estado_pcb(nuevo_pcb, RDY);
-            agregar_proceso_lista(nuevo_pcb);
             eliminar_proceso_Lista(nuevo_pcb);
+            agregar_proceso_lista(nuevo_pcb);
+            
         }
 
     } else {
@@ -2461,14 +2473,11 @@ void init_proc(int socket_cliente) {
         nuevo_pcb = crearNuevoProceso_mock(path, prioridad, info_km.conexion_km);
 
         cambiar_estado_pcb(nuevo_pcb, RDY);
-        agregar_proceso_lista(nuevo_pcb);
         eliminar_proceso_Lista(nuevo_pcb);
+        agregar_proceso_lista(nuevo_pcb);
+        
     }
 
-    //ESTO NO VA porque me modifica la planificacion
-    // cambiar_estado_pcb(pcb, RDY);
-    // agregar_proceso_lista(pcb);
-    // eliminar_proceso_Lista(pcb);
 
     enviar_op_code(OK, socket_cliente);
 
@@ -2493,8 +2502,9 @@ void exit_proceso(int socket_cpu){ /*OK*/
     log_info(logger, "## PID:[%d] Solicito Syscall: [Exit Proc]", pid_a_finalizar); /*Logger Obligatorio*/
 
     cambiar_estado_pcb(pcb,BCK);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
 
     pthread_mutex_lock(&sem_procesos_s_desalojo);
@@ -2513,8 +2523,9 @@ void exit_proceso(int socket_cpu){ /*OK*/
     
     if (pcb != NULL) {
         cambiar_estado_pcb(pcb, EXT);
-        agregar_proceso_lista (pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista (pcb);
+        
     }
     else{
         log_error(logger, "PCB = NULL en EXIT_PROCESO");
@@ -2556,8 +2567,9 @@ void io_sleep(int socket_cpu) {
         /*Bloqueamos el Proceso*/
         pcb->esperando_io = true;
         cambiar_estado_pcb(pcb, BCK);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+        
 
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         list_add(list_suplementarias->desalojo, pcb);
@@ -2659,8 +2671,9 @@ void io_stdin(int socket_cpu) {
         /*Bloqueamos el Proceso*/
         pcb->esperando_io = true;
         cambiar_estado_pcb(pcb, BCK);
-        agregar_proceso_lista(pcb);
         eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista(pcb);
+        
 
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         list_add(list_suplementarias->desalojo, pcb);
@@ -2789,8 +2802,9 @@ void io_stdout(int cpu_socket) {
     /*Bloqueamos el Proceso*/
     pcb->esperando_io = true;
     cambiar_estado_pcb(pcb, BCK);
-    agregar_proceso_lista(pcb);
     eliminar_proceso_Lista(pcb);
+    agregar_proceso_lista(pcb);
+    
 
     
     pthread_mutex_lock(&sem_procesos_s_desalojo);

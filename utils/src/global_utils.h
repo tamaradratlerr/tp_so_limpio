@@ -224,6 +224,7 @@ typedef struct
     estado estado_anterior;
     int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
     bool esperando_io;
+    int quantum_version; 
 }PCB;
 
 //Estructura de dato que identifica CPUs
@@ -324,25 +325,6 @@ char* opcode_to_string(op_code codigo);
 void enviar_int(int code_op, int socket_cliente);
 
 int recibir_int(int socket_cliente);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 //--------- MS - KM - SWAP
 

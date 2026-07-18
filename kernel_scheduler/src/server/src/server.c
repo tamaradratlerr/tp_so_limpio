@@ -1390,30 +1390,20 @@ void actualizar_herencia(mutex_cpu* mutex)
 void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
 {
     int prioridad_vieja = pcb->data.prioridad;
+    if (prioridad_vieja == nueva_prioridad) return;
 
-    if(prioridad_vieja == nueva_prioridad)
-        return;
+    log_info(logger, "## %d Cambio de prioridad: %d - %d",
+             pcb->data.PID, prioridad_vieja, nueva_prioridad);  
 
     pcb->data.prioridad = nueva_prioridad;
 
-    if(pcb->estado_pcb == RDY)
-    {
+    if (pcb->estado_pcb == RDY) {
         pthread_mutex_lock(&mutex_ready);
-
-        list_remove_element(
-            planificador->niveles[prioridad_vieja].cola,
-            pcb
-        );
-
-        list_add(
-            planificador->niveles[nueva_prioridad].cola,
-            pcb
-        );
-
+        bool estaba = list_remove_element(planificador->niveles[prioridad_vieja].cola, pcb);
+        if (estaba)
+            list_add(planificador->niveles[nueva_prioridad].cola, pcb);
         pthread_mutex_unlock(&mutex_ready);
-
     }
-    log_info(logger,"## PID:[%d] Cambio de prioridad: [%d] => [%d]",pcb->data.PID,prioridad_vieja,nueva_prioridad);
 }
 
 void recalcular_prioridad(PCB* pcb)

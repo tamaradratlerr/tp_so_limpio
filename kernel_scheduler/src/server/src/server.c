@@ -2264,37 +2264,39 @@ void mutex_unlock (int socket_cliente)
 
 //MEM_ALLOC,k
 void mem_alloc (int socket_cliente){
-    
+
     enviar_op_code(OK,socket_cliente); //HandShake
 
     char* id_segmento = recibir_mensaje(socket_cliente, logger);
-    enviar_op_code(OK,socket_cliente); 
+    enviar_op_code(OK,socket_cliente);
 
     char* tamanio = recibir_mensaje(socket_cliente,logger);
     enviar_op_code(OK,socket_cliente);
-
 
     int pid = recibir_pid(socket_cliente);
     enviar_op_code(OK, socket_cliente);
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Mem Alloc]", pid); /*Logger Obligatorio*/
 
-    /*Le envamos la DATA a la Kernel Memory*/
+    /*Le enviamos la DATA a la Kernel Memory*/
 
     pthread_mutex_lock(&mutex_conexion_km);
 
     enviar_op_code(gl_MEM_ALLOC,info_km.conexion_km);
-
     enviar_pid(pid, info_km.conexion_km);
-   
     enviar_int(atoi(tamanio), info_km.conexion_km);
-
     enviar_int(atoi(id_segmento),info_km.conexion_km);
 
     int err = recibir_op_code(info_km.conexion_km);
 
-    if ( err == OK) {
+    if (err == OK) {
         log_info(logger, "Nuevo segmento ID:[%s] TAMAÑO:[%s] PID:[%d] fue enviado a KM.",id_segmento,tamanio,pid);
+
+        int base = recibir_int(info_km.conexion_km);
+
+        pthread_mutex_unlock(&mutex_conexion_km);
+
+        enviar_int(base, socket_cliente);
     }
     else if (err == COMPACTACION)
     {
@@ -2311,64 +2313,50 @@ void mem_alloc (int socket_cliente){
             pthread_mutex_unlock(&mutex_conexion_km);
             enviar_int(-1, socket_cliente);
         }
-        return;
     }
     else
     {
+        
+        pthread_mutex_unlock(&mutex_conexion_km);
 
         log_error(logger,
-                "## PID: %d - Finaliza por Mortivo Falta de tamaño para Creación de segmento",
+                "## PID: %d - Finaliza por Motivo Falta de tamaño para Creación de segmento",
                 pid);
 
         PCB* pcb = buscar_pcb_por_pid(pid);
 
         if (pcb != NULL) {
             cambiar_estado_pcb(pcb, EXT);
+            agregar_proceso_lista(pcb);
             eliminar_proceso_Lista(pcb);
-            agregar_proceso_lista (pcb);
-            
-            
-            
+
+            pthread_mutex_lock(&sem_procesos_s_desalojo);
+            list_add(list_suplementarias->desalojo, pcb);
+            pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+            enviar_proceso_finalizar_KM(pcb->data.PID);
+
+            log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]", pcb->data.PID); /*Logger Obligatorio*/
         }
-        else{
+        else {
             log_error(logger, "PCB = NULL en EXIT_PROCESO");
-        }
-
-        
-        pthread_mutex_lock(&sem_procesos_s_desalojo);
-        list_add(list_suplementarias->desalojo, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_desalojo);
-                
-        enviar_proceso_finalizar_KM(pcb->data.PID);
-
-        t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
-                
-        if(cpu_libre == NULL){
-            log_error(logger,"Error al encontrar CPU en la lista");
-            return;
         }
 
         enviar_int(-1, socket_cliente);
 
-        cpu_libre->enUso = false;
-
-        log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pcb->data.PID);/*Logger Obligatorio*/
-        
-        pthread_mutex_unlock(&mutex_conexion_km);
+        t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
+        if (cpu_libre != NULL) {
+            cpu_libre->enUso = false;
+        } else {
+            log_error(logger, "Error al encontrar CPU en la lista");
+        }
 
         nuevo_espacio();
-
-        return;
-
     }
 
-    int base = recibir_int(info_km.conexion_km);
-
-    pthread_mutex_unlock(&mutex_conexion_km);
-
-    enviar_int(base, socket_cliente);
-
-}; 
+    free(id_segmento);
+    free(tamanio);
+}
 
 //MEM_FREE,
 void mem_free (int socket_cliente){

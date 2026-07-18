@@ -2049,218 +2049,178 @@ void mutex_create (int socket_cliente){ /*OK*/
 //MUTEX_LOCK,
 void mutex_lock (int socket_cliente){
 
-        enviar_op_code(OK, socket_cliente);
+    enviar_op_code(OK, socket_cliente);
 
+    int* pid_guardado = malloc(sizeof(int));
+    int pid = recibir_pid(socket_cliente);
+    *pid_guardado = pid;
 
-        int* pid_guardado = malloc(sizeof(int));
-        int pid = recibir_pid (socket_cliente);
+    char* mutex_id = recibir_mensaje(socket_cliente, logger);
 
-        *pid_guardado = pid;
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
 
+    mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
-        char* mutex_id = recibir_mensaje (socket_cliente, logger);
-
-        log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Lock]", pid); /*Logger Obligatorio*/
-
-        mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
-        
-
-        if (mutex == NULL) 
-        {
-            log_error(logger, "Mutex no encontrado");
-            enviar_op_code(NOTOK,socket_cliente);    
-            return;
-        }
-
-        pthread_mutex_lock(&mutex_simulados);
-        list_add(mutex->cola_mutex, pid_guardado);
-        if(mutex->dueño_actual != NULL)
-        {
-            actualizar_herencia(mutex);
-        }
-        pthread_mutex_unlock(&mutex_simulados);
-
-        /*Bloqueo y Desalojo*/
-        PCB* pcb = buscar_pcb_por_pid(pid);
-        
-
-            if (pcb == NULL) {
-                log_error(logger, "finalizado para PID %d pero no se encontró su PCB", pid);
-                return;
-            }
-        
-        cambiar_estado_pcb(pcb,BCK);
-        eliminar_proceso_Lista(pcb);
-        agregar_proceso_lista(pcb);
-       
-
-        pthread_mutex_lock(&sem_procesos_s_desalojo);
-        list_add(list_suplementarias->desalojo, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
-        enviar_op_code(OK, socket_cliente);
-
-        while (1)
+    if (mutex == NULL)
     {
-        pthread_mutex_lock(&mutex_simulados);
-
-        int* primer_pid = list_get(mutex->cola_mutex, 0);
-
-        pthread_mutex_unlock(&mutex_simulados);
-
-        if(primer_pid != NULL && *primer_pid == pid)
-        {
-            while(1)
-            {
-                if(mutex->valor == 1)
-                {
-                    log_info(logger,
-                            "## PID:[%d] Toma el mutex:[%s]",
-                            pid,
-                            mutex_id);
-                pcb = buscar_pcb_por_pid(pid);
-
-
-                if (pcb == NULL) {
-                    log_error(logger, "finalizado para PID %d pero no se encontró su PCB", pid);
-                    return;
-                }
-                
-                mutex->dueño_actual = pcb;
-
-                list_add(pcb->mutex_tomados, mutex);
-
-                mutex->valor = 0;
-
-                break;
-                }
-
-                log_info(logger,
-                        "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo... (Proximo en la lista)",
-                        pid,
-                        mutex_id);
-
-                usleep(1000);
-            }
-
-            break;
-        }
-
-        log_info(logger,
-                "## PID:[%d] No pudo tomar el mutex:[%s]. Vuelve a intentarlo...",
-                pid,
-                mutex_id);
-
-        usleep(1000);
+        log_error(logger, "Mutex no encontrado");
+        enviar_op_code(NOTOK, socket_cliente);
+        free(pid_guardado);
+        free(mutex_id);
+        return;
     }
 
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    if (pcb == NULL) {
+        log_error(logger, "MUTEX_LOCK para PID %d pero no se encontró su PCB", pid);
+        free(pid_guardado);
+        free(mutex_id);
+        return;
+    }
 
-    cambiar_estado_pcb(pcb,RDY);
-    eliminar_proceso_Lista(pcb);
+    /* Siempre bloqueamos el proceso y pedimos desalojo (protocolo con CPU igual que antes) */
+    cambiar_estado_pcb(pcb, BCK);
     agregar_proceso_lista(pcb);
-    
+    eliminar_proceso_Lista(pcb);
 
-        free(mutex_id); 
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+    list_add(list_suplementarias->desalojo, pcb);
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+    enviar_op_code(OK, socket_cliente);
+
+    pthread_mutex_lock(&mutex_simulados);
+
+    if (mutex->valor == 1)
+    {
+        /* Mutex libre: lo toma y vuelve inmediatamente a READY */
+        mutex->valor = 0;
+        mutex->dueño_actual = pcb;
+        list_add(pcb->mutex_tomados, mutex);
+
+        pthread_mutex_unlock(&mutex_simulados);
+
+        log_info(logger, "## PID:[%d] Toma el mutex:[%s]", pid, mutex_id);
+
+        cambiar_estado_pcb(pcb, RDY);
+        agregar_proceso_lista(pcb);
+        eliminar_proceso_Lista(pcb);
+
+        free(pid_guardado);
+    }
+    else
+    {
+        /* Mutex ocupado: queda encolado y BLOQUEADO.
+           NO esperamos acá: lo va a despertar mutex_unlock. */
+        list_add(mutex->cola_mutex, pid_guardado);
+        actualizar_herencia(mutex);
+
+        pthread_mutex_unlock(&mutex_simulados);
+
+        log_info(logger, "## PID:[%d] No pudo tomar el mutex:[%s] y queda bloqueado", pid, mutex_id);
+    }
+
+    free(mutex_id);
 }
 
 //MUTEX_UNLOK,
 void mutex_unlock (int socket_cliente)
 {
+    enviar_op_code(OK, socket_cliente);
 
-        enviar_op_code(OK,socket_cliente);
+    int pid = recibir_pid(socket_cliente);
+    char* mutex_id = recibir_mensaje(socket_cliente, logger);
 
-        int pid = recibir_pid(socket_cliente);
-        char* mutex_id = recibir_mensaje (socket_cliente, logger);
-        log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Mutex Unlock]", pid); /*Logger Obligatorio*/
 
-        /*Bloqueo y Desalojo*/
-        PCB* pcb = buscar_pcb_por_pid(pid);
-        
-        
-            if (pcb == NULL) {
-                log_error(logger, "finalizado para PID %d pero no se encontró su PCB", pid);
-                return;
-            }
+    PCB* pcb = buscar_pcb_por_pid(pid);
+    if (pcb == NULL) {
+        log_error(logger, "MUTEX_UNLOCK para PID %d pero no se encontró su PCB", pid);
+        free(mutex_id);
+        return;
+    }
 
-        cambiar_estado_pcb(pcb,BCK);
-        eliminar_proceso_Lista(pcb);
-        agregar_proceso_lista(pcb);
-        
+    /* Bloqueo y desalojo del que libera (protocolo igual que antes) */
+    cambiar_estado_pcb(pcb, BCK);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
 
-        pthread_mutex_lock(&sem_procesos_s_desalojo);
-        list_add(list_suplementarias->desalojo, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_desalojo);
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+    list_add(list_suplementarias->desalojo, pcb);
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
-        enviar_op_code(OK, socket_cliente);
+    enviar_op_code(OK, socket_cliente);
 
-        mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
+    mutex_cpu* mutex = list_find_with_context(lista_mutex, es_el_mutex_buscado, mutex_id);
 
-        if(mutex == NULL)
-        {
-            log_error(logger, "Mutex no encontrado");
-            free(mutex_id);
-            return;
-        }
-
+    if (mutex == NULL)
+    {
+        log_error(logger, "Mutex no encontrado");
+    }
+    else
+    {
         pthread_mutex_lock(&mutex_simulados);
 
-        int* primer_pid = list_get(mutex->cola_mutex, 0);
-
-        if(primer_pid == NULL || *primer_pid != pid)
+        if (mutex->dueño_actual != pcb)
         {
             pthread_mutex_unlock(&mutex_simulados);
-
-            log_info(logger,
-                "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",
-                mutex_id,
-                pid);
-
-            enviar_op_code(NOTOK, socket_cliente);
-
-            free(mutex_id);
-            return;
+            log_info(logger, "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]", mutex_id, pid);
         }
-
-        int* pid_removed = list_remove(mutex->cola_mutex, 0);
-        
-        if(pid_removed != NULL && *pid_removed == pid){
-
-            mutex->valor = 1;
-            PCB* pcb = buscar_pcb_por_pid(pid);
-            
-            if (pcb == NULL) {
-                log_error(logger, "finalizado para PID %d pero no se encontró su PCB", pid);
-                return;
-            }
-            
-            list_remove_element(
-                pcb->mutex_tomados,
-                mutex
-            );
-
-            recalcular_prioridad(pcb);
-
+        else
+        {
+            list_remove_element(pcb->mutex_tomados, mutex);
+            recalcular_prioridad(pcb);   /* vuelve a su prioridad original si corresponde */
             mutex->dueño_actual = NULL;
-            log_info(logger,"## PID:[%d] Libera el mutex:[%s]",pid,mutex_id);/*Logger Obligatorio*/
-            
-            cambiar_estado_pcb(pcb,RDY);
-            eliminar_proceso_Lista(pcb);
-            agregar_proceso_lista(pcb);
-           
-            
-            
 
-        }
-        else{
-            log_info (logger, "ERROR en sincronizacion de MUTEX mutex_id:[%s] PID:[%d]",mutex_id,pid);
-            enviar_op_code(NOTOK, socket_cliente);
-        }
-        
-        pthread_mutex_unlock (&mutex_simulados);
-        free(pid_removed);
-        free(mutex_id);
+            log_info(logger, "## PID:[%d] Libera el mutex:[%s]", pid, mutex_id); /*Logger Obligatorio*/
 
+            if (!list_is_empty(mutex->cola_mutex))
+            {
+                /* Hand-off: el primero de la cola pasa a ser el nuevo dueño y se despierta */
+                int* pid_siguiente = list_remove(mutex->cola_mutex, 0);
+                PCB* pcb_sig = buscar_pcb_por_pid(*pid_siguiente);
+
+                if (pcb_sig != NULL)
+                {
+                    mutex->dueño_actual = pcb_sig;   /* valor queda en 0: pasa directo */
+                    list_add(pcb_sig->mutex_tomados, mutex);
+
+                    /* re-evaluar herencia del nuevo dueño con los que sigan esperando */
+                    actualizar_herencia(mutex);
+
+                    pthread_mutex_unlock(&mutex_simulados);
+
+                    log_info(logger, "## PID:[%d] Toma el mutex:[%s]", pcb_sig->data.PID, mutex_id);
+
+                    /* despertar: BLOCK -> READY */
+                    cambiar_estado_pcb(pcb_sig, RDY);
+                    agregar_proceso_lista(pcb_sig);
+                    eliminar_proceso_Lista(pcb_sig);
+                }
+                else
+                {
+                    mutex->valor = 1;
+                    pthread_mutex_unlock(&mutex_simulados);
+                    log_error(logger, "PID %d esperaba el mutex pero ya no existe su PCB", *pid_siguiente);
+                }
+
+                free(pid_siguiente);
+            }
+            else
+            {
+                mutex->valor = 1;
+                pthread_mutex_unlock(&mutex_simulados);
+            }
+        }
     }
+
+    /* el que libero vuelve a READY */
+    cambiar_estado_pcb(pcb, RDY);
+    agregar_proceso_lista(pcb);
+    eliminar_proceso_Lista(pcb);
+
+    free(mutex_id);
+}
 
 //MEM_ALLOC,k
 void mem_alloc (int socket_cliente){

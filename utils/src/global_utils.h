@@ -222,9 +222,10 @@ typedef struct
     t_infoProceso data;
     estado estado_pcb;
     estado estado_anterior;
-    int fd_cpu; //socket cpu para que se sepa en q cpu se esta ejecutando
+    int fd_cpu;
     bool esperando_io;
-    int quantum_version; 
+    int quantum_version;
+    int block_version;   
 }PCB;
 
 //Estructura de dato que identifica CPUs

@@ -52,15 +52,12 @@ void enviar_respuesta_simple(int socket_km, op_code respuesta)
 //recibe un paquete, lo convierte en lista y después lee cada dato por posición.
 void manejar_lectura_bloque(int socket_km, t_log* logger)
 {
-    t_list* paquete = recibir_paquete(socket_km);
-
-    int numero_bloque = *(int*) list_get(paquete, 0);
+    int numero_bloque = recibir_int(socket_km);
     int cantidad_bloques = tamanio_total_swap / tamanio_bloque_swap;
 
-    log_info(logger, "## Lectura del bloque: %d", numero_bloque); //para registrar cada vez q la kernel pide leer un bloque
+    log_info(logger, "## Lectura del bloque: %d", numero_bloque);
 
-    if(numero_bloque < 0 || numero_bloque >= cantidad_bloques) {
-        list_destroy_and_destroy_elements(paquete, free);
+    if (numero_bloque < 0 || numero_bloque >= cantidad_bloques) {
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
@@ -69,37 +66,29 @@ void manejar_lectura_bloque(int socket_km, t_log* logger)
     int offset = numero_bloque * tamanio_bloque_swap;
 
     pthread_mutex_lock(&mutex_swap);
-
     int fd = open(archivo_swap_path, O_RDONLY);
 
-    if(fd == -1) {
+    if (fd == -1) {
         pthread_mutex_unlock(&mutex_swap);
         free(datos);
-        list_destroy_and_destroy_elements(paquete, free);
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
 
     ssize_t bytes_leidos = pread(fd, datos, tamanio_bloque_swap, offset);
     close(fd);
-
     pthread_mutex_unlock(&mutex_swap);
 
-    if(bytes_leidos != tamanio_bloque_swap) {
+    if (bytes_leidos != tamanio_bloque_swap) {
         free(datos);
-        list_destroy_and_destroy_elements(paquete, free);
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
 
-    t_paquete* respuesta = crear_paquete(RESPUESTA_DATOS);
-
-    agregar_a_paquete(respuesta, datos, tamanio_bloque_swap);
-    enviar_paquete(respuesta, socket_km);
-    eliminar_paquete(respuesta);
+    enviar_respuesta_simple(socket_km, RESPUESTA_DATOS);
+    enviar_buffer(datos, tamanio_bloque_swap, socket_km);
 
     free(datos);
-    list_destroy_and_destroy_elements(paquete, free);
 }
 
 //recibe numero de bloque y datos a guardar y escribe esos bytes en la posición correcta del archivo.
@@ -107,18 +96,17 @@ void manejar_lectura_bloque(int socket_km, t_log* logger)
 //recibe numero de bloque y datos a guardar, y los escribe en la posicion correcta del archivo.
 void manejar_escritura_bloque(int socket_km, t_log* logger)
 {
-    t_list* paquete = recibir_paquete(socket_km);
+    int numero_bloque = recibir_int(socket_km);
 
-    int numero_bloque = *(int*) list_get(paquete, 0);
-    void* datos = list_get(paquete, 1);
+    int size;
+    void* datos = recibir_buffer(&size, socket_km);
 
     log_info(logger, "## Escritura del bloque: %d", numero_bloque);
 
-    int tamanio_datos = tamanio_bloque_swap;
     int cantidad_bloques = tamanio_total_swap / tamanio_bloque_swap;
 
-    if(numero_bloque < 0 || numero_bloque >= cantidad_bloques) {
-        list_destroy_and_destroy_elements(paquete, free);
+    if (numero_bloque < 0 || numero_bloque >= cantidad_bloques) {
+        free(datos);
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
@@ -126,32 +114,28 @@ void manejar_escritura_bloque(int socket_km, t_log* logger)
     int offset = numero_bloque * tamanio_bloque_swap;
 
     pthread_mutex_lock(&mutex_swap);
-
     int fd = open(archivo_swap_path, O_RDWR);
 
-    if(fd == -1) {
+    if (fd == -1) {
         pthread_mutex_unlock(&mutex_swap);
-        list_destroy_and_destroy_elements(paquete, free);
+        free(datos);
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
 
-    ssize_t bytes_escritos = pwrite(fd, datos, tamanio_datos, offset);
+    ssize_t bytes_escritos = pwrite(fd, datos, tamanio_bloque_swap, offset);
     close(fd);
-
     pthread_mutex_unlock(&mutex_swap);
 
-    if(bytes_escritos != tamanio_datos) {
-        list_destroy_and_destroy_elements(paquete, free);
+    free(datos);
+
+    if (bytes_escritos != tamanio_bloque_swap) {
         enviar_respuesta_simple(socket_km, RESPUESTA_ERROR);
         return;
     }
 
     enviar_respuesta_simple(socket_km, RESPUESTA_OK);
-
-    list_destroy_and_destroy_elements(paquete, free);
 }
-
 
 //KERNEL MEMORY
 //swap se encuentra esperando recibir pedidos, si kernel se desconecta, debe cortar.

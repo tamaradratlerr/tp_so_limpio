@@ -2,11 +2,13 @@
 
 ./bin/kernel_memory src/kernel_memory.config 
 
-./bin/memory_stick memory_stick.config 256
+./bin/memory_stick memory_stick.config 16
+
+./bin/memory_stick memory_stick2.config 16
 
 ./bin/io IO.config io1
 
-./bin/kernel_scheduler src/client/cliente.config MEMORIA_PRE_0.prc
+./bin/kernel_scheduler src/client/cliente.config PHP.prc
 
 ./bin/swap client.config
 

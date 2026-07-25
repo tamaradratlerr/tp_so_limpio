@@ -101,11 +101,38 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	enviar_op_code(NUEVO_KERNEL, info_km.conexion_km);
 
 	int err = recibir_op_code(info_km.conexion_km);
-	
+
+	if( err != OK) 
+	{
+		log_error(logger,"Error en Hand Shake con Kernel Memory");
+		return;
+	}
+
+	int catnidad_sticks_iniciales = recibir_int(info_km.conexion_km);
+
+	log_debug (logger, "Recibiendo [%d] Memorys Sticks",catnidad_sticks_iniciales);
+
+	for (int i = 0; i < catnidad_sticks_iniciales; i++)
+	{
+		t_mem_stick* nueva_stick = malloc(sizeof(t_mem_stick));
+
+		nueva_stick->base = recibir_int(info_km.conexion_km);
+		nueva_stick->tamanio = recibir_int(info_km.conexion_km);
+		nueva_stick->ip = recibir_mensaje(info_km.conexion_km, logger);
+		nueva_stick->puerto = recibir_mensaje(info_km.conexion_km, logger);
+
+		list_add(list_suplementarias->ms, nueva_stick);
+
+		log_debug (logger, "Se Guardo una nueva Memory Stick");
+
+
+	}
+
+
 	PCB* nuevo_pcb;
 
 		log_debug(logger,"Iniciando Proceso Inicial");
-	nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);	
+		nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);	
 
 	int resp_init_proc = recibir_op_code(info_km.conexion_km);
 

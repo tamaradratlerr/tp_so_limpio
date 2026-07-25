@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     /*---Iniciando Log y Config---*/
     char* archivo_config = argv[1];
     identificador = argv[2];
-    config_cpu = malloc(sizeof(config_cpu));
+    config_cpu = malloc(sizeof(*config_cpu));
     
     iniciar_log_config(archivo_config, identificador);
     config_cpu->tiempo_instruccion =
@@ -43,83 +43,16 @@ int main(int argc, char *argv[])
 
     /* ---------------- CONEXIONES ---------------- */
 
-    if(!mock)
-    { 
-        sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
-        enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
-        op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory);
-        
-        if(handshake_km != OK)
-        {
-            log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
-            return EXIT_FAILURE;
-        }
-
+    sockets->conexion_kernel_memory = conexion_kernel_memory(config, logger, KERNEL_MEMORY);
+    enviar_op_code (NUEVA_CPU, sockets->conexion_kernel_memory);
+    enviar_mensaje(identificador,sockets->conexion_kernel_memory);
+    op_code handshake_km = recibir_op_code(sockets->conexion_kernel_memory);
+    
+    if(handshake_km != OK)
+    {
+        log_error(logger, "Error en HandShake con Kernel Memory. valor OP_CODE: [%d]",handshake_km);
+        return EXIT_FAILURE;
     }
-        sockets->memory_sticks = list_create();
-        sem_init(&mutex_memory_sticks, 0, 1);
-
-        t_mem_stick* ms_inicial = malloc(sizeof(t_mem_stick));
-
-
-        ms_inicial->ip = 
-            config_get_string_value(config, "IP_MEMORY_STICK");
-
-
-        ms_inicial->puerto =
-            config_get_string_value(config, "PUERTO_MEMORY_STICK");
-        
-        log_info(logger,
-            "Intentando conectar a Memory Stick %s:%s",
-            ms_inicial->ip,
-            ms_inicial->puerto
-        );
-
-        ms_inicial->socket =
-            crear_conexion(
-                ms_inicial->ip,
-                ms_inicial->puerto,
-                logger,
-                MEMORY_STICK
-            );
-
-
-        if(ms_inicial->socket < 0)
-        {
-            log_error(logger,
-                "No se pudo conectar al Memory Stick inicial");
-
-            return EXIT_FAILURE;
-        }
-
-        enviar_op_code(
-            NUEVA_CPU,
-            ms_inicial->socket
-        );
-
-
-        op_code respuesta = recibir_op_code(ms_inicial->socket);
-
-
-        if(respuesta != OK)
-        {
-            log_error(logger,
-                "Handshake con Memory Stick falló");
-
-            return EXIT_FAILURE;
-        }
-
-        ms_inicial->base = (uint32_t) recibir_int(ms_inicial->socket);
-        ms_inicial->tamanio = (uint32_t) recibir_int(ms_inicial->socket);
-        
-        sem_wait(&mutex_memory_sticks);
-
-        list_add(
-            sockets->memory_sticks,
-            ms_inicial
-        );
-
-        sem_post(&mutex_memory_sticks);
     
 
     sockets->conexion_kernel_scheduler = conexion_kernelS(config, logger, KERNEL_SCHEDULER);
@@ -133,6 +66,62 @@ int main(int argc, char *argv[])
     {
         log_error(logger, "Error en HandShake con Kernel Scheduler valor OP_CODE: [%d]",handshake_ks);
         return EXIT_FAILURE;
+    }
+
+    int catnidad_sticks_iniciales = recibir_int(sockets->conexion_kernel_scheduler);
+
+    if (catnidad_sticks_iniciales < 1)
+    {
+        log_error(logger, "Error en Cantidad de Sticks recibidas");
+        return EXIT_FAILURE;                      // FIX 6b: main es int, return sin valor era UB
+    }
+
+    sockets->memory_sticks = list_create();
+    sem_init(&mutex_memory_sticks, 0, 1);
+
+    for (int i = 0; i < catnidad_sticks_iniciales; i++)
+    {
+        t_mem_stick* nueva_stick = malloc(sizeof(t_mem_stick));
+
+        nueva_stick->base    = recibir_int(sockets->conexion_kernel_scheduler);
+        nueva_stick->tamanio = recibir_int(sockets->conexion_kernel_scheduler);
+        nueva_stick->ip      = recibir_mensaje(sockets->conexion_kernel_scheduler, logger);
+        nueva_stick->puerto  = recibir_mensaje(sockets->conexion_kernel_scheduler, logger);
+
+        log_info(logger, "Intentando conectar a Memory Stick %s:%s", nueva_stick->ip, nueva_stick->puerto);
+
+        nueva_stick->socket = crear_conexion_reintentando(nueva_stick->ip, nueva_stick->puerto, logger, MEMORY_STICK);
+
+        if (nueva_stick->socket < 0)
+        {
+            log_error(logger, "No se pudo conectar al Memory Stick %s:%s", nueva_stick->ip, nueva_stick->puerto);
+            return EXIT_FAILURE;
+        }
+
+
+
+        enviar_op_code(NUEVA_CPU, nueva_stick->socket);
+
+        enviar_mensaje(identificador, nueva_stick->socket);
+
+        op_code respuesta = recibir_op_code(nueva_stick->socket);
+
+        if (respuesta != OK)
+        {
+            log_error(logger, "Handshake con Memory Stick falló");
+            return EXIT_FAILURE;
+        }
+
+        sem_wait(&mutex_memory_sticks);
+        list_add_sorted(sockets->memory_sticks, nueva_stick, comparar_base_memory_stick);
+        sem_post(&mutex_memory_sticks);
+
+        // FIX Error 1: el ACK va al KERNEL SCHEDULER (que está esperando en
+        // nueva_cpu para mandarnos el siguiente stick), NO al memory stick.
+        enviar_op_code(OK, sockets->conexion_kernel_scheduler);
+
+        // FIX Error 2: NO hay free(nueva_stick). El struct ahora es propiedad
+        // de la lista; liberarlo acá dejaba un puntero colgante.
     }
 
     if(!mock)
@@ -242,6 +231,7 @@ int main(int argc, char *argv[])
 
             liberar_instruccion(instruccion_decodificada);
             instruccion_decodificada = NULL;
+            limpiar_contexto_actual();
             proceso_en_ejecucion->pid = -1;
     }
 
@@ -274,9 +264,6 @@ int iniciar_log_config(char* archivo_config, char* identificador){
     sockets->puerto_kernel_scheduler = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER");
     sockets->puerto_kernel_scheduler_dispatch = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_DISPATCH");
     sockets->puerto_kernel_scheduler_interrupt = config_get_string_value(config, "PUERTO_KERNEL_SCHEDULER_INTERRUPT");
-
-    sockets->ip_memory_stick = config_get_string_value(config, "IP_MEMORY_STICK");
-    sockets->puerto_memory_stick = config_get_string_value(config, "PUERTO_MEMORY_STICK");
 
     t_log_level log_level = log_level_from_string (config_get_string_value(config, "LOG_LEVEL"));
     logger = iniciar_logger(log_level);
@@ -611,14 +598,12 @@ void liberar_instruccion(t_instruccion* instruccion) {
 
 void limpiar_contexto_actual() {
     
-    log_info(logger, "Limpiando contexto del proceso actual...");
-
     if (contexto_actual != NULL) {
+        if (contexto_actual->tabla_segmentos != NULL)
+            list_destroy_and_destroy_elements(contexto_actual->tabla_segmentos, free);
         free(contexto_actual);
         contexto_actual = NULL;
     }
-
-    log_info(logger, "Contexto limpio. CPU lista para recibir nuevo PID.");
 }
 
 void gestionar_desalojo_por_syscall(char* valor, op_code tipo_operacion) {
@@ -831,6 +816,7 @@ void ejecutar_mov_in (t_instruccion* instr){
 
     }
 }
+
 void ejecutar_mov_out(t_instruccion* instr){
 
     char* reg_valor_nombre = instr->params[0];
@@ -880,6 +866,10 @@ void ejecutar_mov_out(t_instruccion* instr){
         buffer = valor;
 
         escribir_en_memoria(dir_fisica,buffer,tamanio);
+        log_info(logger,
+        "## PID:[%d] - Ejecutando [MOV OUT] - Dirección [DI] - Valor [%u]",
+        contexto_actual->pid,
+        *valor);
 
     }
 }
@@ -948,6 +938,8 @@ void ejecutar_jnz(t_instruccion* instr) {
         contexto_actual->pc = atoi(instr->params[1]);
         pc_modificado = true;
     }
+
+    log_info(logger, "## PID: %d - Ejecutando: JNZ - %s %s", contexto_actual->pid, instr->params[0], instr->params[1]);
 }
 
 void ejecutar_copy_mem(t_instruccion* instr) {
@@ -1080,7 +1072,11 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     int base = recibir_pid(sockets->conexion_kernel_scheduler); /*Uso esta aunque no sea para esto*/
 
     if(base == -1){
-        log_info(logger, "ERROR al crear el proceso - Terminando proceso");
+        log_info(logger, "## PID:[%d] Finaliza por falta de memoria", contexto_actual->pid);
+        exit_control = 1;
+        control_loop = 0;      // corta el ciclo → la CPU vuelve a pedir CPU_LIBRE
+        esExit     = true;     // no intenta guardar un contexto que KM ya borró
+        limpiar_contexto_actual();
         return;
     }
     crear_segmento(
@@ -1098,7 +1094,7 @@ void ejecutar_mem_free (t_instruccion* instr){
     char* id_segmento = instr->params[0];
     op_code err;
 
-    log_info (logger, "## PID:[%d] - Ejecutando [MEM ALLOC] - ID [%s]",contexto_actual->pid, id_segmento);/*Logger Obligatorio*/
+    log_info (logger, "## PID:[%d] - Ejecutando [MEM FREE] - ID [%s]",contexto_actual->pid, id_segmento);/*Logger Obligatorio*/
 
     enviar_op_code (gl_MEM_FREE, sockets->conexion_kernel_scheduler); //Envia la señal
     err = recibir_op_code (sockets->conexion_kernel_scheduler); // Espera Respuesta de OK
@@ -1127,9 +1123,7 @@ void ejecutar_sleep(t_instruccion* instr) {
 
     enviar_mensaje(tiempo,sockets->conexion_kernel_scheduler);
 
-    
-
-
+    free(tiempo);
 
     if (recibir_op_code(sockets->conexion_kernel_scheduler) != OK) {
         log_info(logger, "Syscall SLEEP NO ACEPTADA por KS");
@@ -1151,7 +1145,7 @@ void ejecutar_stdout(t_instruccion* instr) {
     void* ptr_tam = obtener_registro(reg_tam);
     tamanio = es_registro_32bits(reg_tam) ? *(uint32_t*)ptr_tam : (uint32_t)(*(uint8_t*)ptr_tam);
 
-    log_debug(logger,
+    log_info(logger,
     "## PID:[%d] - Ejecutando STDOUT - Direccion Logica: %u - Tamaño: %u",
     contexto_actual->pid,
     direccion_logica,
@@ -1428,198 +1422,106 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
     uint32_t direccion_actual = dir_fisica;
     int offset_buffer = 0;
 
-    while(bytes_restantes > 0)
+    while (bytes_restantes > 0)
     {
         t_mem_stick* ms = buscar_memory_stick(direccion_actual);
 
-        if(ms == NULL){
-            log_error(logger, 
-                "No existe Memory Stick para la direccion %u",
-                direccion_actual
-            );
-
+        if (ms == NULL) {
+            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
             free(buffer_total);
             return NULL;
         }
 
-        uint32_t dir_local = direccion_actual - ms->base;
-
+        uint32_t dir_local = direccion_actual - ms->base;      // solo para el corte por stick
         int espacio_disponible = ms->tamanio - dir_local;
 
-        int bytes_a_leer =
-            (bytes_restantes < espacio_disponible)
-            ? bytes_restantes
-            : espacio_disponible;
+        int bytes_a_leer = (bytes_restantes < espacio_disponible)
+                           ? bytes_restantes
+                           : espacio_disponible;
 
+        enviar_op_code(LEER_MEMORIA, ms->socket);
 
-        // Avisamos la operación
-        enviar_op_code(
-            LEER_MEMORIA,
-            ms->socket
-        );
+        // FIX Error 4: se manda la direccion GLOBAL. La MS hace (dir - base);
+        // mandar dir_local hacía que la base se restara DOS veces.
+        send(ms->socket, &direccion_actual, sizeof(uint32_t), 0);
 
+        send(ms->socket, &bytes_a_leer, sizeof(int), 0);
 
-        // Enviamos dirección local
-        send(
-            ms->socket,
-            &dir_local,
-            sizeof(uint32_t),
-            0
-        );
-
-
-        // Enviamos cantidad de bytes
-        send(
-            ms->socket,
-            &bytes_a_leer,
-            sizeof(int),
-            0
-        );
-
-
-        // Recibimos los bytes directamente
         void* parte = malloc(bytes_a_leer);
 
-        int recibidos = recv(
-            ms->socket,
-            parte,
-            bytes_a_leer,
-            MSG_WAITALL
-        );
+        int recibidos = recv(ms->socket, parte, bytes_a_leer, MSG_WAITALL);
 
-
-        if(recibidos != bytes_a_leer)
+        if (recibidos != bytes_a_leer)
         {
-            log_error(logger,
-                "Error recibiendo datos del Memory Stick"
-            );
-
+            log_error(logger, "Error recibiendo datos del Memory Stick");
             free(parte);
             free(buffer_total);
             return NULL;
         }
 
-
-        memcpy(
-            (char*)buffer_total + offset_buffer,
-            parte,
-            bytes_a_leer
-        );
-
-
+        memcpy((char*)buffer_total + offset_buffer, parte, bytes_a_leer);
         free(parte);
 
-
         direccion_actual += bytes_a_leer;
-        offset_buffer += bytes_a_leer;
-        bytes_restantes -= bytes_a_leer;
+        offset_buffer    += bytes_a_leer;
+        bytes_restantes  -= bytes_a_leer;
     }
 
-
-    log_info(logger,
-        "## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d]",
-        contexto_actual->pid,
-        dir_fisica
-    );
-
+    log_info(logger, "## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d] - Tamaño [%s]",
+             contexto_actual->pid, dir_fisica,
+             (char*) buffer_total);
 
     return buffer_total;
 }
 
-
 void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
 {
-    log_info(logger,
-        "ENTRO escribir_en_memoria: direccion=%u tamanio=%d",
-        dir_fisica,
-        tamanio
-    );
+    log_info(logger, "ENTRO escribir_en_memoria: direccion=%u tamanio=%d", dir_fisica, tamanio);
 
     int bytes_restantes = tamanio;
     uint32_t direccion_actual = dir_fisica;
     int offset_buffer = 0;
 
-    while(bytes_restantes > 0)
+    while (bytes_restantes > 0)
     {
         t_mem_stick* ms = buscar_memory_stick(direccion_actual);
 
-        if(ms == NULL){
-            log_error(logger,
-                "No existe Memory Stick para la direccion %u",
-                direccion_actual
-            );
+        if (ms == NULL) {
+            log_error(logger, "No existe Memory Stick para la direccion %u", direccion_actual);
             return;
         }
 
-
-        uint32_t dir_local = direccion_actual - ms->base;
-
+        uint32_t dir_local = direccion_actual - ms->base;      // solo para el corte por stick
         int espacio_disponible = ms->tamanio - dir_local;
 
-        int bytes_a_escribir =
-            (bytes_restantes < espacio_disponible)
-            ? bytes_restantes
-            : espacio_disponible;
+        int bytes_a_escribir = (bytes_restantes < espacio_disponible)
+                               ? bytes_restantes
+                               : espacio_disponible;
 
+        enviar_op_code(ESCRIBIR_MEMORIA, ms->socket);
 
-        // Avisamos operación
-        enviar_op_code(
-            ESCRIBIR_MEMORIA,
-            ms->socket
-        );
+        // FIX Error 4: direccion GLOBAL (la MS resta su base una sola vez)
+        send(ms->socket, &direccion_actual, sizeof(uint32_t), 0);
 
+        send(ms->socket, &bytes_a_escribir, sizeof(uint32_t), 0);
 
-        // Mandamos dirección local
-        send(
-            ms->socket,
-            &dir_local,
-            sizeof(uint32_t),
-            0
-        );
+        send(ms->socket, (char*)buffer + offset_buffer, bytes_a_escribir, 0);
 
-
-        // Mandamos cantidad de bytes
-        send(
-            ms->socket,
-            &bytes_a_escribir,
-            sizeof(uint32_t),
-            0
-        );
-
-
-        // Mandamos los datos
-        send(
-            ms->socket,
-            (char*)buffer + offset_buffer,
-            bytes_a_escribir,
-            0
-        );
-
-
-        // Esperamos confirmación
         int resultado = recibir_op_code(ms->socket);
 
-
-        if(resultado != OK)
+        if (resultado != OK)
         {
-            log_error(logger,
-                "Error escribiendo en Memory Stick"
-            );
+            log_error(logger, "Error escribiendo en Memory Stick");
             return;
         }
 
-
         direccion_actual += bytes_a_escribir;
-        offset_buffer += bytes_a_escribir;
-        bytes_restantes -= bytes_a_escribir;
+        offset_buffer    += bytes_a_escribir;
+        bytes_restantes  -= bytes_a_escribir;
     }
 
-
-    log_info(logger,
-        "## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d]",
-        contexto_actual->pid,
-        dir_fisica
-    );
+    log_info(logger, "## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d] - Valor [%s]",
+             contexto_actual->pid, dir_fisica, (char*) buffer);
 }
 
 /* ------------------ MANEJO DE MEMORY STICK  ------------------*/

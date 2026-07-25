@@ -313,7 +313,8 @@ void* atender_cliente_inicial(void* arg)
         
 
         case NUEVA_CPU:
-            log_info(logger, "## CPU %d Conectada", cliente_fd);
+            char* id = recibir_mensaje(cliente_fd, logger);
+            log_info(logger, "## CPU ID:[%s] Conectada", id);
             enviar_op_code(OK,cliente_fd);
 
             atender_cpu(cliente_fd);
@@ -323,6 +324,9 @@ void* atender_cliente_inicial(void* arg)
         case NUEVO_KERNEL:
             log_info(logger, "## Kernel Scheduler Conectado - FD del socket: %d", cliente_fd);
             enviar_op_code(OK,cliente_fd);
+
+            enviar_lista_memory_sticks(cliente_fd);
+            
             socket_kernel_scheduler = cliente_fd;
 
             atender_kernel(cliente_fd);

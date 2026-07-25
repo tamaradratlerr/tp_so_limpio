@@ -238,46 +238,41 @@ void manejar_finalizar_proceso(int socket_cliente) {
 
 
 void manejar_pedido_instruccion_cpu(int socket_cliente) {
-    // Recibimos el paquete de la CPU
-    
+
     log_debug(logger,"Se Ingreso a menjar_pedido_instruccion_cpu");
 
     int pid = recibir_pid(socket_cliente);
     uint32_t pc = (uint32_t) recibir_int(socket_cliente);
 
-    // Buscamos el proceso
     pthread_mutex_lock(&mutex_procesos);
     int indice = buscar_indice_proceso(pid);
-    
+
     if (indice == -1) {
         pthread_mutex_unlock(&mutex_procesos);
         log_error(logger, "CPU pidió instrucción para PID: %d inexistente", pid);
-        // Podrías enviar un op_code de error aquí si tu protocolo lo requiere
+        enviar_mensaje("EXIT", socket_cliente);   // NUEVO: responder para que la CPU no quede colgada
         return;
     }
 
     t_proceso* proceso = list_get(lista_procesos, indice);
 
-    // 5. Verificamos que el PC esté dentro del rango de instrucciones
     if (pc >= (uint32_t)list_size(proceso->instrucciones)) {
         pthread_mutex_unlock(&mutex_procesos);
         log_error(logger, "PID: %d - PC %d fuera de rango", pid, pc);
+        enviar_mensaje("EXIT", socket_cliente);   // NUEVO: idem, responder
         return;
     }
 
-    // Obtenemos la instrucción
     char* instruccion = (char*)list_get(proceso->instrucciones, pc);
     pthread_mutex_unlock(&mutex_procesos);
 
-    // Aplicamos el DELAY obligatorio según configuración
     int delay = config_get_int_value(config_km, "INSTRUCTION_DELAY");
     if (delay > 0) {
         usleep(delay * 1000);
     }
-    enviar_mensaje(instruccion,socket_cliente);
-    
-    log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s", pid, pc, instruccion);
+    enviar_mensaje(instruccion, socket_cliente);
 
+    log_info(logger, "## PID: %d - Obtener instrucción: %d - Instrucción: %s", pid, pc, instruccion);
 }
 
 //Se conecta con ks: stdout
@@ -362,7 +357,7 @@ void lectura_memoria(int socket_ks) {
         return;
     }
 
-    log_info(logger, "## Lectura Exitosa - PID:%d - Dir Global:%u", pid, dir_fisica);
+    log_info(logger, "## PID: %d - Lectura - Dir. Física: %u - Tamaño: %u", pid, dir_fisica, tamanio);
 
     /* ---------- Respuesta a Kernel Scheduler ---------- */
 
@@ -389,8 +384,6 @@ void escritura_memoria(int socket_ks) {
         "KM_IO_STDIN recibido -> PID:%d | DirLogica:%u | Tamaño:%u | SizeBuffer:%d | Datos:\"%s\"",
         pid, dir_logica, tamanio, size_buffer, (char*)datos);
 
-    int confirmacion = -1;
-
     /* ---------- traducción MMU con la tabla del proceso ---------- */
 
     int max_seg = config_get_int_value(config_km, "SEGMENT_MAX_SIZE");
@@ -409,21 +402,52 @@ void escritura_memoria(int socket_ks) {
         }
     }
 
-    if (seg == NULL || seg->en_swap || desplazamiento + tamanio > seg->limite) {
+    /* Error real: segmento inexistente o acceso fuera de límites */
+    if (seg == NULL || desplazamiento + tamanio > seg->limite) {
         pthread_mutex_unlock(&mutex_contextos);
         log_error(logger,
                   "## PID: %d - Escritura IO inválida (dir lógica %u, tam %u)",
                   pid, dir_logica, tamanio);
-        enviar_int(confirmacion, socket_ks);   // -1
+        enviar_int(-1, socket_ks);
         free(datos);
         return;
     }
+
+    /* ---------- Segmento SUSPENDIDO: read-modify-write sobre SWAP ---------- */
+    if (seg->en_swap) {
+
+        void* buffer = malloc(seg->limite);
+
+        if (leer_segmento_de_swap(seg, buffer) != 0) {
+            pthread_mutex_unlock(&mutex_contextos);
+            log_error(logger, "## PID: %d - Error leyendo segmento de SWAP para IO", pid);
+            free(buffer);
+            enviar_int(-1, socket_ks);
+            free(datos);
+            return;
+        }
+
+        memcpy((char*) buffer + desplazamiento, datos, tamanio);   // aplica el dato del STDIN
+        escribir_segmento_en_swap(seg, buffer);
+
+        pthread_mutex_unlock(&mutex_contextos);
+
+        log_info(logger,
+                 "## PID: %d - Escritura IO en SWAP (segmento suspendido) - dir lógica %u, tam %u",
+                 pid, dir_logica, tamanio);
+        free(buffer);
+        enviar_int(1, socket_ks);
+        free(datos);
+        return;
+    }
+
+    /* ---------- Segmento en RAM: camino normal (Memory Stick) ---------- */
 
     uint32_t dir_fisica = seg->direccion_base + desplazamiento;
 
     pthread_mutex_unlock(&mutex_contextos);
 
-    /* -------------------------------------------------------------------- */
+    int confirmacion = -1;
 
     t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_fisica);
 
@@ -443,7 +467,7 @@ void escritura_memoria(int socket_ks) {
             op_code respuesta = recibir_op_code(ms->socket_fd);
 
             if (respuesta == OK) {
-                log_info(logger, "## Escritura Exitosa - Dir Global: %u", dir_fisica);
+                log_info(logger, "## PID: %d - Escritura - Dir. Física: %u - Tamaño: %u", pid, dir_fisica, tamanio);
                 confirmacion = 1;
             }
         }
@@ -573,6 +597,24 @@ void conexion_memory_stick(int socket_ms) {
     // solo, reintentando la desuspensión periódicamente.
 }
 
+void enviar_lista_memory_sticks(int socket_ks) {
+    pthread_mutex_lock(&mutex_ms);
+
+    int cantidad = list_size(lista_memory_sticks);
+    enviar_int(cantidad, socket_ks);
+
+    for (int i = 0; i < cantidad; i++) {
+        t_memory_stick_nodo* ms = list_get(lista_memory_sticks, i);
+
+        enviar_int(ms->base_global, socket_ks);
+        enviar_int(ms->tamanio, socket_ks);
+        enviar_mensaje(ms->ip, socket_ks);
+        enviar_mensaje(ms->port, socket_ks);
+    }
+
+    pthread_mutex_unlock(&mutex_ms);
+}
+
 
 
  bool mem_corrupt_notificado = false;
@@ -600,46 +642,6 @@ void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
 }
 
 
-// bool desconectada;
-
-// void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
-// {
-//     bool avisar_ks = false;
-//     int fd_a_cerrar = -1;
-
-//     pthread_mutex_lock(&mutex_ms);
-
-//     if (!ms->desconectada) 
-//     {
-//         ms->desconectada = true;
-//         fd_a_cerrar = ms->socket_fd;
-//         ms->socket_fd = -1;
-
-//         list_remove_element(lista_memory_sticks, ms);
-//     }
-
-//     pthread_mutex_unlock(&mutex_ms);
-
-//     if (fd_a_cerrar != -1) {
-//         close(fd_a_cerrar);
-//     }
-
-//     pthread_mutex_lock(&mutex_mem_corrupt);
-
-//     if (!mem_corrupt_notificado) {
-//         mem_corrupt_notificado = true;
-//         avisar_ks = true;
-//     }
-
-//     pthread_mutex_unlock(&mutex_mem_corrupt);
-
-//     if (avisar_ks && socket_kernel_scheduler >= 0) {
-//         log_error(logger, "## Memory Stick desconectada. Memoria corrupta.");
-//         enviar_op_code(MEM_CORRUPT, socket_kernel_scheduler);
-//     }
-// }
-
-
 t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global) {
     pthread_mutex_lock(&mutex_ms);
     for (int i = 0; i < list_size(lista_memory_sticks); i++) {
@@ -654,28 +656,78 @@ t_memory_stick_nodo* buscar_ms_por_direccion_global(uint32_t dir_global) {
 }
 
 void* leer_bytes_globales(uint32_t dir_global, uint32_t tamanio) {
-    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_global);
-    if (!ms) return NULL;
 
-    enviar_op_code(LEER_MEMORIA, ms->socket_fd);
-    enviar_int(dir_global, ms->socket_fd);
-    enviar_int(tamanio, ms->socket_fd);
+    void* buffer_total = malloc(tamanio);
 
-    void* buffer = malloc(tamanio);
-    recv(ms->socket_fd, buffer, tamanio, MSG_WAITALL); // Trae los bytes de la MS remota
-    return buffer;
+    uint32_t bytes_restantes  = tamanio;
+    uint32_t direccion_actual = dir_global;
+    uint32_t offset           = 0;
+
+    while (bytes_restantes > 0) {
+
+        t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(direccion_actual);
+
+        if (ms == NULL) {
+            log_error(logger, "leer_bytes_globales: dirección %u sin Memory Stick", direccion_actual);
+            free(buffer_total);
+            return NULL;
+        }
+
+        // Cuánto entra en ESTE stick desde direccion_actual
+        uint32_t dir_local        = direccion_actual - ms->base_global;
+        uint32_t espacio_en_stick = ms->tamanio - dir_local;
+        uint32_t a_leer = (bytes_restantes < espacio_en_stick) ? bytes_restantes : espacio_en_stick;
+
+        enviar_op_code(LEER_MEMORIA, ms->socket_fd);
+        enviar_int(direccion_actual, ms->socket_fd);
+        enviar_int(a_leer, ms->socket_fd);
+
+        if (recv(ms->socket_fd, (char*)buffer_total + offset, a_leer, MSG_WAITALL) != (ssize_t)a_leer) {
+            log_error(logger, "leer_bytes_globales: error recibiendo del Memory Stick");
+            free(buffer_total);
+            return NULL;
+        }
+
+        direccion_actual += a_leer;
+        offset           += a_leer;
+        bytes_restantes  -= a_leer;
+    }
+
+    return buffer_total;
 }
+
 void escribir_bytes_globales(uint32_t dir_global, uint32_t tamanio, void* datos) {
-    t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(dir_global);
-    if (!ms) return;
 
-    enviar_op_code(ESCRIBIR_MEMORIA, ms->socket_fd);
-    enviar_int(dir_global, ms->socket_fd);
-    enviar_int(tamanio, ms->socket_fd);
-    send(ms->socket_fd, datos, tamanio, 0);
+    uint32_t bytes_restantes  = tamanio;
+    uint32_t direccion_actual = dir_global;
+    uint32_t offset           = 0;
 
-    op_code res;
-    recv(ms->socket_fd, &res, sizeof(op_code), MSG_WAITALL); // Espera el OK de guardado de la MS
+    while (bytes_restantes > 0) {
+
+        t_memory_stick_nodo* ms = buscar_ms_por_direccion_global(direccion_actual);
+
+        if (ms == NULL) {
+            log_error(logger, "escribir_bytes_globales: dirección %u sin Memory Stick", direccion_actual);
+            return;
+        }
+
+        uint32_t dir_local        = direccion_actual - ms->base_global;
+        uint32_t espacio_en_stick = ms->tamanio - dir_local;
+        uint32_t a_escribir = (bytes_restantes < espacio_en_stick) ? bytes_restantes : espacio_en_stick;
+
+        enviar_op_code(ESCRIBIR_MEMORIA, ms->socket_fd);
+        enviar_int(direccion_actual, ms->socket_fd);
+        enviar_int(a_escribir, ms->socket_fd);
+        send(ms->socket_fd, (char*)datos + offset, a_escribir, 0);
+
+        if (recibir_op_code(ms->socket_fd) != OK) {
+            log_error(logger, "escribir_bytes_globales: la MS no confirmó la escritura en %u", direccion_actual);
+        }
+
+        direccion_actual += a_escribir;
+        offset           += a_escribir;
+        bytes_restantes  -= a_escribir;
+    }
 }
 
 int calcular_espacio_libre_total() {
@@ -729,7 +781,15 @@ void ejecutar_compactacion_fisica_memory_stick() {
     pthread_mutex_lock(&mutex_contextos);
     for (int i = 0; i < list_size(lista_contextos); i++) {
         t_contexto* ctx = list_get(lista_contextos, i);
-        list_add_all(todos_los_segmentos, ctx->tabla_segmentos);
+
+        // NUEVO: solo compactar segmentos que están en RAM; los que están en
+        // SWAP no tienen dirección física válida y no se tocan.
+        for (int j = 0; j < list_size(ctx->tabla_segmentos); j++) {
+            t_segmento_aux* seg = list_get(ctx->tabla_segmentos, j);
+            if (!seg->en_swap) {
+                list_add(todos_los_segmentos, seg);
+            }
+        }
     }
     pthread_mutex_unlock(&mutex_contextos);
 
@@ -740,19 +800,22 @@ void ejecutar_compactacion_fisica_memory_stick() {
         t_segmento_aux* seg = list_get(todos_los_segmentos, i);
 
         if (seg->direccion_base != proxima_direccion_libre) {
-            log_info(logger, "## Mudando Segmento %d de Base %u a Nueva Base %u", seg->id_segmento, seg->direccion_base, proxima_direccion_libre);
+            log_info(logger, "## Mudando Segmento %d de Base %u a Nueva Base %u",
+                     seg->id_segmento, seg->direccion_base, proxima_direccion_libre);
 
-            // Se hace la mudanza de datos real por red entre las MS
             void* bytes_datos = leer_bytes_globales(seg->direccion_base, seg->limite);
-            escribir_bytes_globales(proxima_direccion_libre, seg->limite, bytes_datos);
-            free(bytes_datos);
 
-            seg->direccion_base = proxima_direccion_libre; // Cambiamos la tabla lógica
+            if (bytes_datos != NULL) {                 // NUEVO: no escribir NULL si la lectura falló
+                escribir_bytes_globales(proxima_direccion_libre, seg->limite, bytes_datos);
+                free(bytes_datos);
+            }
+
+            seg->direccion_base = proxima_direccion_libre;
         }
         proxima_direccion_libre += seg->limite;
     }
 
-    // Unificamos toda la fragmentación en un único gran hueco al fondo del estante
+    // Unificamos toda la fragmentación en un único gran hueco al fondo
     pthread_mutex_lock(&mutex_lista_libres);
     list_clean_and_destroy_elements(lista_huecos_libres, free);
 
@@ -764,9 +827,8 @@ void ejecutar_compactacion_fisica_memory_stick() {
     }
     pthread_mutex_unlock(&mutex_lista_libres);
 
-    // Retardo Obligatorio de tu config (Lee el COMPACTION_DELAY=30000)
     int delay = config_get_int_value(config_km, "COMPACTION_DELAY");
-    usleep(delay * 1000); 
+    usleep(delay * 1000);
 
     log_info(logger, "## Compactación física en las Memory Sticks finalizada.");
     list_destroy(todos_los_segmentos);
@@ -926,6 +988,7 @@ void eliminar_segmento(int pid, int id_segmento) {
 
     free(seg_a_eliminar);
 }
+
 // Mueve la función comparadora fuera del ámbito de la función principal
 bool _ordenar_huecos_por_base(void* h1, void* h2) {
     return ((t_hueco*)h1)->direccion_base < ((t_hueco*)h2)->direccion_base;
@@ -1070,7 +1133,6 @@ void recibir_contexto_cpu(int socket_cpu) {
     enviar_op_code(OK, socket_cpu);
 }
 
-
 // CONEXION CON SWAP
 // Buscar bloques consecutivos (Algoritmo First-Fit)
 int obtener_n_bloques_libres(int n) {
@@ -1106,7 +1168,7 @@ bool mover_segmento_a_swap(t_segmento_aux* seg) {
     int bloques_necesarios = ceil((double)seg->limite / block_size_swap);
     int primer_bloque = obtener_n_bloques_libres(bloques_necesarios);
 
-    log_error(logger, "DEBUG SWAP: seg->limite=%u block_size_swap=%d bloques_necesarios=%d total_bloques_swap=%d primer_bloque=%d",
+    log_debug(logger, "DEBUG SWAP: seg->limite=%u block_size_swap=%d bloques_necesarios=%d total_bloques_swap=%d primer_bloque=%d",
         seg->limite, block_size_swap, bloques_necesarios, total_bloques_swap, primer_bloque);
 
     if (primer_bloque == -1) {
@@ -1170,50 +1232,8 @@ bool suspender_proceso(int pid) {
 
 int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 {
-    int offset = 0;
-
-    for (int i = 0; i < seg->cantidad_bloques; i++) {
-        int numero_bloque = seg->bloque_swap + i;
-
-        t_paquete * paquete = crear_paquete(LECTURA_BLOQUE);
-        agregar_a_paquete(paquete, &numero_bloque, sizeof(int));
-        enviar_paquete(paquete, socket_swap);
-        eliminar_paquete(paquete);
-
-        int cod_op = recibir_op_code(socket_swap);
-
-        if (cod_op != RESPUESTA_DATOS) {
-            log_error(logger,
-                "Error al leer bloque %d de SWAP. Opcode recibido: %d",
-                numero_bloque, cod_op);
-            return -1;
-        }
-
-        t_list* respuesta = recibir_paquete(socket_swap);
-
-        if (respuesta == NULL || list_size(respuesta) != 1) {
-            log_error(logger,
-                "Respuesta inválida al leer bloque %d de SWAP",
-                numero_bloque);
-
-            if (respuesta != NULL) {
-                list_destroy_and_destroy_elements(respuesta, free);
-            }
-
-            return -1;
-        }
-
-        void* bloque = list_get(respuesta, 0);
-
-        int bytes_restantes = seg->limite - offset;
-        int bytes_a_copiar = bytes_restantes < block_size_swap
-            ? bytes_restantes
-            : block_size_swap;
-
-        memcpy((char*) buffer_destino + offset, bloque, bytes_a_copiar);
-        offset += bytes_a_copiar;
-
-        list_destroy_and_destroy_elements(respuesta, free);
+    if (leer_segmento_de_swap(seg, buffer_destino) != 0) {
+        return -1;
     }
 
     liberar_bloques_swap(seg->bloque_swap, seg->cantidad_bloques);
@@ -1225,34 +1245,26 @@ int recibir_de_swap(t_segmento_aux* seg, void* buffer_destino)
 }
 
 void enviar_a_swap(int nro_bloque, void* datos) {
-    //  Crear y enviar el paquete
-    t_paquete * paquete = crear_paquete(ESCRITURA_BLOQUE);
-    
-    agregar_a_paquete(paquete, &nro_bloque, sizeof(int));
-    agregar_a_paquete(paquete, datos, block_size_swap);
-    
-    enviar_paquete(paquete, socket_swap);
-    eliminar_paquete(paquete);
-    
-    //  Esperar confirmación del SWAP
+
+    enviar_op_code(ESCRITURA_BLOQUE, socket_swap);
+    enviar_int(nro_bloque, socket_swap);
+    enviar_buffer(datos, block_size_swap, socket_swap);
+
     int cod_op = recibir_op_code(socket_swap);
-    
-    //  Manejo de estados de la conexión
+
     if (cod_op == RESPUESTA_OK) {
         log_info(logger, "## Escritura exitosa: bloque %d", nro_bloque);
-    } 
-    else if (cod_op == RESPUESTA_ERROR) {
-    log_error(logger, "## Error: El SWAP rechazó la escritura del bloque %d", nro_bloque);
     }
-
+    else if (cod_op == RESPUESTA_ERROR) {
+        log_error(logger, "## Error: El SWAP rechazó la escritura del bloque %d", nro_bloque);
+    }
     else if (cod_op == -1) {
-        log_error(logger, "## Error Crítico: SWAP desconectado inesperadamente al escribir bloque %d", nro_bloque);
-        // Opcional: abortar, cerrar socket o intentar reconectar
+        log_error(logger, "## Error Crítico: SWAP desconectado al escribir bloque %d", nro_bloque);
         close(socket_swap);
-        socket_swap = -1; // Marcamos el socket como inválido
-    } 
+        socket_swap = -1;
+    }
     else {
-        log_error(logger, "## Error: Código de operación inesperado recibido del SWAP: %d", cod_op);
+        log_error(logger, "## Error: Código de operación inesperado del SWAP: %d", cod_op);
     }
 }
 
@@ -1319,4 +1331,60 @@ int desuspender_proceso(int pid) {
 
     log_info(logger, "Proceso %d des-suspendido exitosamente", pid);
     return 0;
+}
+
+// Lee TODOS los bloques del segmento desde SWAP a buffer_destino, SIN liberar
+// los bloques ni tocar en_swap (el proceso sigue suspendido). Es la versión
+// read-only de recibir_de_swap.
+int leer_segmento_de_swap(t_segmento_aux* seg, void* buffer_destino)
+{
+    int offset = 0;
+
+    for (int i = 0; i < seg->cantidad_bloques; i++) {
+        int numero_bloque = seg->bloque_swap + i;
+
+        enviar_op_code(LECTURA_BLOQUE, socket_swap);
+        enviar_int(numero_bloque, socket_swap);
+
+        if (recibir_op_code(socket_swap) != RESPUESTA_DATOS) {
+            log_error(logger, "Error al leer bloque %d de SWAP", numero_bloque);
+            return -1;
+        }
+
+        int size;
+        void* bloque = recibir_buffer(&size, socket_swap);
+
+        if (bloque == NULL) {
+            log_error(logger, "Respuesta inválida al leer bloque %d de SWAP", numero_bloque);
+            return -1;
+        }
+
+        int bytes_restantes = seg->limite - offset;
+        int bytes_a_copiar = bytes_restantes < block_size_swap ? bytes_restantes : block_size_swap;
+
+        memcpy((char*) buffer_destino + offset, bloque, bytes_a_copiar);
+        offset += bytes_a_copiar;
+
+        free(bloque);
+    }
+
+    return 0;
+}
+
+// Escribe 'buffer' (seg->limite bytes) en los bloques de SWAP que YA tiene
+// asignados el segmento suspendido. Es el loop de escritura de
+// mover_segmento_a_swap, pero recibiendo el buffer por parámetro.
+void escribir_segmento_en_swap(t_segmento_aux* seg, void* buffer)
+{
+    for (int i = 0; i < seg->cantidad_bloques; i++) {
+        int a_escribir = (i == seg->cantidad_bloques - 1)
+            ? (seg->limite - (i * block_size_swap))
+            : block_size_swap;
+
+        void* bloque_data = calloc(1, block_size_swap);
+        memcpy(bloque_data, (char*) buffer + (i * block_size_swap), a_escribir);
+
+        enviar_a_swap(seg->bloque_swap + i, bloque_data);
+        free(bloque_data);
+    }
 }

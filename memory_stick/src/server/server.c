@@ -137,7 +137,7 @@ void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
     memcpy(buffer_lectura, ms_globals.memoria + dir_fisica, tamanio);
     pthread_mutex_unlock(&mutex_memoria);
 
-    log_debug(logger, "## Lectura de %u bytes", tamanio);
+    log_info(logger, "## Lectura de %u bytes", tamanio);
     log_debug(logger, "## Datos leídos: %.*s", (int)tamanio, (char*)buffer_lectura);
 
     return buffer_lectura; 
@@ -149,43 +149,35 @@ void* atender_cliente(void* arg) {
     free(socket_ptr);
 
     while (1) {
+        
         int cop = recibir_op_code(socket_cliente);
         
         if (cop == -1) {
             break;
         }
 
-       if (cop == NUEVA_CPU) {
+       if (cop == NUEVA_CPU) 
+       {
 
+        char* identificador = recibir_mensaje(socket_cliente, logger);
         // Confirmamos handshake
-        enviar_op_code(OK, socket_cliente);
+            enviar_op_code(OK, socket_cliente);
 
-        log_info(logger,
-            "Enviando info a CPU: base=%u tamaño=%u",
-            ms_globals.base,
-            ms_globals.tamanio
-        );
+            // FIX Error 3: ya NO se envían base y tamaño. La CPU los recibe del
+            // Kernel Scheduler; estos 2 send() dejaban 8 bytes huérfanos en el
+            // socket que desincronizaban la primera lectura/escritura real.
 
-        send(socket_cliente,
-            &ms_globals.base,
-            sizeof(uint32_t),
-            0);
+            log_info(logger, "## CPU ID:[%s] Conectada", identificador);
 
-        send(socket_cliente,
-            &ms_globals.tamanio,
-            sizeof(uint32_t),
-            0);
+            pthread_mutex_lock(&mutex_memoria);
 
+            list_add(ms_globals.cpus_conectadas,
+                    (void*)(intptr_t)socket_cliente);
 
-        pthread_mutex_lock(&mutex_memoria);
+            pthread_mutex_unlock(&mutex_memoria);
 
-        list_add(ms_globals.cpus_conectadas,
-                (void*)(intptr_t)socket_cliente);
-
-        pthread_mutex_unlock(&mutex_memoria);
-
-        continue;
-    }
+            continue;
+        }
     if (cop == LEER_MEMORIA) {
 
         uint32_t dir_fisica;

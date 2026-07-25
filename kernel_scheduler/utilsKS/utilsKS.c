@@ -395,7 +395,6 @@ int ready_CMN(PCB* pcb_nuevo ){
 
 
 /*------     PCB     -----*/
-
 PCB* iniciar_pcb (int PID, int prioridad){
 
 	PCB* nuevo_pcb = malloc(sizeof(PCB));
@@ -407,7 +406,8 @@ PCB* iniciar_pcb (int PID, int prioridad){
     nuevo_pcb -> mutex_tomados = list_create();
     nuevo_pcb->esperando_io = false;
     nuevo_pcb->quantum_version = 0;
-    
+    nuevo_pcb->block_version = 0;   // NUEVO
+
     agregar_proceso_lista(nuevo_pcb);
 
 	return nuevo_pcb;
@@ -456,14 +456,18 @@ void terminar_pcb (PCB* pcb){
 	
 }
 
-void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){ /*Funcion que cambia el estado de un PCB*/
-    
-    //Se le podria agregar semaforos pero antes y dsp de llamar a la funcion
-    
-    pcb -> estado_anterior = (pcb ->estado_pcb);
-    pcb ->estado_pcb = nuevoEstado;
-    
-    log_info (logger, "## PID:[%d] Pasa del Estado [%s] al estado [%s]",pcb->data.PID,nombre_estado(pcb->estado_anterior),nombre_estado(pcb->estado_pcb));
+void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
+
+    pcb->estado_anterior = pcb->estado_pcb;
+    pcb->estado_pcb = nuevoEstado;
+
+    // NUEVO: cada vez que un proceso ENTRA a BLOCK arranca un período nuevo.
+    // Esto invalida cualquier timer de suspensión de un bloqueo anterior.
+    if (nuevoEstado == BCK)
+        pcb->block_version++;
+
+    log_info (logger, "## PID:[%d] Pasa del Estado [%s] al estado [%s]",
+              pcb->data.PID, nombre_estado(pcb->estado_anterior), nombre_estado(pcb->estado_pcb));
 }
 
 char* nombre_estado (estado sto){

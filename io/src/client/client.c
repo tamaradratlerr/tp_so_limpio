@@ -60,7 +60,12 @@ int main(int argc, char **argv)
 			/* Bucle principal de la IO */
 			enviar_op_code(IO_LIBRE, fd_conexion);
 
+			int pid = recibir_pid(fd_conexion);
+
 			op_code cod_op = recibir_op_code(fd_conexion);
+
+
+			log_info(logger, "## PID: %u - Inicio de IO", pid);/*LOGGER OBLIGATORIO*/
 
 			switch (cod_op)
 			{
@@ -107,6 +112,8 @@ int main(int argc, char **argv)
 				// Respuesta de la operación
 				enviar_pid(pid, fd_conexion);
 
+				log_info(logger, "## PID: %u - Fin de IO", pid);
+
 				
 				list_destroy_and_destroy_elements(lista, free);
 				break;
@@ -128,7 +135,7 @@ int main(int argc, char **argv)
 				uint32_t direccion_logica = *(uint32_t *)list_get(lista, 1);
 				uint32_t bytes_a_leer = *(uint32_t *)list_get(lista, 2);
 
-				log_info(logger, "## PID: %u - Operación STDIN. Leyendo %u bytes.", pid, bytes_a_leer);
+				log_info(logger, "## PID: %u - STDIN - Ingrese %u Caracteres.", pid, bytes_a_leer);
 
 				char *entrada = malloc(bytes_a_leer + 2);		// +2 por '\n' y '\0'
 				char *buffer_usuario = calloc(bytes_a_leer, 1); // queda lleno de '\0'
@@ -163,6 +170,8 @@ int main(int argc, char **argv)
 
 				free(buffer_usuario);
 				list_destroy_and_destroy_elements(lista, free);
+
+				log_info(logger, "## PID: %u - Fin de IO", pid);
 				
 				break;
 			}
@@ -178,12 +187,12 @@ int main(int argc, char **argv)
 				uint32_t tam = *(uint32_t *)list_get(lista, 1);
 				void *datos_imprimir = list_get(lista, 2);
 
-				log_info(logger, "## PID: %u - Operación STDOUT.", pid);
+				
 
 				write(STDOUT_FILENO, datos_imprimir, tam);
 				printf("\n");
-
-				log_info(logger, "Contenido: %.*s", tam, (char *)datos_imprimir);
+				
+				log_info(logger, "## PID: %u - STDOUT - [%s]", pid, (char*)datos_imprimir);
 
 				enviar_op_code(IO_STDOUT, fd_conexion);
 				enviar_pid(pid, fd_conexion);
@@ -200,6 +209,8 @@ int main(int argc, char **argv)
 					return EXIT_FAILURE;
 				}
 				list_destroy_and_destroy_elements(lista, free);
+
+				log_info(logger, "## PID: %u - Fin de IO", pid);
 				break;
 			}
 

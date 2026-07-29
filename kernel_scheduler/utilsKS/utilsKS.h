@@ -35,7 +35,8 @@ typedef struct
 typedef struct {
 
     int fd; 
-    bool enUso;        //false es que no y true es que si         
+    bool enUso;
+    espera_io* pid_ejec;       //false es que no y true es que si         
     char* nombre;             
 
 } t_IO;
@@ -43,7 +44,9 @@ typedef struct {
 typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs conectadas 
     
     t_list* cpu;
-    t_list* io;
+    t_list* io_sleep;
+    t_list* io_stdin;
+    t_list* io_stdout;
     t_list* ms;
     t_list* desalojo;
 
@@ -58,6 +61,15 @@ typedef struct{
     t_list* cola_mutex;
 
 }mutex_cpu;
+
+typedef struct 
+{
+    t_list* io_sleep;
+    t_list* io_stdin;
+    t_list* io_stdout;
+
+}t_list_ios;
+
 
 
 
@@ -94,8 +106,6 @@ PCB* iniciar_pcb (int PID, int prioridad);
 void terminar_pcb (PCB* pcb);
 PCB* crearNuevoProceso(char* path, int prioridad, int fd_km);
 void enviarProcesoKM(PCB* pcb, char* path, int fd_km);
-t_IO* buscar_io_por_nombre(char* nombre_buscado);
-t_IO* buscar_io_por_fd(int fd_buscado);
 void* list_find_with_context(t_list* lista, bool (*condicion)(void*, void*),void* contexto);
 void terminar_programa(t_log* logger, t_config* config, t_info_km info_km);
 void iniciar_planificador_CMN(char** algoritmos_array, int total_colas, int quantum_default);
@@ -141,7 +151,7 @@ extern int inicio_todo;
 
 extern t_listas_suplementarias* list_suplementarias;
 extern t_listas_procesos* listasProcesos;
-extern t_list* lista_bck_io;
+extern t_list_ios* lista_bck_io;
 extern t_list* lista_mutex;
 extern t_info_km info_km;
 extern t_info_config info_config;
@@ -171,8 +181,14 @@ extern sem_t sem_hay_ready;
 extern sem_t sem_hay_s_ready;
 extern sem_t sem_compactacion;
 extern sem_t sem_rnn_vacio;
-extern sem_t sem_io_vacio;
+extern sem_t sem_io_sleep_vacio;
+extern sem_t sem_io_stdin_vacio;
+extern sem_t sem_io_stdout_vacio;
+extern sem_t init_sem_sleep;
+extern sem_t init_sem_stdin;
+extern sem_t init_sem_stdout;
 extern pthread_cond_t cond_rnn_vacio;
+extern pthread_mutex_t mutex_transiciones;
 
 
 

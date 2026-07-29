@@ -166,6 +166,7 @@ int main(int argc, char *argv[])
         log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
         esExit = false; 
+        exit_control = 0;
 
         control_loop = 1;
         while (control_loop == 1){
@@ -477,29 +478,23 @@ void execute() {
     
 }
 
-void interrupt() { 
-    
-    if(exit_control == 1) {
-        exit_control = 0;
-        return;
-    }
+void interrupt() {
 
-    enviar_op_code (DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
-    enviar_pid (contexto_actual->pid,sockets->conexion_kernel_scheduler);
-    enviar_mensaje (identificador, sockets->conexion_kernel_scheduler);
-    
-    int cod_op = recibir_op_code (sockets->conexion_kernel_scheduler);
+    enviar_op_code(DESALOJO, sockets->conexion_kernel_scheduler); //Se le consulta al KS si se debe desalojar.
+    enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
+    enviar_mensaje(identificador, sockets->conexion_kernel_scheduler);
+
+    int cod_op = recibir_op_code(sockets->conexion_kernel_scheduler);
+
     if (cod_op == DESALOJO || cod_op == MEM_CORRUPT || cod_op == COMPACTACION) {
-        log_info (logger, "## Interrupcion recibida"); /*Logger Obligatorio*/
+        log_info(logger, "## Interrupcion recibida"); /*Logger Obligatorio*/
         gestionar_desalojo_por_syscall(NULL, DESALOJO);
-        if(cod_op == MEM_CORRUPT){control_loop00 = 0;}
-
+        if (cod_op == MEM_CORRUPT) { control_loop00 = 0; }
     }
-    else if(cod_op == NUEVA_MEMORY_STICK){
+    else if (cod_op == NUEVA_MEMORY_STICK) {
         recibir_memory_stick(sockets->conexion_kernel_scheduler);
     }
     else {
-        
         enviar_op_code(OK, sockets->conexion_kernel_scheduler);
     }
 }
@@ -1467,9 +1462,12 @@ void* leer_de_memoria(uint32_t dir_fisica, int tamanio)
         bytes_restantes  -= bytes_a_leer;
     }
 
-    log_info(logger, "## PID:[%d] - Accion: [Leer] - Direccion Fisica [%d] - Tamaño [%s]",
-             contexto_actual->pid, dir_fisica,
-             (char*) buffer_total);
+    uint32_t valor_log = 0;
+    memcpy(&valor_log, buffer_total,
+           tamanio < (int)sizeof(uint32_t) ? (size_t)tamanio : sizeof(uint32_t));
+
+    log_info(logger, "## PID: %d - Accion: LEER - Direccion Fisica: %u - Valor: %u",
+             contexto_actual->pid, dir_fisica, valor_log);
 
     return buffer_total;
 }
@@ -1520,8 +1518,12 @@ void escribir_en_memoria(uint32_t dir_fisica, void* buffer, int tamanio)
         bytes_restantes  -= bytes_a_escribir;
     }
 
-    log_info(logger, "## PID:[%d] - Accion: [Escribir] - Direccion Fisica [%d] - Valor [%s]",
-             contexto_actual->pid, dir_fisica, (char*) buffer);
+    uint32_t valor_log = 0;
+    memcpy(&valor_log, buffer,
+           tamanio < (int)sizeof(uint32_t) ? (size_t)tamanio : sizeof(uint32_t));
+
+    log_info(logger, "## PID: %d - Accion: ESCRIBIR - Direccion Fisica: %u - Valor: %u",
+             contexto_actual->pid, dir_fisica, valor_log);
 }
 
 /* ------------------ MANEJO DE MEMORY STICK  ------------------*/

@@ -28,7 +28,7 @@ t_log* logger = NULL;
 
 t_listas_procesos* listasProcesos= NULL; //Lista de PCBs segun estado (GLOBAL)
 t_listas_suplementarias* list_suplementarias= NULL; //Lista de CPUs y IOs (GLOBAL)
-t_list* lista_bck_io = NULL;
+t_list_ios* lista_bck_io = NULL;
 t_list* lista_mutex= NULL;
 t_info_km info_km;
 t_info_config info_config;
@@ -54,12 +54,18 @@ pthread_mutex_t mutex_simulados = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_conexion_km = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond_rnn_vacio = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex_transiciones = PTHREAD_MUTEX_INITIALIZER;
 
 sem_t sem_hay_ready;
 sem_t sem_hay_s_ready;
 sem_t sem_compactacion;
 sem_t sem_rnn_vacio;
-sem_t sem_io_vacio;
+sem_t sem_io_sleep_vacio;
+sem_t sem_io_stdin_vacio;
+sem_t sem_io_stdout_vacio;
+sem_t init_sem_sleep;
+sem_t init_sem_stdin;
+sem_t init_sem_stdout;
 
 
 
@@ -81,7 +87,14 @@ t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas la
     sem_init(&sem_hay_s_ready, 0, 0);
     sem_init(&sem_compactacion, 0, 1);
     sem_init(&sem_rnn_vacio, 0, 0);
-    sem_init(&sem_io_vacio, 0, 0);
+    sem_init(&sem_io_sleep_vacio, 0, 0);
+    sem_init(&sem_io_stdin_vacio, 0, 0);
+    sem_init(&sem_io_stdout_vacio, 0, 0);
+
+    sem_init(&init_sem_sleep, 0, 0);
+    sem_init(&init_sem_stdin, 0, 0);
+    sem_init(&init_sem_stdout, 0, 0);
+    
 
 
 	return listasProcesos;
@@ -101,7 +114,13 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
     sem_destroy(&sem_hay_s_ready);
     sem_destroy(&sem_compactacion);
     sem_destroy(&sem_rnn_vacio);
-    sem_destroy(&sem_io_vacio);
+    sem_destroy(&sem_io_sleep_vacio);
+    sem_destroy(&sem_io_stdin_vacio);
+    sem_destroy(&sem_io_stdout_vacio);
+
+    sem_destroy(&init_sem_sleep);
+    sem_destroy(&init_sem_stdin);
+    sem_destroy(&init_sem_stdout);
 }
 
 void iniciar_listas_suple()
@@ -109,25 +128,43 @@ void iniciar_listas_suple()
     list_suplementarias = malloc(sizeof(t_listas_suplementarias));
 
     list_suplementarias->cpu = list_create();
-    list_suplementarias->io = list_create();
+    list_suplementarias->io_sleep = list_create();
+    list_suplementarias->io_stdin = list_create();
+    list_suplementarias->io_stdout = list_create();
     list_suplementarias->ms = list_create();
     list_suplementarias->desalojo = list_create();
 
+    
+    lista_mutex = malloc(sizeof(t_list));
     lista_mutex = list_create();
 
-    lista_bck_io = list_create();
+    lista_bck_io = malloc(sizeof(t_list_ios));
+
+    lista_bck_io->io_sleep = list_create();
+    lista_bck_io->io_stdin = list_create();
+    lista_bck_io->io_stdout = list_create();
 }
 
 void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/
     
     list_destroy(list_suplementarias->cpu);
-    list_destroy(list_suplementarias->io);
+    list_destroy(list_suplementarias->io_sleep);
+    list_destroy(list_suplementarias->io_stdin);
+    list_destroy(list_suplementarias->io_stdout);
     list_destroy(list_suplementarias->ms);
     list_destroy(list_suplementarias->desalojo);
     
+    free(list_suplementarias);
+
     list_destroy(lista_mutex);
+
+    free(lista_mutex);
     
-    list_destroy(lista_bck_io);
+    list_destroy(lista_bck_io->io_sleep);
+    list_destroy(lista_bck_io->io_stdin);
+    list_destroy(lista_bck_io->io_stdout);
+
+    free(lista_bck_io);
 
 }
 
@@ -489,31 +526,6 @@ char* nombre_estado (estado sto){
 }
 
 /*-----     IO      -----*/
-
-
-// Auxiliar para buscar la IO por su FILE DESCRIPTOR (Socket)
-t_IO* buscar_io_por_fd(int fd_buscado) {
-    t_IO* io_encontrada = NULL;
-
-    pthread_mutex_lock(&mutex_ios);
-    
-    for (int i = 0; i < list_size(list_suplementarias->io); i++) {
-        t_IO* una_io = list_get(list_suplementarias->io, i);
-        
-        if (una_io->fd == fd_buscado) {
-            io_encontrada = una_io;
-            break;
-        }
-    }
-    
-    pthread_mutex_unlock(&mutex_ios);
-
-    if (io_encontrada == NULL) {
-        printf("Kernel Error: No se encontró la interfaz de IO con FD: %d", fd_buscado);
-    }
-
-    return io_encontrada;
-}
 
 /*----- Auxiliares -----*/
 

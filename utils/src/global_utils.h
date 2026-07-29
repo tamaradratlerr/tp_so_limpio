@@ -21,6 +21,7 @@
 #include <commons/config.h>
 #include <semaphore.h> 
 #include <pthread.h>  
+#include <signal.h>
 
 extern t_log* logger;
 extern char* PUERTO; // O como sea que definas el puerto en tu config
@@ -233,6 +234,7 @@ typedef struct{
     int fd;
     char* identificador; 
     bool enUso; // EN USO = TRUE --- LIBRE = FALSE
+    int pid_ejecutando;
 }t_CPU;
 typedef struct {
     int id_memory_stick;      // A qué chip le tenemos que hablar

@@ -225,9 +225,11 @@ void segmentation_fault(int socket_cpu){
     pthread_mutex_lock(&mutex_cpus);
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
     if (cpu_libre == NULL) {
+        pthread_mutex_unlock(&mutex_cpus);
         log_error(logger, "Error al encontrar CPU en la lista");
         return;
     }
+
     cpu_libre->enUso = false;
     pthread_mutex_unlock(&mutex_cpus);
 
@@ -601,10 +603,27 @@ void desalojar_por_syscall_mismo_cpu (PCB* pcb, int socket_cpu, char* nombre_sys
     }
 
     /* 1. Dispara el desalojo: el proximo Check Interrupt de la CPU va a responder
-          DESALOJO. Es el mismo mecanismo que ya usabas en mutex_create. */
+          DESALOJO. Es el mismo mecanismo que ya usabas en mutex_create.
+
+          OJO: NO se puede usar existe_pcb_con_pid() aca adentro porque esa funcion
+          toma sem_procesos_s_desalojo por su cuenta y el mutex no es recursivo. */
     pthread_mutex_lock(&sem_procesos_s_desalojo);
-    if (!existe_pcb_con_pid(list_suplementarias->desalojo, pcb->data.PID))
+
+    bool ya_estaba = false;
+
+    for (int i = 0; i < list_size(list_suplementarias->desalojo); i++) {
+
+        PCB* pcb_en_lista = list_get(list_suplementarias->desalojo, i);
+
+        if (pcb_en_lista->data.PID == pcb->data.PID) {
+            ya_estaba = true;
+            break;
+        }
+    }
+
+    if (!ya_estaba)
         list_add(list_suplementarias->desalojo, pcb);
+
     pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
     /* 2. Reserva la CPU para ese mismo PID */
@@ -2539,6 +2558,7 @@ void exit_proceso(int socket_cpu){ /*OK*/
     
 
     if(cpu_libre == NULL){
+        pthread_mutex_unlock(&mutex_cpus);
         log_error(logger,"Error al encontrar CPU en la lista");
         return;
     }
@@ -2888,7 +2908,7 @@ void rta_io_stdout(int socket_io){
 int rev_desconexion (int cliente_fd){
 
     log_info(logger, "Atendiendo desconexion de CLiente");
-    pthread_mutex_lock(&mutex_cpus);
+    /* SIN pthread_mutex_lock: gestionar_desconexion_cpu() ya toma mutex_cpus */
     
     /*Revisamos si era una CPU*/
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &cliente_fd);

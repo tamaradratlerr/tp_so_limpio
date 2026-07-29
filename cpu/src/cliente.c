@@ -13,7 +13,7 @@ static int id_buscado = 0;
 
 int main(int argc, char *argv[])
 {
-
+    signal(SIGPIPE, SIG_IGN);
 
     if(argc != 3){
         printf("ERROR: Usar: ./bin/cpu [Archivo Config] [Identificador]\n");

@@ -45,7 +45,7 @@ pthread_mutex_t sem_procesos_exit = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_s_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_s_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sem_procesos_s_desalojo = PTHREAD_MUTEX_INITIALIZER;
-
+pthread_mutex_t sem_retorno_cpu = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex_cpus = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ios = PTHREAD_MUTEX_INITIALIZER;
@@ -133,7 +133,7 @@ void iniciar_listas_suple()
     list_suplementarias->io_stdout = list_create();
     list_suplementarias->ms = list_create();
     list_suplementarias->desalojo = list_create();
-
+    list_suplementarias->retorno_cpu = list_create();
     
     lista_mutex = malloc(sizeof(t_list));
     lista_mutex = list_create();
@@ -153,6 +153,7 @@ void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs 
     list_destroy(list_suplementarias->io_stdout);
     list_destroy(list_suplementarias->ms);
     list_destroy(list_suplementarias->desalojo);
+    list_destroy_and_destroy_elements(list_suplementarias->retorno_cpu, free); 
     
     free(list_suplementarias);
 

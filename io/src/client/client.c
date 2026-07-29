@@ -3,6 +3,7 @@ t_log *logger;
 
 int main(int argc, char **argv)
 {
+	signal(SIGPIPE, SIG_IGN);
 
 	validar_argumentos(argc, argv);
 

@@ -5,6 +5,7 @@
 
 int main(int argc, char *argv[]) /*OK*/
 {
+    signal(SIGPIPE, SIG_IGN);
 
     printf("=====     Iniciando Kernel Scheduler     =====\n");
 
@@ -78,10 +79,7 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
             log_warning(logger, "El cliente en el socket [%d] se desconectó.", cliente_fd);
             int err = rev_desconexion(cliente_fd);
 
-            if(err == -1) return EXIT_FAILURE;
-
-
-
+        
             control_loop = 0;
             break;
         }
@@ -224,12 +222,14 @@ void segmentation_fault(int socket_cpu){
 
     enviar_proceso_finalizar_KM(pcb->data.PID);
 
+    pthread_mutex_lock(&mutex_cpus);
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
     if (cpu_libre == NULL) {
         log_error(logger, "Error al encontrar CPU en la lista");
         return;
     }
     cpu_libre->enUso = false;
+    pthread_mutex_unlock(&mutex_cpus);
 
     log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [SEG_FAULT]", pcb->data.PID);
     nuevo_espacio();
@@ -338,8 +338,54 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
 { 
     
     log_opcode(logger, CPU_LIBRE);
-      
-   
+
+    /* ===== RETORNO A LA MISMA CPU (Enunciado pag. 11) =====
+       Si esta CPU tiene un proceso reservado por MEM_ALLOC / MEM_FREE / MUTEX_CREATE /
+       MUTEX_UNLOCK, se le devuelve ESE proceso y no se planifica nada de READY. */
+    if (compactacion_value == 0)
+    {
+        int pid_reservado = tomar_retorno_cpu(socket_cliente);
+
+        if (pid_reservado != -1)
+        {
+            PCB* pcb_reservado = buscar_pcb_por_pid(pid_reservado);
+
+            pthread_mutex_lock(&mutex_cpus);
+            t_CPU* cpu_duenia = list_find_with_context(list_suplementarias->cpu,
+                                                       es_la_cpu_buscada, &socket_cliente);
+            pthread_mutex_unlock(&mutex_cpus);
+
+            if (pcb_reservado != NULL && cpu_duenia != NULL && pcb_reservado->estado_pcb == RNN)
+            {
+                cpu_duenia->enUso = true;             /* nunca se libero, se reafirma */
+                cpu_duenia->pid_ejecutando = pid_reservado;
+
+                if (enviar_pid(pid_reservado, cpu_duenia->fd) == 1)
+                {
+                    /* No se reinicia el quantum: es la misma rafaga de ejecucion,
+                       solo hubo un viaje de ida y vuelta al Kernel Scheduler. */
+                    log_info(logger,
+                             "## PID:[%d] vuelve a la CPU ID:[%s], la que realizo la Syscall",
+                             pid_reservado, cpu_duenia->identificador);
+                    return;
+                }
+
+                log_error(logger, "Fallo el retorno del PID:[%d] a su CPU. Se replanifica por READY",
+                          pid_reservado);
+
+                cpu_duenia->enUso = false;
+                cambiar_estado_pcb(pcb_reservado, RDY);
+                eliminar_proceso_Lista(pcb_reservado);
+                agregar_proceso_lista(pcb_reservado);
+                return;
+            }
+
+            log_warning(logger,
+                        "PID:[%d] tenia reserva de CPU pero ya no esta en EXEC. Se descarta la reserva",
+                        pid_reservado);
+        }
+    }
+
     sem_wait(&sem_hay_ready); // Verifica que no se entre si la lista esta vacia
     pthread_mutex_lock(&mutex_cpus);
 
@@ -365,6 +411,7 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
     {
         log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
         pthread_mutex_unlock(&mutex_cpus);
+        sem_post(&sem_hay_ready);
         return;
     }
        
@@ -455,6 +502,117 @@ bool es_la_cpu_buscada (void* elemento, void* contexto)/*OK*/
      int socket_buscado = *(int*) contexto; 
     
     return (cpu->fd == socket_buscado);
+}
+
+
+
+
+
+
+
+
+bool es_el_retorno_de_la_cpu (void* elemento, void* contexto)
+{
+    t_retorno_cpu* retorno = (t_retorno_cpu*) elemento;
+    int socket_buscado = *(int*) contexto;
+
+    return (retorno->fd_cpu == socket_buscado);
+}
+
+void pinear_retorno_cpu (int pid, int fd_cpu)
+{
+    t_retorno_cpu* retorno = malloc(sizeof(t_retorno_cpu));
+
+    retorno->pid    = pid;
+    retorno->fd_cpu = fd_cpu;
+
+    pthread_mutex_lock(&sem_retorno_cpu);
+    list_add(list_suplementarias->retorno_cpu, retorno);
+    pthread_mutex_unlock(&sem_retorno_cpu);
+}
+
+/* Saca y devuelve el PID reservado para esa CPU. -1 si no hay ninguno. */
+int tomar_retorno_cpu (int fd_cpu)
+{
+    int pid = -1;
+
+    pthread_mutex_lock(&sem_retorno_cpu);
+
+    t_retorno_cpu* retorno = list_find_with_context(list_suplementarias->retorno_cpu,
+                                                    es_el_retorno_de_la_cpu, &fd_cpu);
+    if (retorno != NULL) {
+        pid = retorno->pid;
+        list_remove_element(list_suplementarias->retorno_cpu, retorno);
+        free(retorno);
+    }
+
+    pthread_mutex_unlock(&sem_retorno_cpu);
+
+    return pid;
+}
+
+/* Consulta sin sacar de la lista. La usa desalojo(). */
+bool existe_retorno_cpu (int pid, int fd_cpu)
+{
+    bool existe = false;
+
+    pthread_mutex_lock(&sem_retorno_cpu);
+
+    for (int i = 0; i < list_size(list_suplementarias->retorno_cpu); i++) {
+
+        t_retorno_cpu* retorno = list_get(list_suplementarias->retorno_cpu, i);
+
+        if (retorno->pid == pid && retorno->fd_cpu == fd_cpu) {
+            existe = true;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&sem_retorno_cpu);
+
+    return existe;
+}
+
+/* Cancela la reserva (compactacion, BSOD, desconexion de la CPU). */
+void quitar_retorno_cpu (int pid)
+{
+    pthread_mutex_lock(&sem_retorno_cpu);
+
+    for (int i = 0; i < list_size(list_suplementarias->retorno_cpu); i++) {
+
+        t_retorno_cpu* retorno = list_get(list_suplementarias->retorno_cpu, i);
+
+        if (retorno->pid == pid) {
+            list_remove(list_suplementarias->retorno_cpu, i);
+            free(retorno);
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&sem_retorno_cpu);
+}
+
+/* Cierre comun de MEM_ALLOC / MEM_FREE / MUTEX_CREATE / MUTEX_UNLOCK */
+void desalojar_por_syscall_mismo_cpu (PCB* pcb, int socket_cpu, char* nombre_syscall)
+{
+    if (pcb == NULL) {
+        log_error(logger, "PCB = NULL en desalojar_por_syscall_mismo_cpu [%s]", nombre_syscall);
+        return;
+    }
+
+    /* 1. Dispara el desalojo: el proximo Check Interrupt de la CPU va a responder
+          DESALOJO. Es el mismo mecanismo que ya usabas en mutex_create. */
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+    if (!existe_pcb_con_pid(list_suplementarias->desalojo, pcb->data.PID))
+        list_add(list_suplementarias->desalojo, pcb);
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+    /* 2. Reserva la CPU para ese mismo PID */
+    pinear_retorno_cpu(pcb->data.PID, socket_cpu);
+
+    log_info(logger,
+             "## PID:[%d] libera la CPU por Syscall [%s] y queda reservado para volver a la MISMA CPU",
+             pcb->data.PID, nombre_syscall);
 }
 
 
@@ -745,10 +903,16 @@ void desalojo(int socket_cliente)
     char* cpu_id = recibir_mensaje(socket_cliente, logger);
     op_code err = OK;
     int desalojado = 0;
+    bool retorna_misma_cpu = existe_retorno_cpu(pid, socket_cliente);
 
     if (mem_corrupt_value == 1) {
 
         log_debug(logger, "MEM CORRUPT");
+        
+        if (retorna_misma_cpu) {
+            quitar_retorno_cpu(pid); retorna_misma_cpu = false;
+        }   
+
         enviar_op_code(MEM_CORRUPT, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
         desalojado = 1;
@@ -757,6 +921,11 @@ void desalojo(int socket_cliente)
     else if (compactacion_value == 1) {
 
         log_debug(logger, "COMPACTACION");
+        
+        if (retorna_misma_cpu) {
+            quitar_retorno_cpu(pid); retorna_misma_cpu = false;
+        }
+
         enviar_op_code(COMPACTACION, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
         desalojado = 1;
@@ -819,6 +988,12 @@ void desalojo(int socket_cliente)
                 log_debug(logger, "EXIT: %d", list_size(listasProcesos->ext));
                 log_debug(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
                 log_debug(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
+            }
+            else if (retorna_misma_cpu) {
+
+                log_info(logger,
+                         "PID:[%d] queda reservado para volver a la CPU:[%s] que hizo la Syscall",
+                         pid, cpu_id);
             }
             else if (pcb->estado_pcb == BCK) {
 
@@ -894,11 +1069,13 @@ void desalojo(int socket_cliente)
         log_error(logger, "Error de coordinacion en la comunicacion [desalojo]");
     }
 
+    pthread_mutex_lock(&mutex_cpus);
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
-    if (cpu_libre != NULL)          // FIX: antes se desreferenciaba sin chequear NULL
+    if (cpu_libre != NULL && !retorna_misma_cpu)          // FIX: antes se desreferenciaba sin chequear NULL
         cpu_libre->enUso = false;
 
+    pthread_mutex_unlock(&mutex_cpus);
     free(cpu_id);                   // FIX: recibir_mensaje hace malloc, esto se perdía en cada llamada
 
     return;
@@ -1050,8 +1227,7 @@ void io_libre(int io_socket){
             agregar_a_paquete(paquete, pcb_a_ejecutar->iostdout.info, pcb_a_ejecutar->iostdout.length);
 
             enviar_solo_buffer(paquete->buffer, io_socket);
-            eliminar_paquete(paquete);
-            free(pcb_a_ejecutar->iostdout.info);   /* buffer malloc'd en io_stdout */
+            eliminar_paquete(paquete);   /* buffer malloc'd en io_stdout */
             break;
         }
 
@@ -1425,8 +1601,9 @@ void enviar_memory_stick_a_cpus(t_mem_stick* ms)
 
     for(int i = 0; i < list_size(list_suplementarias->cpu); i++)
     {
-
+        pthread_mutex_lock(&mutex_cpus);
         t_CPU* cpu = list_get(list_suplementarias->cpu,i);
+        pthread_mutex_unlock(&mutex_cpus);
 
 
         enviar_op_code(
@@ -1924,9 +2101,8 @@ void mutex_create (int socket_cliente){ /*OK*/
 
     enviar_op_code(OK, socket_cliente);
 
-    cambiar_estado_pcb(pcb,RDY);
-    eliminar_proceso_Lista(pcb);
-    agregar_proceso_lista(pcb);
+    desalojar_por_syscall_mismo_cpu(pcb, socket_cliente, "MUTEX_CREATE");
+
     
         
 }
@@ -2090,6 +2266,8 @@ void mutex_unlock (int socket_cliente)
     /* El que libera NO se bloquea ni se desaloja: sigue ejecutando en la CPU */
     enviar_op_code(OK, socket_cliente);
 
+    desalojar_por_syscall_mismo_cpu(pcb, socket_cliente, "MUTEX_UNLOCK");
+
     free(mutex_id);
 }
 
@@ -2148,6 +2326,8 @@ void mem_alloc (int socket_cliente){
                  id_segmento, tamanio, pid);
 
         enviar_int(base, socket_cliente);
+        desalojar_por_syscall_mismo_cpu(buscar_pcb_por_pid(pid), socket_cliente, "MEM_ALLOC");
+
     }
     else {
 
@@ -2176,9 +2356,10 @@ void mem_alloc (int socket_cliente){
         }
 
         enviar_int(-1, socket_cliente);
-
+        pthread_mutex_lock(&mutex_cpus);
         t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu,
                                                   es_la_cpu_buscada, &socket_cliente);
+        pthread_mutex_unlock(&mutex_cpus);
         if (cpu_libre != NULL) {
             cpu_libre->enUso = false;
         } else {
@@ -2222,8 +2403,13 @@ void mem_free (int socket_cliente){
     }
 
     pthread_mutex_unlock(&mutex_conexion_km);
+    
+    desalojar_por_syscall_mismo_cpu(buscar_pcb_por_pid(pid), socket_cliente, "MEM_FREE");
 
     free(id_segmento); 
+
+    /* Se libero memoria -> puede haber lugar para des-suspender procesos (pag. 10) */
+    nuevo_espacio();
     
 } 
 
@@ -2348,14 +2534,17 @@ void exit_proceso(int socket_cpu){ /*OK*/
         log_error(logger, "PCB = NULL en EXIT_PROCESO");
     }
 
+    pthread_mutex_lock(&mutex_cpus);
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
     
+
     if(cpu_libre == NULL){
         log_error(logger,"Error al encontrar CPU en la lista");
         return;
     }
 
     cpu_libre->enUso = false;
+    pthread_mutex_unlock(&mutex_cpus);
 
     log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
     
@@ -2699,6 +2888,7 @@ void rta_io_stdout(int socket_io){
 int rev_desconexion (int cliente_fd){
 
     log_info(logger, "Atendiendo desconexion de CLiente");
+    pthread_mutex_lock(&mutex_cpus);
     
     /*Revisamos si era una CPU*/
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &cliente_fd);
@@ -2710,7 +2900,7 @@ int rev_desconexion (int cliente_fd){
     io_encontrada = list_find_with_context(list_suplementarias->io_stdin, es_la_io_buscada, &cliente_fd);
     if (io_encontrada != NULL) gestionar_desconexion_io(io_encontrada);
 
-    io_encontrada = list_find_with_context(list_suplementarias->io_stdin, es_la_io_buscada, &cliente_fd);
+    io_encontrada = list_find_with_context(list_suplementarias->io_stdout, es_la_io_buscada, &cliente_fd);
     if (io_encontrada != NULL) gestionar_desconexion_io(io_encontrada);
     
     
@@ -2720,6 +2910,7 @@ int rev_desconexion (int cliente_fd){
         return -1;
     }
     
+    pthread_mutex_unlock(&mutex_cpus);
     return 0;
 }
 
@@ -2739,6 +2930,8 @@ void gestionar_desconexion_cpu(t_CPU* cpu) {
 
     PCB* pcb_ejec = buscar_pcb_por_pid(cpu->pid_ejecutando);
 
+    quitar_retorno_cpu(cpu->pid_ejecutando);
+
     if (pcb_ejec == NULL) 
     {
         log_error(logger, "Error al identificar el porceso que se estaba ejecutando en la CPU desconectada");
@@ -2757,11 +2950,12 @@ void gestionar_desconexion_cpu(t_CPU* cpu) {
         eliminar_proceso_Lista(pcb_ejec);
         agregar_proceso_lista(pcb_ejec);
 
+
         pthread_mutex_lock(&mutex_cpus);
         list_remove_element(list_suplementarias->cpu, cpu);
         pthread_mutex_unlock(&mutex_cpus);
     }
-    else if (pcb_ejec->estado_pcb == BCK)
+    else if (pcb_ejec->estado_pcb == BCK && pcb_ejec->esperando_io)
     {
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         sacar_pcb_por_pid(list_suplementarias->desalojo, pcb_ejec->data.PID);
@@ -2771,6 +2965,17 @@ void gestionar_desconexion_cpu(t_CPU* cpu) {
         list_remove_element(list_suplementarias->cpu, cpu);
         pthread_mutex_unlock(&mutex_cpus);
         log_info(logger, "EL PID:[%d] No fue desalojada debido a la desconexion de la CPU que lo estaba Ejecutando",pcb_ejec->data.PID);
+    }
+    else if (pcb_ejec->estado_pcb == BCK )
+    {
+        cambiar_estado_pcb(pcb_ejec,RDY);
+        eliminar_proceso_Lista(pcb_ejec);
+        agregar_proceso_lista(pcb_ejec);
+        
+        
+        pthread_mutex_lock(&mutex_cpus);
+        list_remove_element(list_suplementarias->cpu, cpu);
+        pthread_mutex_unlock(&mutex_cpus);
     }
     else 
     {

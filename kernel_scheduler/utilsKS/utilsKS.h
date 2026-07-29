@@ -49,9 +49,16 @@ typedef struct{ //Estreuctura de datos que contiene a las listas de CPU y IOs co
     t_list* io_stdout;
     t_list* ms;
     t_list* desalojo;
+    t_list* retorno_cpu;
 
 }t_listas_suplementarias;
 
+typedef struct{
+
+    int pid;
+    int fd_cpu;
+
+}t_retorno_cpu;
 
 typedef struct{
 
@@ -167,7 +174,7 @@ extern pthread_mutex_t sem_procesos_exit;
 extern pthread_mutex_t sem_procesos_s_block;
 extern pthread_mutex_t sem_procesos_s_ready;
 extern pthread_mutex_t sem_procesos_s_desalojo;
-
+extern pthread_mutex_t sem_retorno_cpu;        
 
 extern pthread_mutex_t mutex_conexion_km;
 extern pthread_mutex_t mutex_cpus;

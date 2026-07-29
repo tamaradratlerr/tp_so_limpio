@@ -44,6 +44,13 @@ void nueva_cpu(int cliente_fd);
 void cpu_libre(int cliente_fd);
 void desalojo (int socket_cliente);
 
+/*----- RETORNO A LA MISMA CPU -----*/
+void pinear_retorno_cpu(int pid, int fd_cpu);
+int  tomar_retorno_cpu(int fd_cpu);
+bool existe_retorno_cpu(int pid, int fd_cpu);
+void quitar_retorno_cpu(int pid);
+void desalojar_por_syscall_mismo_cpu(PCB* pcb, int socket_cpu, char* nombre_syscall);
+
 /*--- IO ---*/
 
 void nueva_io(int cliente_fd);
@@ -99,6 +106,10 @@ void io_stdout(int cpu_socket);
 void rta_io_stdout(int socket_io);
 void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
 void loguear_lista_suplementaria(char* tipo_lista, t_log* logger);
+
+int rev_desconexion (int cliente_fd);
+void gestionar_desconexion_cpu(t_CPU* cpu);
+void gestionar_desconexion_io(t_IO* io);
 
 
 #endif /* SERVER_H_ */

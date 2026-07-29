@@ -2908,29 +2908,44 @@ void rta_io_stdout(int socket_io){
 int rev_desconexion (int cliente_fd){
 
     log_info(logger, "Atendiendo desconexion de CLiente");
-    /* SIN pthread_mutex_lock: gestionar_desconexion_cpu() ya toma mutex_cpus */
-    
+
+    /* SIN pthread_mutex_lock(&mutex_cpus): gestionar_desconexion_cpu() y
+       gestionar_desconexion_io() ya toman los mutex que necesitan por dentro.
+       Tomarlo aca producia un deadlock (mutex no recursivo). */
+
+    bool encontrado = false;
+
     /*Revisamos si era una CPU*/
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &cliente_fd);
-    if (cpu_libre != NULL) gestionar_desconexion_cpu(cpu_libre);
+    if (cpu_libre != NULL) {
+        gestionar_desconexion_cpu(cpu_libre);
+        encontrado = true;
+    }
 
     t_IO* io_encontrada = list_find_with_context(list_suplementarias->io_sleep, es_la_io_buscada, &cliente_fd);
-    if (io_encontrada != NULL) gestionar_desconexion_io(io_encontrada);
+    if (io_encontrada != NULL) {
+        gestionar_desconexion_io(io_encontrada);
+        encontrado = true;
+    }
 
     io_encontrada = list_find_with_context(list_suplementarias->io_stdin, es_la_io_buscada, &cliente_fd);
-    if (io_encontrada != NULL) gestionar_desconexion_io(io_encontrada);
+    if (io_encontrada != NULL) {
+        gestionar_desconexion_io(io_encontrada);
+        encontrado = true;
+    }
 
     io_encontrada = list_find_with_context(list_suplementarias->io_stdout, es_la_io_buscada, &cliente_fd);
-    if (io_encontrada != NULL) gestionar_desconexion_io(io_encontrada);
-    
-    
-    if (cpu_libre == NULL && io_encontrada == NULL) 
+    if (io_encontrada != NULL) {
+        gestionar_desconexion_io(io_encontrada);
+        encontrado = true;
+    }
+
+    if (!encontrado)
     {
         log_error(logger, "No se pudo identificar al cliente desconectado");
         return -1;
     }
-    
-    pthread_mutex_unlock(&mutex_cpus);
+
     return 0;
 }
 

@@ -1464,11 +1464,20 @@ void recibir_nueva_memory_stick(int socket_km)
 }
     
     
+static bool ya_fue_intentado (t_list* intentados, PCB* pcb)
+{
+    for (int i = 0; i < list_size(intentados); i++)
+        if (list_get(intentados, i) == pcb) return true;
 
+    return false;
+}
 
-//NUEVO_ESPACIO
 void nuevo_espacio()
 {
+    /* Procesos que ya se evaluaron y no entraron en esta ronda. Sin esto, el
+       while volveria a elegir siempre al mismo y giraria infinito. */
+    t_list* ya_intentados = list_create();
+
     while (1)
     {
         PCB* pcb = NULL;
@@ -1478,7 +1487,7 @@ void nuevo_espacio()
         if (list_is_empty(listasProcesos->s_rdy))
         {
             pthread_mutex_unlock(&sem_procesos_s_ready);
-            return;
+            break;
         }
 
         if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0)
@@ -1489,7 +1498,7 @@ void nuevo_espacio()
                 {
                     PCB* aux = list_get(listasProcesos->s_rdy, i);
 
-                    if (aux->data.prioridad == prioridad)
+                    if (aux->data.prioridad == prioridad && !ya_fue_intentado(ya_intentados, aux))
                     {
                         pcb = aux;
                         break;
@@ -1499,17 +1508,17 @@ void nuevo_espacio()
         }
         else
         {
-            pcb = list_get(listasProcesos->s_rdy, 0);
+            for (int i = 0; i < list_size(listasProcesos->s_rdy) && pcb == NULL; i++)
+            {
+                PCB* aux = list_get(listasProcesos->s_rdy, i);
+
+                if (!ya_fue_intentado(ya_intentados, aux)) pcb = aux;
+            }
         }
 
         pthread_mutex_unlock(&sem_procesos_s_ready);
 
-        if (pcb == NULL)
-        {
-            log_warning(logger,
-                "No se encontró ningún proceso en SUSP_READY");
-            return;
-        }
+        if (pcb == NULL) break;   /* no quedan candidatos sin evaluar */
 
         int respuesta;
 
@@ -1534,7 +1543,8 @@ void nuevo_espacio()
                 "No hay espacio para PID [%d]. Continúa suspendido.",
                 pcb->data.PID);
 
-            return;
+            list_add(ya_intentados, pcb);
+            continue;                    /* sigue con el proximo, ya no corta */
         }
 
         pthread_mutex_lock(&sem_procesos_s_ready);
@@ -1557,11 +1567,10 @@ void nuevo_espacio()
         log_info(logger,
             "## PID [%d] desuspendido correctamente",
             pcb->data.PID);
-
-
     }
-}
 
+    list_destroy(ya_intentados);
+}
 // Reintenta la desuspensión periódicamente. Reemplaza al aviso roto que
 // mandaba Kernel Memory por el socket compartido (nadie lo leía del lado
 // de KS). Cubre los 3 casos del enunciado: se liberó memoria, se conectó

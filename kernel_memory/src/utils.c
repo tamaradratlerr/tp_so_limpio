@@ -1357,7 +1357,7 @@ int desuspender_proceso(int pid) {
             if (hueco == NULL) {
                 pthread_mutex_unlock(&mutex_lista_libres);
                 pthread_mutex_unlock(&mutex_contextos);
-                log_error(logger,
+                log_warning(logger,
                     "ERROR: No hay espacio en RAM para el segmento %d del proceso %d",
                     seg->id_segmento, pid);
                 return -1;

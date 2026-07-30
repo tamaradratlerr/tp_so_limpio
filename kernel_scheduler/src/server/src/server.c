@@ -710,7 +710,7 @@ void verificar_desalojo_por_prioridad(PCB* pcb)
 
         if (pcb_rnn == pcb) continue;   // el pcb que estoy encolando puede seguir en RNN
 
-        if (pcb->data.prioridad_original < pcb_rnn->data.prioridad_original){
+        if (pcb->data.prioridad < pcb_rnn->data.prioridad){
             pthread_mutex_unlock(&sem_procesos_running);   // soltar antes de tocar otras listas
 
             pthread_mutex_lock(&sem_procesos_s_desalojo);

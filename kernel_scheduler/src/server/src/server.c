@@ -2150,7 +2150,6 @@ void mock_cpu(PCB* pcb)
 
 /*-----     Syscalls CPU     -----*/
 
-//MUTEX_CREATE,
 void mutex_create (int socket_cliente){ /*OK*/
 
     enviar_op_code(OK, socket_cliente); //Segundo paso del Handshake
@@ -2169,7 +2168,6 @@ void mutex_create (int socket_cliente){ /*OK*/
     
     list_add(lista_mutex, mutex);
 
-    /*Bloqueo y Desalojo*/
     PCB* pcb = buscar_pcb_por_pid(pid);
 
 
@@ -2178,16 +2176,9 @@ void mutex_create (int socket_cliente){ /*OK*/
                 return;
             }
 
-    cambiar_estado_pcb(pcb,BCK);
-    eliminar_proceso_Lista(pcb);
-    agregar_proceso_lista(pcb);
-    
-
-    loguear_lista(listasProcesos->bck,logger);
-
-    pthread_mutex_lock(&sem_procesos_s_desalojo);
-    list_add(list_suplementarias->desalojo, pcb);
-    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+    /* MUTEX_CREATE no bloquea: el PCB queda en RNN y vuelve a la misma CPU,
+       igual que MUTEX_UNLOCK. desalojar_por_syscall_mismo_cpu() ya se encarga
+       de encolarlo en la lista de desalojo y de pinear la CPU. */
 
     log_info(logger, "## PID:[%d] Creo el Mutex [%s]", pid, mutex->mutex_id); /*Logger Obligatorio*/
 
@@ -2195,8 +2186,6 @@ void mutex_create (int socket_cliente){ /*OK*/
 
     desalojar_por_syscall_mismo_cpu(pcb, socket_cliente, "MUTEX_CREATE");
 
-    
-        
 }
 
 //MUTEX_LOCK,

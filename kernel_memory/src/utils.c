@@ -559,6 +559,7 @@ int conectar_ks_suave(char* ip, char* puerto) {
     freeaddrinfo(server_info);
     return fd;
 }
+
 void conexion_memory_stick(int socket_ms) {
     
     uint32_t tamanio_recibido = 0;
@@ -598,20 +599,22 @@ void conexion_memory_stick(int socket_ms) {
 
 
     // Inicializamos o expandimos el espacio libre mapeado en KM
-    pthread_mutex_lock(&mutex_lista_libres);
+    // pthread_mutex_lock(&mutex_lista_libres);
    
 
-    t_hueco* nuevo_hueco = malloc(sizeof(t_hueco));
-    nuevo_hueco->direccion_base = nuevo_ms->base_global;
-    nuevo_hueco->tamanio = nuevo_ms->tamanio;
+    // t_hueco* nuevo_hueco = malloc(sizeof(t_hueco));
+    // nuevo_hueco->direccion_base = nuevo_ms->base_global;
+    // nuevo_hueco->tamanio = nuevo_ms->tamanio;
 
-    list_add(lista_huecos_libres, nuevo_hueco);
+    // list_add(lista_huecos_libres, nuevo_hueco);
 
-    // Mantener los huecos ordenados por dirección base
-    list_sort(lista_huecos_libres, _ordenar_huecos_por_base);
+    // // Mantener los huecos ordenados por dirección base
+    // list_sort(lista_huecos_libres, _ordenar_huecos_por_base);
 
 
-    pthread_mutex_unlock(&mutex_lista_libres);
+    // pthread_mutex_unlock(&mutex_lista_libres);
+    liberar_espacio_en_huecos(nuevo_ms->base_global, nuevo_ms->tamanio);
+
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
 

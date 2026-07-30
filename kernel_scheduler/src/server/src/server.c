@@ -803,7 +803,11 @@ void mediano_plazo_bck(PCB* pcb){
 
         if (pcb->estado_pcb == S_BCK)       cambiar_estado_pcb(pcb, BCK);
         else if (pcb->estado_pcb == S_RDY)  cambiar_estado_pcb(pcb, RDY);
-
+        else {
+            pthread_mutex_unlock(&mutex_transiciones);
+            return;
+        }
+        
         eliminar_proceso_Lista(pcb);
         agregar_proceso_lista(pcb);
 
@@ -2370,78 +2374,34 @@ void mem_alloc (int socket_cliente){
     bool alloc_ok          = false;
     bool hubo_compactacion = false;
 
-    // /* ===== TRANSACCIÓN ATÓMICA sobre el socket KS <-> KM =====
-    //    El mutex se sostiene hasta el final, INCLUIDA la compactación.
-    //    Soltarlo en el medio permitía que otro hilo colara su propio
-    //    intercambio y se llevara una respuesta ajena. */
-    // pthread_mutex_lock(&mutex_conexion_km);
-
-    // enviar_op_code(gl_MEM_ALLOC, info_km.conexion_km);
-    // enviar_pid(pid, info_km.conexion_km);
-    // enviar_int(atoi(tamanio), info_km.conexion_km);
-    // enviar_int(atoi(id_segmento), info_km.conexion_km);
-
-    // int err = recibir_op_code(info_km.conexion_km);
-
-    // if (err == COMPACTACION) {
-    //     hubo_compactacion = true;
-
-    //     compactacion(socket_cliente, pid);            // ya no toca el mutex
-
-    //     err = recibir_op_code(info_km.conexion_km);   // respuesta del alloc reintentado
-    // }
-
-    // if (err == OK) {
-    //     base     = recibir_int(info_km.conexion_km);
-    //     alloc_ok = true;
-    // }
-
-    // pthread_mutex_unlock(&mutex_conexion_km);
-    // /* ===== fin de la transacción ===== */
-
-
     /* ===== TRANSACCIÓN ATÓMICA sobre el socket KS <-> KM =====
        El mutex se sostiene hasta el final, INCLUIDA la compactación.
-       El usleep del reintento va FUERA del mutex: es lo que deja entrar a
-       mediano_plazo_bck() a suspender procesos y liberar memoria. */
-    const int MAX_REINTENTOS_MEMORIA = 60;   /* ~30 s */
-    int intentos = 0;
+       Soltarlo en el medio permitía que otro hilo colara su propio
+       intercambio y se llevara una respuesta ajena. */
+    pthread_mutex_lock(&mutex_conexion_km);
 
-    while (!alloc_ok && intentos < MAX_REINTENTOS_MEMORIA) {
+    enviar_op_code(gl_MEM_ALLOC, info_km.conexion_km);
+    enviar_pid(pid, info_km.conexion_km);
+    enviar_int(atoi(tamanio), info_km.conexion_km);
+    enviar_int(atoi(id_segmento), info_km.conexion_km);
 
-        pthread_mutex_lock(&mutex_conexion_km);
+    int err = recibir_op_code(info_km.conexion_km);
 
-        enviar_op_code(gl_MEM_ALLOC, info_km.conexion_km);
-        enviar_pid(pid, info_km.conexion_km);
-        enviar_int(atoi(tamanio), info_km.conexion_km);
-        enviar_int(atoi(id_segmento), info_km.conexion_km);
+    if (err == COMPACTACION) {
+        hubo_compactacion = true;
 
-        int err = recibir_op_code(info_km.conexion_km);
+        compactacion(socket_cliente, pid);            // ya no toca el mutex
 
-        if (err == COMPACTACION) {
-            hubo_compactacion = true;
-
-            compactacion(socket_cliente, pid);            // ya no toca el mutex
-
-            err = recibir_op_code(info_km.conexion_km);   // respuesta del alloc reintentado
-        }
-
-        if (err == OK) {
-            base     = recibir_int(info_km.conexion_km);
-            alloc_ok = true;
-        }
-
-        pthread_mutex_unlock(&mutex_conexion_km);
-        /* ===== fin de la transacción ===== */
-
-        if (alloc_ok) break;
-
-        intentos++;
-        log_info(logger,
-                 "PID:[%d] sin espacio para el segmento. Esperando liberacion (intento %d)",
-                 pid, intentos);
-        usleep(500 * 1000);
+        err = recibir_op_code(info_km.conexion_km);   // respuesta del alloc reintentado
     }
+
+    if (err == OK) {
+        base     = recibir_int(info_km.conexion_km);
+        alloc_ok = true;
+    }
+
+    pthread_mutex_unlock(&mutex_conexion_km);
+    /* ===== fin de la transacción ===== */
 
     if (alloc_ok) {
 
@@ -2454,40 +2414,27 @@ void mem_alloc (int socket_cliente){
     }
     else {
 
-        log_error(logger,
-                  "## PID: %d - Finaliza por Motivo Falta de tamaño para Creación de segmento",
-                  pid);
+        log_info(logger,
+                 "## PID:[%d] sin espacio para el segmento. Vuelve a READY para reintentar",
+                 pid);
 
         PCB* pcb = buscar_pcb_por_pid(pid);
 
         if (pcb != NULL) {
-            cambiar_estado_pcb(pcb, EXT);
-            agregar_proceso_lista(pcb);
-            eliminar_proceso_Lista(pcb);
-
+            /* Mismo mecanismo que desalojar_por_syscall_mismo_cpu, pero SIN pinear
+               la CPU: asi desalojo() cae en la rama estado_pcb == RNN y hace
+               RUNNING -> READY liberando la CPU. Es imprescindible, porque los
+               procesos que tienen que liberar memoria necesitan ejecutar para
+               llegar a su punto de bloqueo. La CPU la libera desalojo(). */
             pthread_mutex_lock(&sem_procesos_s_desalojo);
             list_add(list_suplementarias->desalojo, pcb);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
-            enviar_proceso_finalizar_KM(pcb->data.PID);
-
-            log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Out of Memory]",
-                     pcb->data.PID); /*Logger Obligatorio*/
         }
         else {
-            log_error(logger, "PCB = NULL en mem_alloc (OOM)");
+            log_error(logger, "PCB = NULL en mem_alloc (sin espacio)");
         }
 
         enviar_int(-1, socket_cliente);
-        pthread_mutex_lock(&mutex_cpus);
-        t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu,
-                                                  es_la_cpu_buscada, &socket_cliente);
-        pthread_mutex_unlock(&mutex_cpus);
-        if (cpu_libre != NULL) {
-            cpu_libre->enUso = false;
-        } else {
-            log_error(logger, "Error al encontrar CPU en la lista");
-        }
     }
 
     /* Va DESPUÉS del unlock: nuevo_espacio() toma mutex_conexion_km. */

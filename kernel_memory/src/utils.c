@@ -966,7 +966,7 @@ void creacion_segmento(int socket_cliente, int socket_ks, int pid, int id_segmen
         } 
         else 
         {
-            log_error(logger, "## Out of Memory real - PID: %d - Tamaño: %u", pid, tamanio_segmento);
+            log_debug(logger, "## Out of Memory real - PID: %d - Tamaño: %u", pid, tamanio_segmento);
             int error = -1;
             enviar_op_code(NOTOK,socket_cliente);
             return;

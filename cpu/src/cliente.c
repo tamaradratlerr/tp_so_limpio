@@ -1079,13 +1079,16 @@ void ejecutar_mem_alloc (t_instruccion* instr){
     int base = recibir_pid(sockets->conexion_kernel_scheduler); /*Uso esta aunque no sea para esto*/
 
     if(base == -1){
-        log_info(logger, "## PID:[%d] Finaliza por falta de memoria", contexto_actual->pid);
-        exit_control = 1;
-        control_loop = 0;      // corta el ciclo → la CPU vuelve a pedir CPU_LIBRE
-        esExit     = true;     // no intenta guardar un contexto que KM ya borró
-        limpiar_contexto_actual();
+        /* No hay memoria ahora. El proceso NO finaliza: se devuelve al Kernel
+           Scheduler sin avanzar el PC, para que al volver a ejecutar reintente
+           este mismo MEM_ALLOC. El interrupt() del ciclo hace el desalojo y
+           guarda el contexto con el PC apuntando aca. */
+        log_info(logger, "## PID:[%d] Sin memoria para el segmento. Vuelve al Kernel Scheduler",
+                 contexto_actual->pid);
+        pc_modificado = true;
         return;
     }
+
     crear_segmento(
         atoi(id_segmento),
         atoi(tamanio),

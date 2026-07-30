@@ -1091,7 +1091,7 @@ void desalojo(int socket_cliente)
     pthread_mutex_lock(&mutex_cpus);
     t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
-    if (cpu_libre != NULL && !retorna_misma_cpu)          // FIX: antes se desreferenciaba sin chequear NULL
+    if (cpu_libre != NULL && !retorna_misma_cpu && desalojado == 1)          // FIX: antes se desreferenciaba sin chequear NULL
         cpu_libre->enUso = false;
 
     pthread_mutex_unlock(&mutex_cpus);
@@ -1136,7 +1136,6 @@ void nueva_io (int cliente_fd){
     log_info(logger, "IO '%s' registrada en el socket %d", info_io->nombre, cliente_fd);
 }
 
-// IO LIBRE
 // IO LIBRE
 void io_libre(int io_socket){
 
@@ -1192,7 +1191,7 @@ void io_libre(int io_socket){
     if (pcb_a_ejecutar->io_op_code != io_type) {
         log_error(logger, "Error en Sincronizacion de Syscalls e IOs [ERROR EN TIPOS]");
         pthread_mutex_lock(&mutex_ios);
-            io_encontrada->enUso = false;    /* se libera para no dejarla colgada */
+            io_encontrada->enUso = false;
         pthread_mutex_unlock(&mutex_ios);
         free(pcb_a_ejecutar);
         return;
@@ -1203,11 +1202,26 @@ void io_libre(int io_socket){
     enviar_op_code(io_type, io_socket);
 
     if (recibir_op_code(io_socket) != OK) {
-        log_error(logger, "La IO del socket %d no confirmo la operacion", io_socket);
+        /* La IO murio (tipico: se la mato estando ociosa y este hilo se
+           desperto del sem_wait para tomar un trabajo que ya no puede
+           entregar). ANTES aca se hacia free(pcb_a_ejecutar) y el proceso
+           quedaba en BLOCK para siempre porque su trabajo se perdia y nadie
+           lo volvia a despertar (bug reproducido: PID 0 colgado al final de
+           la prueba de desconexion de IO).
+           AHORA se REENCOLA el trabajo al frente de la cola y se hace
+           sem_post, para que otra IO viva del mismo tipo lo tome. */
+        log_error(logger, "La IO del socket %d no confirmo la operacion. Se reencola el trabajo del PID %d",
+                  io_socket, pcb_a_ejecutar->pid);
+
         pthread_mutex_lock(&mutex_ios);
             io_encontrada->enUso = false;
+            list_add_in_index(lista_bck_del_tipo, 0, pcb_a_ejecutar);  /* al frente: preserva orden */
         pthread_mutex_unlock(&mutex_ios);
-        free(pcb_a_ejecutar);
+
+        sem_post(sem_del_tipo);   /* despierta a otra IO del tipo para que lo tome */
+
+        /* NO se libera pcb_a_ejecutar: sigue vivo en la cola.
+           NO se setea io_encontrada->pid_ejec: este hilo ya no maneja ese trabajo. */
         return;
     }
 
@@ -1261,27 +1275,28 @@ void io_libre(int io_socket){
 void io_finalizada(int io_socket){
     pthread_mutex_lock(&mutex_ios);
 
-    t_IO *io = list_find_with_context(list_suplementarias->io_sleep,es_la_io_buscada,&io_socket);
+    t_IO *io = list_find_with_context(list_suplementarias->io_sleep,  es_la_io_buscada, &io_socket);
+    if (io == NULL) io = list_find_with_context(list_suplementarias->io_stdin,  es_la_io_buscada, &io_socket);
+    if (io == NULL) io = list_find_with_context(list_suplementarias->io_stdout, es_la_io_buscada, &io_socket);
 
-    if (io == NULL) io = list_find_with_context(list_suplementarias->io_stdin,es_la_io_buscada,&io_socket);
-
-    if (io == NULL) io = list_find_with_context(list_suplementarias->io_stdout,es_la_io_buscada,&io_socket);
-
-    if(io != NULL)
-    {
+    if (io != NULL) {
         io->enUso = false;
+
+        if (io->pid_ejec != NULL) {
+            if (io->pid_ejec->io_op_code == gl_IO_STDOUT)
+                free(io->pid_ejec->iostdout.info);
+
+            free(io->pid_ejec);
+            io->pid_ejec = NULL;
+        }
+
         log_info(logger, "IO liberada");
     }
-    else
-    {
-        log_error(logger, "No se encontró IO finalizada");
+    else {
+        log_error(logger, "No se encontró la IO del socket %d al finalizar", io_socket);
     }
 
     pthread_mutex_unlock(&mutex_ios);
-
-    espera_io* pid_ejec = io->pid_ejec;
-
-    free(pid_ejec);
 
     enviar_op_code(OK, io_socket);
 }
@@ -2653,8 +2668,16 @@ void rta_io_sleep(int socket_io){
     );
 
     if(io != NULL){
+        
         io->enUso = false;
+        
+        if (io->pid_ejec != NULL) {
+            free(io->pid_ejec);
+            io->pid_ejec = NULL;
+        }
+
         log_info(logger, "IO liberada");
+
     }
     else{
         log_error(logger, "No se encontró IO finalizada");
@@ -2752,22 +2775,21 @@ void rta_io_stdin(int socket_io){
         pthread_mutex_unlock(&mutex_conexion_km);
 
 
-    PCB* pcb = buscar_pcb_por_pid(pid);
+        PCB* pcb = buscar_pcb_por_pid(pid);
 
     if (pcb == NULL) {
         log_error(logger, "IO finalizado para PID %d pero no se encontró su PCB", pid);
+        free(datos_recibidos);   /* aun sin PCB, el texto recibido hay que liberarlo */
         return;
     }
+
+    free(datos_recibidos);       /* recibir_mensaje hace malloc; ya lo mandamos a KM */
 
     pcb->esperando_io = false;
 
     mediano_plazo_rdy (pcb);
 
-
-    log_info(logger,
-        "## PID:[%d] Finalizo IO STDIN",
-        pcb->data.PID
-    );
+    log_info(logger, "## PID:[%d] Finalizo IO STDIN", pcb->data.PID);
 
     pthread_mutex_lock(&mutex_ios);
     t_IO *io = list_find_with_context(
@@ -2777,13 +2799,18 @@ void rta_io_stdin(int socket_io){
     );
     if (io != NULL) {
         io->enUso = false;
+
+        /* STDIN tampoco pasa por io_finalizada: se libera el trabajo aca. */
+        if (io->pid_ejec != NULL) {
+            free(io->pid_ejec);
+            io->pid_ejec = NULL;
+        }
+
         log_info(logger, "IO liberada");
     }
     pthread_mutex_unlock(&mutex_ios);
 
     enviar_op_code(OK, socket_io);
-
-
 }
 
 
@@ -2909,9 +2936,6 @@ int rev_desconexion (int cliente_fd){
 
     log_info(logger, "Atendiendo desconexion de CLiente");
 
-    /* SIN pthread_mutex_lock(&mutex_cpus): gestionar_desconexion_cpu() y
-       gestionar_desconexion_io() ya toman los mutex que necesitan por dentro.
-       Tomarlo aca producia un deadlock (mutex no recursivo). */
 
     bool encontrado = false;
 
@@ -2951,190 +2975,142 @@ int rev_desconexion (int cliente_fd){
 
 void gestionar_desconexion_cpu(t_CPU* cpu) {
 
-    if (!cpu->enUso)
-    {
-        log_info(logger, "La CPU desconectada no estaba siendo utilizada");
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
-
-        free(cpu);
-
-        return;
-    }
-
-    PCB* pcb_ejec = buscar_pcb_por_pid(cpu->pid_ejecutando);
+    
+    pthread_mutex_lock(&mutex_cpus);
+    list_remove_element(list_suplementarias->cpu, cpu);
+    pthread_mutex_unlock(&mutex_cpus);
 
     quitar_retorno_cpu(cpu->pid_ejecutando);
 
-    if (pcb_ejec == NULL) 
-    {
-        log_error(logger, "Error al identificar el porceso que se estaba ejecutando en la CPU desconectada");
+    PCB* pcb_ejec = (cpu->pid_ejecutando < 0)
+                        ? NULL
+                        : buscar_pcb_por_pid(cpu->pid_ejecutando);
 
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
-        
+    if (pcb_ejec == NULL) {
+        log_info(logger, "La CPU desconectada no tenia proceso asignado");
+        free(cpu->identificador);
         free(cpu);
         return;
     }
-    
-    if (pcb_ejec->estado_pcb == RNN)
-    {
-        cambiar_estado_pcb(pcb_ejec, RDY);
-        eliminar_proceso_Lista(pcb_ejec);
-        agregar_proceso_lista(pcb_ejec);
 
+    bool sigue_en_esta_cpu = (pcb_ejec->fd_cpu == cpu->fd);
 
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
-    }
-    else if (pcb_ejec->estado_pcb == BCK && pcb_ejec->esperando_io)
-    {
+    if (sigue_en_esta_cpu && pcb_ejec->estado_pcb == RNN) {
+
         pthread_mutex_lock(&sem_procesos_s_desalojo);
         sacar_pcb_por_pid(list_suplementarias->desalojo, pcb_ejec->data.PID);
         pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
-        log_info(logger, "EL PID:[%d] No fue desalojada debido a la desconexion de la CPU que lo estaba Ejecutando",pcb_ejec->data.PID);
-    }
-    else if (pcb_ejec->estado_pcb == BCK )
-    {
-        cambiar_estado_pcb(pcb_ejec,RDY);
+        cambiar_estado_pcb(pcb_ejec, RDY);
         eliminar_proceso_Lista(pcb_ejec);
         agregar_proceso_lista(pcb_ejec);
-        
-        
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
+
+        log_info(logger, "## PID:[%d] Replanificado a READY por desconexion de su CPU",
+                 pcb_ejec->data.PID);
     }
-    else 
-    {
-        log_error(logger, "Error con Estado del Proceso Ejecutando");
-        pthread_mutex_lock(&mutex_cpus);
-        list_remove_element(list_suplementarias->cpu, cpu);
-        pthread_mutex_unlock(&mutex_cpus);
+    else if (sigue_en_esta_cpu && pcb_ejec->estado_pcb == BCK && pcb_ejec->esperando_io) {
+
+        pthread_mutex_lock(&sem_procesos_s_desalojo);
+        sacar_pcb_por_pid(list_suplementarias->desalojo, pcb_ejec->data.PID);
+        pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+        log_info(logger, "El PID:[%d] queda en BLOCK esperando IO pese a la desconexion de su CPU",
+                 pcb_ejec->data.PID);
     }
+    else if (sigue_en_esta_cpu && pcb_ejec->estado_pcb == BCK) {
+
+        pthread_mutex_lock(&sem_procesos_s_desalojo);
+        sacar_pcb_por_pid(list_suplementarias->desalojo, pcb_ejec->data.PID);
+        pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
+        cambiar_estado_pcb(pcb_ejec, RDY);
+        eliminar_proceso_Lista(pcb_ejec);
+        agregar_proceso_lista(pcb_ejec);
+
+        log_info(logger, "## PID:[%d] Replanificado a READY por desconexion de su CPU (estaba en BLOCK)",
+                 pcb_ejec->data.PID);
+    }
+    else {
+        log_info(logger, "La CPU desconectada no estaba ejecutando activamente (PID %d en estado %d)",
+                 cpu->pid_ejecutando, pcb_ejec->estado_pcb);
+    }
+
+    free(cpu->identificador);
     free(cpu);
-    return;
-    
 }
 
 void gestionar_desconexion_io(t_IO* io) {
 
-    if (!io->enUso)
-    {
+    sem_t*  sem_disponibilidad = NULL;   /* init_sem_*  : "hay una IO de este tipo" */
+    sem_t*  sem_trabajo        = NULL;   /* sem_io_*_vacio : "hay trabajo pendiente" */
+    t_list* lista_ios          = NULL;   /* lista de IOs registradas de este tipo */
+    t_list* lista_trabajo      = NULL;   /* cola de trabajo pendiente de este tipo */
+
+    if (strcmp(io->nombre, "SLEEP") == 0) {
+        sem_disponibilidad = &init_sem_sleep;
+        sem_trabajo        = &sem_io_sleep_vacio;
+        lista_ios          = list_suplementarias->io_sleep;
+        lista_trabajo      = lista_bck_io->io_sleep;
+    }
+    else if (strcmp(io->nombre, "STDIN") == 0) {
+        sem_disponibilidad = &init_sem_stdin;
+        sem_trabajo        = &sem_io_stdin_vacio;
+        lista_ios          = list_suplementarias->io_stdin;
+        lista_trabajo      = lista_bck_io->io_stdin;
+    }
+    else if (strcmp(io->nombre, "STDOUT") == 0) {
+        sem_disponibilidad = &init_sem_stdout;
+        sem_trabajo        = &sem_io_stdout_vacio;
+        lista_ios          = list_suplementarias->io_stdout;
+        lista_trabajo      = lista_bck_io->io_stdout;
+    }
+    else {
+        log_error(logger, "IO desconectada con tipo desconocido: [%s]", io->nombre);
+        return;   /* no se libera: no sabemos de qué lista sacarla */
+    }
+
+    /* --- Reencolado del trabajo en curso, si habia --- */
+    espera_io* trabajo_pendiente = NULL;
+
+    if (io->enUso && io->pid_ejec != NULL) {
+
+        PCB* pcb_ejec = buscar_pcb_por_pid(io->pid_ejec->pid);
+
+        if (pcb_ejec == NULL) {
+            log_error(logger, "La IO [%s] tenia trabajo del PID %d pero no se encontro su PCB",
+                      io->nombre, io->pid_ejec->pid);
+        }
+        else if (pcb_ejec->estado_pcb == BCK || pcb_ejec->estado_pcb == S_BCK) {
+            log_info(logger, "Se Repite la Señal de IO para el PID:[%d] IO:[%s]",
+                     pcb_ejec->data.PID, io->nombre);
+            trabajo_pendiente = io->pid_ejec;   /* se reencola abajo */
+        }
+        else {
+            log_error(logger, "El PID:[%d] de la IO [%s] estaba en estado inesperado: %d",
+                      pcb_ejec->data.PID, io->nombre, pcb_ejec->estado_pcb);
+        }
+    }
+    else if (io->enUso) {
+        log_error(logger, "La IO [%s] figuraba en uso pero sin trabajo asignado", io->nombre);
+    }
+    else {
         log_info(logger, "La IO desconectada no estaba siendo utilizada");
-
-        pthread_mutex_lock(&mutex_ios);
-        if(strcmp(io->nombre, "SLEEP") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_sleep, io); 
-            sem_wait(&init_sem_sleep);
-        }
-        else if(strcmp(io->nombre, "STDIN") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_stdin, io); 
-            sem_wait(&init_sem_stdin);
-        }
-        else if(strcmp(io->nombre, "STDOUT") == 0)
-        {
-            list_remove_element(list_suplementarias->io_stdout, io); 
-            sem_wait(&init_sem_stdout);   
-        } 
-        pthread_mutex_unlock(&mutex_ios);
-
-        free(io);
-
-        return;
     }
 
-    PCB* pcb_ejec = buscar_pcb_por_pid(io->pid_ejec->pid);
-
-    if (pcb_ejec == NULL) 
-    {
-        log_error(logger, "Error al identificar el porceso que se estaba ejecutando en la CPU desconectada");
-        pthread_mutex_lock(&mutex_ios);
-        if(strcmp(io->nombre, "SLEEP") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_sleep, io); 
-            sem_wait(&init_sem_sleep);
-        }
-        else if(strcmp(io->nombre, "STDIN") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_stdin, io); 
-            sem_wait(&init_sem_stdin);
-        }
-        else if(strcmp(io->nombre, "STDOUT") == 0)
-        {
-            list_remove_element(list_suplementarias->io_stdout, io); 
-            sem_wait(&init_sem_stdout);   
-        } 
-        pthread_mutex_unlock(&mutex_ios);
-        free(io);
-        return;
-    }
-    
-    if (pcb_ejec->estado_pcb == BCK || pcb_ejec->estado_pcb == S_BCK) 
-    {
-        log_info(logger, "Se Repite la Señal de IO para el PID:[%d] IO:[%s]", pcb_ejec->data.PID, io->nombre);
-
-
-        if(strcmp(io->nombre, "SLEEP") == 0) 
-        {
-            pthread_mutex_lock(&mutex_ios);
-            list_add(lista_bck_io->io_sleep, io->pid_ejec);
-            pthread_mutex_unlock(&mutex_ios);
-
-            sem_post(&sem_io_sleep_vacio);
-        }
-        else if(strcmp(io->nombre, "STDIN") == 0) 
-        {
-            pthread_mutex_lock(&mutex_ios);
-            list_add(lista_bck_io->io_stdin, io->pid_ejec);
-            pthread_mutex_unlock(&mutex_ios);
-
-            sem_post(&sem_io_stdin_vacio);
-        }
-        else if(strcmp(io->nombre, "STDOUT") == 0)
-        {
-            pthread_mutex_lock(&mutex_ios);
-            list_add(lista_bck_io->io_stdout, io->pid_ejec);
-            pthread_mutex_unlock(&mutex_ios);
-
-            sem_post(&sem_io_stdout_vacio); 
-        } 
-
-
-    }
-    else 
-    {
-        log_error(logger, "Error con Estado del Proceso Ejecutando");
-    }
     pthread_mutex_lock(&mutex_ios);
-        if(strcmp(io->nombre, "SLEEP") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_sleep, io); 
-            sem_wait(&init_sem_sleep);
-        }
-        else if(strcmp(io->nombre, "STDIN") == 0) 
-        {
-            list_remove_element(list_suplementarias->io_stdin, io); 
-            sem_wait(&init_sem_stdin);
-        }
-        else if(strcmp(io->nombre, "STDOUT") == 0)
-        {
-            list_remove_element(list_suplementarias->io_stdout, io); 
-            sem_wait(&init_sem_stdout);   
-        } 
-        pthread_mutex_unlock(&mutex_ios);
 
+        list_remove_element(lista_ios, io);
+
+        if (trabajo_pendiente != NULL)
+            list_add(lista_trabajo, trabajo_pendiente);
+
+    pthread_mutex_unlock(&mutex_ios);
+
+
+    sem_wait(sem_disponibilidad);     /* cierra el torniquete: una IO menos de este tipo */
+
+    free(io->nombre);                 /* lo aloco recibir_mensaje en nueva_io */
     free(io);
 
-    return;
-    
+    /* trabajo_pendiente NO se libera: sigue vivo en lista_trabajo */
 }

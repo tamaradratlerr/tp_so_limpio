@@ -19,6 +19,9 @@ int socket_kernel_scheduler = -1;
 
 /*MAIN*/
 int main(int argc, char** argv) {
+
+    signal(SIGPIPE, SIG_IGN); 
+
     if (argc < 2) {
         printf("Falta el path al archivo de config\n");
         return 1;
@@ -315,6 +318,7 @@ void* atender_cliente_inicial(void* arg)
         case NUEVA_CPU:
             char* id = recibir_mensaje(cliente_fd, logger);
             log_info(logger, "## CPU ID:[%s] Conectada", id);
+            free(id);                   
             enviar_op_code(OK,cliente_fd);
 
             atender_cpu(cliente_fd);

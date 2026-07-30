@@ -170,7 +170,12 @@ int main(int argc, char *argv[])
 
         control_loop = 1;
         while (control_loop == 1){
-            
+
+            if (instruccion_decodificada != NULL) {
+                liberar_instruccion(instruccion_decodificada);
+                instruccion_decodificada = NULL;
+            }
+
             log_debug(logger,"Nuevo Ciclo de Instruccion");
             log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
             
@@ -236,7 +241,12 @@ int main(int argc, char *argv[])
             proceso_en_ejecucion->pid = -1;
     }
 
-    terminar_programa (logger, config, sockets); /*Pensar si hay algo mas que se tenga que [cerrar / terminar]*/
+            liberar_instruccion(instruccion_decodificada);
+            instruccion_decodificada = NULL;
+            limpiar_contexto_actual();
+            proceso_en_ejecucion->pid = -1;
+
+            terminar_programa(logger, config, sockets); /*Pensar si hay algo mas que se tenga que [cerrar / terminar]*/
 }
 
 /* ---------------- FUNCIONES ADMINISTRATIVAS ---------------- */
@@ -253,7 +263,9 @@ t_log* iniciar_logger(t_log_level log_level)
 
 int iniciar_log_config(char* archivo_config, char* identificador){    
     sockets = malloc(sizeof(t_cpu_sockets));
-    sockets->memory_sticks = list_create();
+
+    sockets->memory_sticks = NULL;
+
     proceso_en_ejecucion = malloc(sizeof(t_proceso_ejec));
 
     config = iniciar_config(archivo_config);

@@ -156,7 +156,7 @@ int main(int argc, char **argv)
 			log_info(logger, "## PID: %u - STDIN - Ingrese %u Caracteres.", pid, bytes_a_leer);
 
 			char *entrada = malloc(bytes_a_leer + 2);		// +2 por '\n' y '\0'
-			char *buffer_usuario = calloc(bytes_a_leer, 1); // queda lleno de '\0'
+			char *buffer_usuario = calloc(bytes_a_leer + 1, 1); // queda lleno de '\0'
 
 			fgets(entrada, bytes_a_leer + 2, stdin);
 

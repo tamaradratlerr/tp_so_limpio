@@ -12,6 +12,8 @@ extern int socket_km;
 
 int main(int argc, char** argv)
 {
+    signal(SIGPIPE, SIG_IGN);
+
     validar_argumentos(argc, argv);
 
     config = config_create(argv[1]);
@@ -119,6 +121,8 @@ void escribir_en_bloque_memoria(uint32_t dir_fisica, void* datos_a_escribir, uin
 }
 
 void* leer_de_bloque_memoria(uint32_t dir_fisica, uint32_t tamanio) {
+    
+    
     log_debug(logger, "llegó a leer bloque de memoria");
     
     usleep(delay_memoria * 1000);
@@ -159,15 +163,13 @@ void* atender_cliente(void* arg) {
        if (cop == NUEVA_CPU) 
        {
 
-        char* identificador = recibir_mensaje(socket_cliente, logger);
-        // Confirmamos handshake
+            char* identificador = recibir_mensaje(socket_cliente, logger);
+        
             enviar_op_code(OK, socket_cliente);
 
-            // FIX Error 3: ya NO se envían base y tamaño. La CPU los recibe del
-            // Kernel Scheduler; estos 2 send() dejaban 8 bytes huérfanos en el
-            // socket que desincronizaban la primera lectura/escritura real.
 
             log_info(logger, "## CPU ID:[%s] Conectada", identificador);
+            free(identificador);        /* recibir_mensaje hace malloc */
 
             pthread_mutex_lock(&mutex_memoria);
 

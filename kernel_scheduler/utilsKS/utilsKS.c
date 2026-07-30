@@ -94,8 +94,6 @@ t_listas_procesos* Iniciar_listas_procesos (){ /*Funcion que inicializa todas la
     sem_init(&init_sem_sleep, 0, 0);
     sem_init(&init_sem_stdin, 0, 0);
     sem_init(&init_sem_stdout, 0, 0);
-    
-
 
 	return listasProcesos;
 };
@@ -121,7 +119,10 @@ void terminar_listas_procesos (){ /*Funcion que destruye las listas de los Proce
     sem_destroy(&init_sem_sleep);
     sem_destroy(&init_sem_stdin);
     sem_destroy(&init_sem_stdout);
+
+    free(listasProcesos);
 }
+
 
 void iniciar_listas_suple()
 {
@@ -134,8 +135,7 @@ void iniciar_listas_suple()
     list_suplementarias->ms = list_create();
     list_suplementarias->desalojo = list_create();
     list_suplementarias->retorno_cpu = list_create();
-    
-    lista_mutex = malloc(sizeof(t_list));
+
     lista_mutex = list_create();
 
     lista_bck_io = malloc(sizeof(t_list_ios));
@@ -146,27 +146,24 @@ void iniciar_listas_suple()
 }
 
 void eliminar_listas_suple (){ /* Funcion que destruye las listas de CPUs y IOs (Suplmentarias)*/
-    
+
     list_destroy(list_suplementarias->cpu);
     list_destroy(list_suplementarias->io_sleep);
     list_destroy(list_suplementarias->io_stdin);
     list_destroy(list_suplementarias->io_stdout);
     list_destroy(list_suplementarias->ms);
     list_destroy(list_suplementarias->desalojo);
-    list_destroy_and_destroy_elements(list_suplementarias->retorno_cpu, free); 
-    
-    free(list_suplementarias);
+    list_destroy_and_destroy_elements(list_suplementarias->retorno_cpu, free);
 
-    list_destroy(lista_mutex);
+    free(list_suplementarias);   /* struct: se libera con free (VA) */
 
-    free(lista_mutex);
-    
+    list_destroy(lista_mutex);   /* lista: list_destroy ya la libera; NO poner free (seria doble free) */
+
     list_destroy(lista_bck_io->io_sleep);
     list_destroy(lista_bck_io->io_stdin);
     list_destroy(lista_bck_io->io_stdout);
 
-    free(lista_bck_io);
-
+    free(lista_bck_io);          /* struct: se libera con free (VA) */
 }
 
 /*-----                     GESTION DE LISTAS DE PCBs                    -----*/

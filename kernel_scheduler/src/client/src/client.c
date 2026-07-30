@@ -132,7 +132,7 @@ int cliente_Kernel_Scheduler (int argc, char *argv[])
 	PCB* nuevo_pcb;
 
 		log_debug(logger,"Iniciando Proceso Inicial");
-		nuevo_pcb = crearNuevoProceso(archivo_procesos, 1, info_km.conexion_km);	
+		nuevo_pcb = crearNuevoProceso(archivo_procesos, 0, info_km.conexion_km);	
 
 	int resp_init_proc = recibir_op_code(info_km.conexion_km);
 

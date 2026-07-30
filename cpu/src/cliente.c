@@ -1233,7 +1233,7 @@ void ejecutar_stdin(t_instruccion* instr) {
 void ejecutar_init_proc(t_instruccion* instr) {
 
     char* path = instr->params[0];
-    int prioridad = atoi(instr->params[1]) - 1;
+    int prioridad = atoi(instr->params[1]);
 
     log_info(logger,
         "## PID:[%d] - Ejecutando [INIT PROC] - PATH [%s] - Prioridad [%d]",
@@ -1593,6 +1593,7 @@ void recibir_memory_stick(int socket_ks)
 
 
     enviar_op_code(NUEVA_CPU,ms->socket);
+    enviar_mensaje(identificador, ms->socket);
 
     if(recibir_op_code(ms->socket)!=OK)
     {

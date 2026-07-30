@@ -10,6 +10,6 @@
 
 ./bin/kernel_scheduler src/client/cliente.config PHP.prc
 
-./bin/swap client.config
+./bin/swap swap.config
 
 

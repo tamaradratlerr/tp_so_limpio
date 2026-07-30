@@ -536,6 +536,29 @@ bool _ordenar_por_base(void* seg1, void* seg2) {
     return ((t_segmento_aux*)seg1)->direccion_base < ((t_segmento_aux*)seg2)->direccion_base; 
 }
 
+
+// Conexión "suave" a Kernel Scheduler: intenta UNA vez y devuelve -1 si falla,
+// sin abortar (crear_conexion aborta).
+int conectar_ks_suave(char* ip, char* puerto) {
+    struct addrinfo hints, *server_info;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(ip, puerto, &hints, &server_info) != 0) return -1;
+
+    int fd = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
+    if (fd == -1) { freeaddrinfo(server_info); return -1; }
+
+    if (connect(fd, server_info->ai_addr, server_info->ai_addrlen) != 0) {
+        close(fd);
+        freeaddrinfo(server_info);
+        return -1;
+    }
+
+    freeaddrinfo(server_info);
+    return fd;
+}
 void conexion_memory_stick(int socket_ms) {
     
     uint32_t tamanio_recibido = 0;
@@ -591,10 +614,29 @@ void conexion_memory_stick(int socket_ms) {
     pthread_mutex_unlock(&mutex_lista_libres);
     log_info(logger, "## Memory Stick de %u bytes Conectada", tamanio_recibido);
 
-    // No le avisamos a Kernel Scheduler por este socket: es la misma conexión
-    // que KS usa para sus propios pedidos, y nadie del lado de KS está leyendo
-    // avisos espontáneos ahí — mandarlo corrompía el protocolo. KS se entera
-    // solo, reintentando la desuspensión periódicamente.
+
+    pthread_t hilo_monitor;
+    pthread_create(&hilo_monitor, NULL, monitorear_memory_stick, nuevo_ms);
+    pthread_detach(hilo_monitor);
+
+    // Si Kernel Scheduler YA está arriba (este MS se conectó EN CALIENTE), le
+    // avisamos por una conexión nueva. Si no está (MS inicial), falla suave y
+    // no pasa nada: esos los cubre el handshake inicial.
+    char* ip_ks = config_get_string_value(config_km, "IP_KERNEL_SCHEDULER");
+    char* puerto_ks = config_get_string_value(config_km, "PUERTO_KERNEL_SCHEDULER");
+
+    if (ip_ks != NULL && puerto_ks != NULL) {
+        int fd_ks = conectar_ks_suave(ip_ks, puerto_ks);
+        if (fd_ks >= 0) {
+            enviar_op_code(NUEVA_MEMORY_STICK, fd_ks);
+            enviar_mensaje(nuevo_ms->ip, fd_ks);
+            enviar_mensaje(nuevo_ms->port, fd_ks);
+            enviar_int(nuevo_ms->base_global, fd_ks);
+            enviar_int(nuevo_ms->tamanio, fd_ks);
+            close(fd_ks);
+            log_info(logger, "## Nuevo Memory Stick avisado al Kernel Scheduler (en caliente)");
+        }
+    }
 }
 
 void enviar_lista_memory_sticks(int socket_ks) {
@@ -620,6 +662,26 @@ void enviar_lista_memory_sticks(int socket_ks) {
  bool mem_corrupt_notificado = false;
  pthread_mutex_t mutex_mem_corrupt = PTHREAD_MUTEX_INITIALIZER;
 
+// Hilo "vigía": queda escuchando la conexión de UN Memory Stick. Si el
+// Memory Stick se cae, lo detecta y marca la memoria como corrupta.
+void* monitorear_memory_stick(void* arg)
+{
+    t_memory_stick_nodo* ms = (t_memory_stick_nodo*) arg;
+    char b;
+
+    while (1) {
+        int r = recv(ms->socket_fd, &b, 1, MSG_PEEK);
+
+        if (r <= 0) {
+            manejar_caida_memory_stick(ms);
+            return NULL;
+        }
+
+        usleep(100000);
+    }
+
+    return NULL;
+}
 void manejar_caida_memory_stick(t_memory_stick_nodo* ms)
 {
     pthread_mutex_lock(&mutex_mem_corrupt);

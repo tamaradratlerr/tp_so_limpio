@@ -3,6 +3,9 @@
 #include "utilsKS.h"
 #include "../../utils/src/global_utils.h"
 
+t_list* list_ms_pendientes = NULL;
+pthread_mutex_t mutex_ms_pendientes = PTHREAD_MUTEX_INITIALIZER;
+
 int main(int argc, char *argv[]) /*OK*/
 {
     signal(SIGPIPE, SIG_IGN);
@@ -710,12 +713,6 @@ void verificar_desalojo_por_prioridad(PCB* pcb)
         if (pcb->data.prioridad_original < pcb_rnn->data.prioridad_original){
             pthread_mutex_unlock(&sem_procesos_running);   // soltar antes de tocar otras listas
 
-            cambiar_estado_pcb(pcb_rnn, BCK);
-            eliminar_proceso_Lista(pcb_rnn);
-            agregar_proceso_lista(pcb_rnn);
-            
-            loguear_lista(listasProcesos->bck, logger);
-
             pthread_mutex_lock(&sem_procesos_s_desalojo);
             list_add(list_suplementarias->desalojo, pcb_rnn);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
@@ -978,13 +975,46 @@ void desalojo(int socket_cliente)
             // acá: era una variable local que no se usaba para nada
         }
     }
-    else {
+        else {
 
-        log_info(logger, "No es Necesario Relizar Acciones");
-        log_debug(logger, "NO HAY DESAOLOJO");
-        enviar_op_code(OK, socket_cliente);
-        desalojado = 0;
+        // ¿Hay un Memory Stick nuevo (en caliente) pendiente de avisar?
+        t_mem_stick* pendiente = NULL;
+        pthread_mutex_lock(&mutex_ms_pendientes);
+        if (list_ms_pendientes != NULL && list_size(list_ms_pendientes) > 0)
+            pendiente = list_remove(list_ms_pendientes, 0);
+        pthread_mutex_unlock(&mutex_ms_pendientes);
+
+                if (pendiente != NULL) {
+
+            enviar_op_code(NUEVA_MEMORY_STICK, socket_cliente);
+
+            // La CPU espera un buffer PLANO: ip\0 puerto\0 base tamanio.
+            int len_ip = strlen(pendiente->ip) + 1;
+            int len_puerto = strlen(pendiente->puerto) + 1;
+            int size = len_ip + len_puerto + sizeof(uint32_t) * 2;
+
+            void* buffer = malloc(size);
+            int off = 0;
+            memcpy(buffer + off, pendiente->ip, len_ip);           off += len_ip;
+            memcpy(buffer + off, pendiente->puerto, len_puerto);   off += len_puerto;
+            memcpy(buffer + off, &pendiente->base, sizeof(uint32_t));    off += sizeof(uint32_t);
+            memcpy(buffer + off, &pendiente->tamanio, sizeof(uint32_t)); off += sizeof(uint32_t);
+
+            enviar_buffer(buffer, size, socket_cliente);
+            free(buffer);
+
+            log_info(logger, "CPU %s recibió nueva Memory Stick ", cpu_id);
+            desalojado = 0;
+        }
+        else {
+
+            log_info(logger, "No es Necesario Relizar Acciones");
+            log_debug(logger, "NO HAY DESAOLOJO");
+            enviar_op_code(OK, socket_cliente);
+            desalojado = 0;
+        }
     }
+
 
     err = recibir_op_code(socket_cliente);
 
@@ -1411,11 +1441,20 @@ void recibir_nueva_memory_stick(int socket_km)
         );
 
 
-        enviar_memory_stick_a_cpus(ms);
+                // No escribimos directo a la CPU (rompía el protocolo). Encolamos el
+        // aviso y la CPU lo recibe cuando pregunta por desalojo (canal seguro).
+        if (list_ms_pendientes == NULL) list_ms_pendientes = list_create();
+        pthread_mutex_lock(&mutex_ms_pendientes);
+        list_add(list_ms_pendientes, ms);
+        pthread_mutex_unlock(&mutex_ms_pendientes);
+
         nuevo_espacio();
-    
-    } 
+
+    }
 }
+    
+    
+
 
 //NUEVO_ESPACIO
 void nuevo_espacio()
@@ -2474,10 +2513,6 @@ void init_proc(int socket_cliente) {
         return;
     }
 
-    cambiar_estado_pcb(pcb, BCK);
-    eliminar_proceso_Lista(pcb);
-    agregar_proceso_lista(pcb);
-
     pthread_mutex_lock(&sem_procesos_s_desalojo);
     list_add(list_suplementarias->desalojo, pcb);
     pthread_mutex_unlock(&sem_procesos_s_desalojo);
@@ -2538,16 +2573,7 @@ void exit_proceso(int socket_cpu){ /*OK*/
 
     log_info(logger, "## PID:[%d] Solicito Syscall: [Exit Proc]", pid_a_finalizar); /*Logger Obligatorio*/
 
-    cambiar_estado_pcb(pcb,BCK);
-    eliminar_proceso_Lista(pcb);
-    agregar_proceso_lista(pcb);
-    
-
-
-    pthread_mutex_lock(&sem_procesos_s_desalojo);
-    list_add(list_suplementarias->desalojo, pcb);
-    pthread_mutex_unlock(&sem_procesos_s_desalojo);
-    
+   
     
     enviar_op_code(OK, socket_cpu);
 

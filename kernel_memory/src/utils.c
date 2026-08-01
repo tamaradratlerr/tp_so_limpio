@@ -847,8 +847,6 @@ void ejecutar_compactacion_fisica_memory_stick() {
     for (int i = 0; i < list_size(lista_contextos); i++) {
         t_contexto* ctx = list_get(lista_contextos, i);
 
-        // NUEVO: solo compactar segmentos que están en RAM; los que están en
-        // SWAP no tienen dirección física válida y no se tocan.
         for (int j = 0; j < list_size(ctx->tabla_segmentos); j++) {
             t_segmento_aux* seg = list_get(ctx->tabla_segmentos, j);
             if (!seg->en_swap) {

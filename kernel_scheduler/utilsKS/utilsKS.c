@@ -451,7 +451,7 @@ PCB* iniciar_pcb (int PID, int prioridad){
 PCB*   crearNuevoProceso(char* path, int prioridad, int fd_km) {
     
     PCB* nuevoPcb = iniciar_pcb(contador_pid, prioridad);
-    log_info (logger, "## Se crea el proceso PID [%d] - Estado [NEW]", contador_pid);
+    log_info (logger, "## (%d) Se crea el proceso - Estado: NEW", contador_pid);
 
     enviarProcesoKM(nuevoPcb, path, fd_km);
 	contador_pid++;
@@ -501,7 +501,7 @@ void cambiar_estado_pcb(PCB* pcb, estado nuevoEstado){
     if (nuevoEstado == BCK)
         pcb->block_version++;
 
-    log_info (logger, "## PID:[%d] Pasa del Estado [%s] al estado [%s]",
+    log_info (logger, "## PID:(%d) Pasa del Estado [%s] al estado [%s]",
               pcb->data.PID, nombre_estado(pcb->estado_anterior), nombre_estado(pcb->estado_pcb));
 }
 

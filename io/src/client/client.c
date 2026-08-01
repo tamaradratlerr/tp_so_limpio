@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 	/* Inicio configuración */
 	t_config *io_config = iniciar_config(argv[1]);
 
-	ks_ip = config_get_string_value(io_config, "KS_IP");	 /* Ip del KS */
+	ks_ip = config_get_string_value(io_config, "IP_KERNEL_SCHEDULER");	 /* Ip del KS */
 	ks_port = config_get_string_value(io_config, "KS_PORT"); /* Port del KS */
 	log_level = config_get_string_value(io_config, "LOG_LEVEL");
 	log_file = config_get_string_value(io_config, "LOG_FILE");
@@ -50,6 +50,7 @@ int main(int argc, char **argv)
 	/* Conexion a servidor */
 	log_info(logger, "Iniciando conexión con Kernel Shceduler...");
 	fd_conexion = crear_conexion_reintentando(ks_ip, ks_port, logger, KERNEL_SCHEDULER);
+	
 
 	/* Una vez conectados, quedamos a la espera de mensajes del KERNEL SCHEDULER.*/
 	enviar_op_code(NUEVA_IO, fd_conexion);
@@ -59,6 +60,7 @@ int main(int argc, char **argv)
 	{
 		log_error(logger, "Error en HandShake con KS");
 	}
+	log_info(logger, "## Conectado a Kernel Scheduler");
 	
 	log_info(logger, "Esperando peticiones IO desde %s", getModuleName(KERNEL_SCHEDULER));
 

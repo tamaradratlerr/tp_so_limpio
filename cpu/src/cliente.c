@@ -730,7 +730,8 @@ bool es_registro_32bits(char* nombre) {
 void ejecutar_noop (t_instruccion* instr){/*OK*/
 
     log_info (logger, "## PID:[%d] - Ejecutando [NOOP]",contexto_actual->pid);/*Logger Obligatorio*/
-    //No hace nada
+
+    usleep(config_cpu->tiempo_instruccion * 1000);
 
 }
 

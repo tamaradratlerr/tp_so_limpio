@@ -902,19 +902,15 @@ void nueva_cpu (int cliente_fd)/*OK*/
 //CPU_LIBRE,
 void cpu_libre (int cliente_fd)/*OK*/
 {
-    log_info(logger, "Revision de IOs minimas para ejecucion");
     sem_wait(&init_sem_sleep);
     sem_post(&init_sem_sleep);
 
-    log_info(logger, "1/3 OK");
     sem_wait(&init_sem_stdin);
     sem_post(&init_sem_stdin);
 
-    log_info(logger, "2/3 OK");
     sem_wait(&init_sem_stdout);
     sem_post(&init_sem_stdout);
 
-    log_info(logger, "3/3 OK");
     sem_wait(&sem_compactacion);
 
     mandar_proceso_cpu(cliente_fd);
@@ -2176,10 +2172,6 @@ void mutex_create (int socket_cliente){ /*OK*/
                 return;
             }
 
-    /* MUTEX_CREATE no bloquea: el PCB queda en RNN y vuelve a la misma CPU,
-       igual que MUTEX_UNLOCK. desalojar_por_syscall_mismo_cpu() ya se encarga
-       de encolarlo en la lista de desalojo y de pinear la CPU. */
-
     log_info(logger, "## PID:[%d] Creo el Mutex [%s]", pid, mutex->mutex_id); /*Logger Obligatorio*/
 
     enviar_op_code(OK, socket_cliente);
@@ -2419,11 +2411,7 @@ void mem_alloc (int socket_cliente){
         PCB* pcb = buscar_pcb_por_pid(pid);
 
         if (pcb != NULL) {
-            /* Mismo mecanismo que desalojar_por_syscall_mismo_cpu, pero SIN pinear
-               la CPU: asi desalojo() cae en la rama estado_pcb == RNN y hace
-               RUNNING -> READY liberando la CPU. Es imprescindible, porque los
-               procesos que tienen que liberar memoria necesitan ejecutar para
-               llegar a su punto de bloqueo. La CPU la libera desalojo(). */
+            
             pthread_mutex_lock(&sem_procesos_s_desalojo);
             list_add(list_suplementarias->desalojo, pcb);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);

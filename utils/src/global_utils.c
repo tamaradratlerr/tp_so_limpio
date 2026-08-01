@@ -325,7 +325,7 @@ int recibir_int(int socket_cliente)
     if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0)
     {
 
-        log_debug(logger,"Fue Recibido el INT:[%d]",cod_op);
+        log_debug(logger," el INT:[%d]",cod_op);
         return cod_op;
     }
     else

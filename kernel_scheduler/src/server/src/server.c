@@ -77,7 +77,7 @@ void* atender_nuevo_cliente(void* fd) { /*OK*/
         log_info(logger,"[***ESPERA DE SOLICITUDES***]");
 
         int opcode = recibir_op_code(cliente_fd); //syscall bloqueante --> por lo que no se esta haciendo espera activa; es como que el sistema se duerme hasta que reciva 
-        log_info(logger,"Fue Recibivo el %s", opcode_to_string(opcode));
+
         if(opcode == -1){
             log_warning(logger, "El cliente en el socket [%d] se desconectó.", cliente_fd);
             int err = rev_desconexion(cliente_fd);
@@ -340,6 +340,25 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) /*OK*/
 
 
 /*-----                     GESTION DE CPUs                     -----*/
+
+
+/* Limpia pedidos de desalojo huerfanos: si el quantum vencio y el proceso
+   se bloqueo por syscall antes de que la CPU consuma la interrupcion, la
+   entrada queda viva y le come el proximo turno. */
+static void quitar_de_desalojo(PCB* pcb)
+{
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+
+    for (int i = 0; i < list_size(list_suplementarias->desalojo); ) {
+        PCB* p = list_get(list_suplementarias->desalojo, i);
+        if (p->data.PID == pcb->data.PID) list_remove(list_suplementarias->desalojo, i);
+        else i++;
+    }
+
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+}
+
+
 /* Devuelve true si hay que REINTENTAR (no despacho pero puede despachar mas tarde),
    false si no hay que reintentar (despacho ok, o la CPU murio).
    El token de sem_hay_ready lo consume solo cuando despacha; en cualquier otro
@@ -402,7 +421,8 @@ bool mandar_proceso_cpu(int socket_cliente)
     }
 
     /* ---- Despacho ---- */
-
+    quitar_de_desalojo(pcb_a_ejecutar);
+    
     cambiar_estado_pcb(pcb_a_ejecutar, RNN);
     pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
     agregar_proceso_lista(pcb_a_ejecutar);
@@ -654,6 +674,26 @@ void desalojar_por_syscall_mismo_cpu (PCB* pcb, int socket_cpu, char* nombre_sys
 
 /*-----                     ALGORITMOS DE PLANIFICACION                     -----*/
 
+/* Evita que un mismo PCB entre dos veces en la lista de desalojo. Sin esto,
+   si el desalojo por prioridad y el fin de quantum caen en el mismo turno,
+   la entrada sobrante le come el turno siguiente al proceso. */
+static void agregar_a_desalojo(PCB* pcb)
+{
+    pthread_mutex_lock(&sem_procesos_s_desalojo);
+
+    bool ya_estaba = false;
+
+    for (int i = 0; i < list_size(list_suplementarias->desalojo); i++) {
+        PCB* p = list_get(list_suplementarias->desalojo, i);
+        if (p->data.PID == pcb->data.PID) { ya_estaba = true; break; }
+    }
+
+    if (!ya_estaba)
+        list_add(list_suplementarias->desalojo, pcb);
+
+    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+}
+
 void* control_hilo_quantum(void* arg)
 {
     t_datos_quantum* datos = (t_datos_quantum*) arg;
@@ -668,10 +708,8 @@ void* control_hilo_quantum(void* arg)
     // desactualizada -> se ignora (era el bug de los desalojos espurios).
     if(pcb->estado_pcb == RNN && version == pcb->quantum_version)
     {
-        pthread_mutex_lock(&sem_procesos_s_desalojo);
-        list_add(list_suplementarias->desalojo, pcb);
-        pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
+        agregar_a_desalojo(pcb);
+        
         log_info(
             logger,
             "## PID:[%d] - Desalojado por Fin de Quantum",/*Logger Obligatorio*/
@@ -715,6 +753,13 @@ PCB* obtener_siguiente_proceso() {
 
 void verificar_desalojo_por_prioridad(PCB* pcb)
 {
+    /* FIX FIFO/RR: el desalojo por prioridad es exclusivo de CMN con preemption.
+       En FIFO/RR no existen colas por nivel (planificador == NULL) y ademas
+       FIFO/RR nunca desalojan por prioridad. */
+    if (planificador == NULL ||
+        strcmp(info_config.planificacion_algoritmo, "CMN") != 0)
+        return;
+
     pthread_mutex_lock(&sem_procesos_running);
     int size = list_size(listasProcesos->rnn);   // FIX: antes comparaba i < listasProcesos->rnn (puntero)
 
@@ -727,9 +772,7 @@ void verificar_desalojo_por_prioridad(PCB* pcb)
         if (pcb->data.prioridad < pcb_rnn->data.prioridad){
             pthread_mutex_unlock(&sem_procesos_running);   // soltar antes de tocar otras listas
 
-            pthread_mutex_lock(&sem_procesos_s_desalojo);
-            list_add(list_suplementarias->desalojo, pcb_rnn);
-            pthread_mutex_unlock(&sem_procesos_s_desalojo);
+            agregar_a_desalojo(pcb_rnn);
 
             log_info(logger,"## PID:[%d] Prioridad: [%d] - Desalojado por cola más prioritaria por el proceso PID:[%d] con prioridad [%d]",pcb_rnn->data.PID,pcb_rnn->data.prioridad,pcb->data.PID,pcb->data.prioridad);
             return;
@@ -750,13 +793,15 @@ bool usa_quantum (PCB* pcb)
     {
         int nivel = pcb->data.prioridad;
 
+        if(planificador == NULL || nivel < 0 || nivel >= planificador->cantidad_niveles)
+            return false;
+
         if(planificador->niveles[nivel].tipo == RR)
             return true;
     }
 
     return false;
 }
-
 
    /*----- Mediano Plazo -----*/
 
@@ -1647,6 +1692,13 @@ void actualizar_herencia(mutex_cpu* mutex)
 
 void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
 {
+    /* FIX FIFO/RR: la prioridad solo tiene efecto en CMN. Con FIFO/RR
+       planificador es NULL (nunca se llama a iniciar_planificador_CMN) y
+       tocar planificador->niveles[...] es un segfault seguro. */
+    if (planificador == NULL ||
+        strcmp(info_config.planificacion_algoritmo, "CMN") != 0)
+        return;
+
     int prioridad_vieja = pcb->data.prioridad;
     if (prioridad_vieja == nueva_prioridad) return;
 
@@ -1655,7 +1707,9 @@ void actualizar_prioridad_pcb(PCB* pcb, int nueva_prioridad)
 
     pcb->data.prioridad = nueva_prioridad;
 
-    if (pcb->estado_pcb == RDY) {
+    if (pcb->estado_pcb == RDY &&
+        prioridad_vieja  >= 0 && prioridad_vieja  < planificador->cantidad_niveles &&
+        nueva_prioridad  >= 0 && nueva_prioridad  < planificador->cantidad_niveles) {
         pthread_mutex_lock(&mutex_ready);
         bool estaba = list_remove_element(planificador->niveles[prioridad_vieja].cola, pcb);
         if (estaba)

@@ -212,57 +212,34 @@ void segmentation_fault(int socket_cpu){
 
     if (pcb == NULL) {
         log_error(logger, "PCB = NULL en SEGMENTATION_FAULT");
-
-        /* FIX: aunque no haya PCB hay que matar el pin, si no queda una
-           afinidad huerfana trabando la cabeza de READY para siempre. */
-        quitar_retorno_cpu(pid);
-
-        pthread_mutex_lock(&mutex_cpus);
-        t_CPU* cpu_muerta = list_find_with_context(list_suplementarias->cpu,
-                                                   es_la_cpu_buscada, &socket_cpu);
-        if (cpu_muerta != NULL) {
-            cpu_muerta->enUso          = false;
-            cpu_muerta->pid_ejecutando = -1;
-        }
-        pthread_mutex_unlock(&mutex_cpus);
-
-        return;
+        quitar_retorno_cpu(pid);                  /* AGREGADO */
+        return;                                   // antes seguía y hacía pcb->data.PID
     }
 
-    /* FIX: el proceso se muere -> su afinidad deja de tener sentido. */
-    quitar_retorno_cpu(pid);
-
-    /* FIX: si estaba marcado para desalojar, sacarlo (ya no existe). */
-    pthread_mutex_lock(&sem_procesos_s_desalojo);
-    sacar_pcb_por_pid(list_suplementarias->desalojo, pid);
-    pthread_mutex_unlock(&sem_procesos_s_desalojo);
-
-    pcb->fd_cpu = 0;
-    pcb->quantum_version++;              /* invalida el timer de quantum vigente */
+    quitar_retorno_cpu(pid);                      /* AGREGADO */
 
     cambiar_estado_pcb(pcb, EXT);
     eliminar_proceso_Lista(pcb);
     agregar_proceso_lista(pcb);
+    
+
+    // ELIMINADO: list_add(list_suplementarias->desalojo, pcb);
 
     enviar_proceso_finalizar_KM(pcb->data.PID);
 
     pthread_mutex_lock(&mutex_cpus);
-
-    t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
-                                              es_la_cpu_buscada, &socket_cpu);
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
     if (cpu_libre == NULL) {
         pthread_mutex_unlock(&mutex_cpus);
         log_error(logger, "Error al encontrar CPU en la lista");
         return;
     }
 
-    cpu_libre->enUso          = false;
-    cpu_libre->pid_ejecutando = -1;      /* FIX */
-
+    cpu_libre->enUso = false;
+    cpu_libre->pid_ejecutando = -1;               /* AGREGADO */
     pthread_mutex_unlock(&mutex_cpus);
 
-    log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [SEG_FAULT]", pid);
-
+    log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [SEG_FAULT]", pcb->data.PID);
     nuevo_espacio();
 }
 
@@ -2576,73 +2553,61 @@ void init_proc(int socket_cliente) {
 }
 
 //EXIT
-void exit_proceso(int socket_cpu){
+void exit_proceso(int socket_cpu){ /*OK*/
 
     log_debug(logger, "Iniciando EXIT Proceso");
-
+    
     int pid_a_finalizar = recibir_pid(socket_cpu);
 
+    /*Bloqueo y Desalojo*/
     PCB* pcb = buscar_pcb_por_pid(pid_a_finalizar);
 
     if (pcb == NULL){
         log_error(logger, "PCB NULL en [Exit Proceso]");
-
-        /* FIX: igual hay que limpiar el pin y soltar la CPU. */
-        quitar_retorno_cpu(pid_a_finalizar);
-
-        pthread_mutex_lock(&mutex_cpus);
-        t_CPU* cpu_hue = list_find_with_context(list_suplementarias->cpu,
-                                                es_la_cpu_buscada, &socket_cpu);
-        if (cpu_hue != NULL) {
-            cpu_hue->enUso          = false;
-            cpu_hue->pid_ejecutando = -1;
-        }
-        pthread_mutex_unlock(&mutex_cpus);
-
+        quitar_retorno_cpu(pid_a_finalizar);              /* AGREGADO */
         return;
     }
 
-    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit Proc]", pid_a_finalizar);
+    log_info(logger, "## PID:[%d] Solicito Syscall: [Exit Proc]", pid_a_finalizar); /*Logger Obligatorio*/
 
+   
+    
     enviar_op_code(OK, socket_cpu);
 
-    /* FIX: el proceso se muere -> se borra su afinidad y su marca de desalojo. */
-    quitar_retorno_cpu(pid_a_finalizar);
-
-    pthread_mutex_lock(&sem_procesos_s_desalojo);
-    sacar_pcb_por_pid(list_suplementarias->desalojo, pid_a_finalizar);
-    pthread_mutex_unlock(&sem_procesos_s_desalojo);
+    quitar_retorno_cpu(pid_a_finalizar);                  /* AGREGADO */
 
     log_info(logger, "Finalizando proceso PID: %d", pid_a_finalizar);
 
-    if (!mock) { enviar_proceso_finalizar_KM(pid_a_finalizar); }
-    else       { enviar_proceso_finalizar_KM_mock(pid_a_finalizar); }
-
-    pcb->fd_cpu = 0;
-    pcb->quantum_version++;              /* invalida el timer de quantum vigente */
-
-    cambiar_estado_pcb(pcb, EXT);
-    eliminar_proceso_Lista(pcb);
-    agregar_proceso_lista(pcb);
+    if(!mock){enviar_proceso_finalizar_KM(pid_a_finalizar);}
+    else{enviar_proceso_finalizar_KM_mock(pid_a_finalizar);}
+ 
+    
+    if (pcb != NULL) {
+        cambiar_estado_pcb(pcb, EXT);
+        eliminar_proceso_Lista(pcb);
+        agregar_proceso_lista (pcb);
+        
+    }
+    else{
+        log_error(logger, "PCB = NULL en EXIT_PROCESO");
+    }
 
     pthread_mutex_lock(&mutex_cpus);
+    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cpu);
+    
 
-    t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
-                                              es_la_cpu_buscada, &socket_cpu);
-    if (cpu_libre == NULL) {
+    if(cpu_libre == NULL){
         pthread_mutex_unlock(&mutex_cpus);
-        log_error(logger, "Error al encontrar CPU en la lista");
+        log_error(logger,"Error al encontrar CPU en la lista");
         return;
     }
 
-    cpu_libre->enUso          = false;
-    cpu_libre->pid_ejecutando = -1;      /* FIX */
-
+    cpu_libre->enUso = false;
+    cpu_libre->pid_ejecutando = -1;                       /* AGREGADO */
     pthread_mutex_unlock(&mutex_cpus);
 
-    log_info(logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",
-             pid_a_finalizar);
-
+    log_info (logger, "## PID:[%d] Finalizo su ejecucion con motivo de [Fin de proceso]",pid_a_finalizar);/*Logger Obligatorio*/
+    
     nuevo_espacio();
 }
 

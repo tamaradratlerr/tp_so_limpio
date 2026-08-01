@@ -151,25 +151,24 @@ int main(int argc, char *argv[])
      while(control_loop00 == 1)
     {
         int contexto_key = 0;
-
-        enviar_op_code(CPU_LIBRE, sockets->conexion_kernel_scheduler);
+        enviar_op_code (CPU_LIBRE, sockets->conexion_kernel_scheduler);
 
         log_info(logger, "Esperando Por Procesos");
 
         if((proceso_en_ejecucion->pid = recibir_pid(sockets->conexion_kernel_scheduler)) == -1){
-            log_error(logger, "Error en Conexion con Kernel Scheduler");
-            return EXIT_FAILURE;          /* FIX: main devuelve int, antes era "return;" */
-        }
 
+            log_error(logger, "Error en Conexion");
+            return EXIT_FAILURE;
+        }
+        
         contexto_key++;
 
-        log_info(logger, "Fue recibido el PID: [%d]", proceso_en_ejecucion->pid);
+        log_info(logger,"Fue recibido el PID: [%d]",proceso_en_ejecucion->pid);
 
-        esExit       = false;
+        esExit = false; 
         exit_control = 0;
 
         control_loop = 1;
-
         while (control_loop == 1){
 
             if (instruccion_decodificada != NULL) {
@@ -177,62 +176,57 @@ int main(int argc, char *argv[])
                 instruccion_decodificada = NULL;
             }
 
-            log_debug(logger, "Nuevo Ciclo de Instruccion");
-            log_debug(logger, "Valor Contexto Key [%d]", contexto_key);
-
+            log_debug(logger,"Nuevo Ciclo de Instruccion");
+            log_debug(logger,"Valor Contexto Key [%d]",contexto_key);
+            
             char* instruccion_raw;
 
-            if(contexto_key == 1)
-            {
-                log_info(logger, "Solicitando Contexto del Proceso PID: [%d]",
-                         proceso_en_ejecucion->pid);
+                if(contexto_key == 1)
+                { 
+                    log_info(logger,"Solicitando Contexto del Proceso PID: [%d]", proceso_en_ejecucion->pid);
+                    contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
 
-                contexto_actual = recibir_contexto(sockets->conexion_kernel_memory);
+                    if (contexto_actual == NULL) {                       /* AGREGADO */
+                        log_error(logger, "No se pudo obtener el contexto del PID [%d]",
+                                  proceso_en_ejecucion->pid);
+                        control_loop = 0;
+                        break;
+                    }
 
-                /* FIX: sin esta guarda, el fetch() de abajo hace
-                   contexto_actual->pid con puntero NULL y la CPU se cae. */
-                if (contexto_actual == NULL) {
-                    log_error(logger,
-                              "No se pudo obtener el contexto del PID [%d]. Se abandona el proceso",
-                              proceso_en_ejecucion->pid);
-                    control_loop = 0;
-                    break;                /* vuelve al while exterior -> CPU_LIBRE */
+                    contexto_key--;
                 }
-
-                contexto_key--;
-            }
-
-            instruccion_raw = fetch(sockets);   /* Fase Fetch */
-
+                
+                instruccion_raw = fetch(sockets); /* Fase Fetch */
+            
             if (instruccion_raw == NULL)
             {
-                /* FIX: antes hacia return EXIT_FAILURE y mataba la CPU entera.
-                   Se abandona solo este proceso y se vuelve a pedir trabajo. */
-                log_error(logger, "Error en Instruccion RAW post FETCH [== NULL]");
-                control_loop = 0;
-                break;
+                log_info(logger, "Error en Instruccion RAW post FETCH [== NULL]");
+                return EXIT_FAILURE;
             }
+            
+            
+            decode(instruccion_raw); /* Fase Decode */
 
-            decode(instruccion_raw);            /* Fase Decode */
-
+           
+            
             if(instruccion_decodificada == NULL) {
-                log_error(logger, "No hay instruccion decodificada");
+                log_error(logger,"No hay instruccion decodificada");
                 continue;
             }
 
-            execute();                          /* Fase Execute */
-
-            if (seg_fault_ocurrido) {
-                /* corta el ciclo: sin PC++, sin interrupt(), sin guardar contexto */
+            execute(); /* Fase Execute */
+            
+            if (seg_fault_ocurrido) {                 // NUEVO: cortar el ciclo, sin PC++, sin interrupt(), sin guardar contexto
                 seg_fault_ocurrido = false;
                 liberar_instruccion(instruccion_decodificada);
                 instruccion_decodificada = NULL;
                 limpiar_contexto_actual();
                 control_loop = 0;
-                break;
+                break;                                // vuelve al while exterior → CPU_LIBRE
             }
 
-            if(control_loop == 0){
+             if(control_loop == 0){
+                log_debug(logger, "entre aca lpm");
                 liberar_instruccion(instruccion_decodificada);
                 instruccion_decodificada = NULL;
                 break;
@@ -241,12 +235,12 @@ int main(int argc, char *argv[])
             if (control_loop == 1 && !pc_modificado) {
                 log_debug(logger, "Antes de incrementar PC: %d", contexto_actual->pc);
                 contexto_actual->pc++;
-                log_debug(logger, "Despues de incrementar PC: %d", contexto_actual->pc);
+                log_debug(logger, "Después de incrementar PC: %d", contexto_actual->pc);
             }
-
-            pc_modificado = false;
-
-            interrupt();                        /* Fase Interrupt */
+            pc_modificado = false;  
+            
+            interrupt();/* Fase Interrupt */
+            
         }
 
             liberar_instruccion(instruccion_decodificada);
@@ -1356,66 +1350,56 @@ t_mem_stick* buscar_memory_stick(uint32_t direccion_fisica) {
 
 uint32_t pedir_direccion_mmu(uint32_t dir_logica, uint32_t tamanio_solicitado)
 {
-    /* FIX: guarda dura. Si llegamos aca sin contexto es un bug de flujo,
-       no un SEG_FAULT del proceso: hay que verlo distinto en el log. */
-    if (contexto_actual == NULL) {
-        log_error(logger, "MMU llamada sin contexto cargado (bug de flujo, NO es SEG_FAULT)");
+    if (contexto_actual == NULL) {                      /* AGREGADO */
+        log_error(logger, "MMU llamada sin contexto cargado");
         return ERROR_SEGMENTATION_FAULT;
     }
 
-    uint32_t id_segmento    = dir_logica / config_cpu->tam_max_segmento;
+    uint32_t id_segmento = dir_logica / config_cpu->tam_max_segmento;
     uint32_t desplazamiento = dir_logica % config_cpu->tam_max_segmento;
 
     id_buscado = id_segmento;
 
-    t_segmento* segmento = list_find(contexto_actual->tabla_segmentos, tiene_mismo_id);
+    log_info(logger, "Cantidad de segmentos: %d",
+         list_size(contexto_actual->tabla_segmentos));
+
+    for(int i = 0; i < list_size(contexto_actual->tabla_segmentos); i++)
+    {
+        t_segmento* s = list_get(contexto_actual->tabla_segmentos, i);
+
+        log_info(logger,
+                "Segmento %d -> id=%d base=%u tam=%u",
+                i,
+                s->id_segmento,
+                s->base,
+                s->tamanio);
+    }
+
+    t_segmento* segmento = list_find(
+        contexto_actual->tabla_segmentos,
+        tiene_mismo_id
+    );
 
     if(segmento == NULL)
     {
-        /* Log ampliado: si los registros vienen con valores absurdos el problema
-           no es el programa, es el contexto que mando Kernel Memory. */
-        log_error(logger,
-                  "SEG_FAULT: Segmento %u inexistente | PID:%d PC:%u dir_logica:%u "
-                  "SI:%u DI:%u segmentos_en_tabla:%d",
-                  id_segmento,
-                  contexto_actual->pid,
-                  contexto_actual->pc,
-                  dir_logica,
-                  contexto_actual->si,
-                  contexto_actual->di,
-                  list_size(contexto_actual->tabla_segmentos));
-
-        for(int i = 0; i < list_size(contexto_actual->tabla_segmentos); i++) {
-            t_segmento* s = list_get(contexto_actual->tabla_segmentos, i);
-            log_error(logger, "   tabla[%d] -> id=%d base=%u tam=%u",
-                      i, s->id_segmento, s->base, s->tamanio);
-        }
-
+        log_error(logger, "SEG_FAULT: Segmento %u inexistente", id_segmento);
         enviar_op_code(ERROR_SEGMENTATION_FAULT, sockets->conexion_kernel_scheduler);
         enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
-        seg_fault_ocurrido = true;
+        seg_fault_ocurrido = true;                       // NUEVO
         return ERROR_SEGMENTATION_FAULT;
     }
 
     if(desplazamiento + tamanio_solicitado > segmento->tamanio)
     {
-        log_error(logger,
-                  "SEG_FAULT: Acceso fuera de limites | PID:%d seg:%u desp:%u pedido:%u tam_seg:%u",
-                  contexto_actual->pid,
-                  id_segmento,
-                  desplazamiento,
-                  tamanio_solicitado,
-                  segmento->tamanio);
-
+        log_error(logger, "SEG_FAULT: Acceso fuera de límites. PID: %u", contexto_actual->pid);
         enviar_op_code(ERROR_SEGMENTATION_FAULT, sockets->conexion_kernel_scheduler);
         enviar_pid(contexto_actual->pid, sockets->conexion_kernel_scheduler);
-        seg_fault_ocurrido = true;
+        seg_fault_ocurrido = true;                       // NUEVO
         return ERROR_SEGMENTATION_FAULT;
     }
 
     return segmento->base + desplazamiento;
 }
-
 
 uint32_t obtener_direccion_del_registro(char* reg)
 {

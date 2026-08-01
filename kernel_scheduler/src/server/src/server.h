@@ -107,6 +107,10 @@ void rta_io_stdout(int socket_io);
 void verificar_desalojo_por_prioridad(PCB* pcb_nuevo);
 void loguear_lista_suplementaria(char* tipo_lista, t_log* logger);
 
+int fd_afinidad_de (int pid);
+PCB* obtener_siguiente_proceso_para_cpu (int fd_cpu);
+void quitar_retorno_por_fd (int fd_cpu);
+
 int rev_desconexion (int cliente_fd);
 void gestionar_desconexion_cpu(t_CPU* cpu);
 void gestionar_desconexion_io(t_IO* io);

@@ -338,131 +338,100 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) /*OK*/
 
 
 /*-----                     GESTION DE CPUs                     -----*/
-
-void  mandar_proceso_cpu(int socket_cliente)/*OK*/
-{ 
-    
+void  mandar_proceso_cpu(int socket_cliente)
+{
     log_opcode(logger, CPU_LIBRE);
 
-    /* ===== RETORNO A LA MISMA CPU (Enunciado pag. 11) =====
-       Si esta CPU tiene un proceso reservado por MEM_ALLOC / MEM_FREE / MUTEX_CREATE /
-       MUTEX_UNLOCK, se le devuelve ESE proceso y no se planifica nada de READY. */
-    if (compactacion_value == 0)
+    /* Se reintenta mientras el turno sea de un proceso con afinidad a OTRA CPU.
+       Ya no hay atajo de "retorno": la reserva es solo afinidad y se resuelve
+       dentro de obtener_siguiente_proceso_para_cpu(). */
+    while (1)
     {
-        int pid_reservado = tomar_retorno_cpu(socket_cliente);
+        sem_wait(&sem_hay_ready);          /* no entra si READY esta vacia */
 
-        if (pid_reservado != -1)
+        pthread_mutex_lock(&mutex_cpus);
+
+        t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
+                                                  es_la_cpu_buscada, &socket_cliente);
+
+        /* Durante la compactacion no se despacha nada. Se devuelve el token y
+           se SALE (no se reintenta): cpu_libre() nos tiene tomado
+           sem_compactacion y girar aca adentro trabaria a compactacion(). */
+        if (compactacion_value)
         {
-            PCB* pcb_reservado = buscar_pcb_por_pid(pid_reservado);
-
-            pthread_mutex_lock(&mutex_cpus);
-            t_CPU* cpu_duenia = list_find_with_context(list_suplementarias->cpu,
-                                                       es_la_cpu_buscada, &socket_cliente);
             pthread_mutex_unlock(&mutex_cpus);
-
-            if (pcb_reservado != NULL && cpu_duenia != NULL && pcb_reservado->estado_pcb == RNN)
-            {
-                cpu_duenia->enUso = true;             /* nunca se libero, se reafirma */
-                cpu_duenia->pid_ejecutando = pid_reservado;
-
-                if (enviar_pid(pid_reservado, cpu_duenia->fd) == 1)
-                {
-                    /* No se reinicia el quantum: es la misma rafaga de ejecucion,
-                       solo hubo un viaje de ida y vuelta al Kernel Scheduler. */
-                    log_info(logger,
-                             "## PID:[%d] vuelve a la CPU ID:[%s], la que realizo la Syscall",
-                             pid_reservado, cpu_duenia->identificador);
-                    return;
-                }
-
-                log_error(logger, "Fallo el retorno del PID:[%d] a su CPU. Se replanifica por READY",
-                          pid_reservado);
-
-                cpu_duenia->enUso = false;
-                cambiar_estado_pcb(pcb_reservado, RDY);
-                eliminar_proceso_Lista(pcb_reservado);
-                agregar_proceso_lista(pcb_reservado);
-                return;
-            }
-
-            log_warning(logger,
-                        "PID:[%d] tenia reserva de CPU pero ya no esta en EXEC. Se descarta la reserva",
-                        pid_reservado);
-        }
-    }
-
-    sem_wait(&sem_hay_ready); // Verifica que no se entre si la lista esta vacia
-    pthread_mutex_lock(&mutex_cpus);
-
-    
-        /* Buscamos la CPU pasándole la dirección del socket_cliente como contexto */
-    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
-    
-    if (compactacion_value)
-    {   
-        pthread_mutex_unlock(&mutex_cpus);
-        sem_post(&sem_hay_ready);   // devolvemos el token: el proceso sigue en READY
-
-        log_info(logger, "No se despacha: Memory esta compactando");
-    return;
-    }
-
-    if (cpu_libre != NULL && cpu_libre->enUso == false) 
-    {
-        
-        cpu_libre->enUso = true;
-    }
-    else 
-    {
-        log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
-        pthread_mutex_unlock(&mutex_cpus);
-        sem_post(&sem_hay_ready);
-        return;
-    }
-       
-        pthread_mutex_unlock(&mutex_cpus);
-
-    /*Mandamos el PCB a la CPU*/
-    if ((cpu_libre != NULL)) { /*Verifica que exista la CPU libre; Verifica que Haya algun procesos en READY; Verifica que Haya alguna IO*/
-        
-        
-        
-        PCB* pcb_a_ejecutar = obtener_siguiente_proceso();
-        
-        if(mock && pcb_a_ejecutar)
-        {
-            log_info(logger,
-                "[MOCK] Scheduler selecciono PID %d",
-                pcb_a_ejecutar->data.PID);
-        }
-
-        if(pcb_a_ejecutar == NULL){
-            log_error(logger, "No se pudo obtener PCB READY");
-            cpu_libre->enUso = false;
+            sem_post(&sem_hay_ready);
+            log_info(logger, "No se despacha: Memory esta compactando");
             return;
         }
 
+        if (cpu_libre != NULL && cpu_libre->enUso == false)
+        {
+            cpu_libre->enUso = true;
+        }
+        else
+        {
+            log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
+            pthread_mutex_unlock(&mutex_cpus);
+            sem_post(&sem_hay_ready);
+            return;
+        }
+
+        pthread_mutex_unlock(&mutex_cpus);
+
+        /* Toma el head de la cola SOLO si no tiene afinidad o la afinidad es
+           con esta CPU. Si el turno es de un proceso pineado a otra CPU
+           devuelve NULL y el proceso se queda en READY. */
+        PCB* pcb_a_ejecutar = obtener_siguiente_proceso_para_cpu(socket_cliente);
+
+        if (mock && pcb_a_ejecutar)
+        {
+            log_info(logger, "[MOCK] Scheduler selecciono PID %d", pcb_a_ejecutar->data.PID);
+        }
+
+        if (pcb_a_ejecutar == NULL)
+        {
+            log_info(logger,
+                     "CPU fd:[%d] no despacha: el turno es de un proceso con afinidad a otra CPU",
+                     socket_cliente);
+
+            pthread_mutex_lock(&mutex_cpus);
+            cpu_libre = list_find_with_context(list_suplementarias->cpu,
+                                               es_la_cpu_buscada, &socket_cliente);
+            if (cpu_libre != NULL) cpu_libre->enUso = false;
+            pthread_mutex_unlock(&mutex_cpus);
+
+            sem_post(&sem_hay_ready);   /* FIX: antes se perdia el token */
+            usleep(5000);               /* evita busy-wait cerrado */
+            continue;                   /* vuelve a intentar */
+        }
+
+        /* ---- Despacho normal ---- */
+
         cambiar_estado_pcb(pcb_a_ejecutar, RNN);
         pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
-        agregar_proceso_lista(pcb_a_ejecutar); 
-        
-        loguear_lista(listasProcesos->rnn,logger);
-        
+        agregar_proceso_lista(pcb_a_ejecutar);
 
-        int err = enviar_pid (pcb_a_ejecutar->data.PID, cpu_libre->fd); //Envia el PID a la CPU
-        log_info(logger, "Kernel Shceduler envio PID[%d] a CPU ID: [%s] a Ejecutarse",pcb_a_ejecutar->data.PID,cpu_libre->identificador);
+        loguear_lista(listasProcesos->rnn, logger);
 
-        if (err != 1) 
+        int err = enviar_pid(pcb_a_ejecutar->data.PID, cpu_libre->fd);
+
+        log_info(logger, "Kernel Scheduler envio PID[%d] a CPU ID: [%s] a Ejecutarse",
+                 pcb_a_ejecutar->data.PID, cpu_libre->identificador);
+
+        if (err != 1)
         {
-            log_error (logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)"); // Completar log de error
-            cpu_libre->enUso = false; 
-            
-            
+            log_error(logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)");
+
+            pthread_mutex_lock(&mutex_cpus);
+            cpu_libre->enUso          = false;
+            cpu_libre->pid_ejecutando = -1;
+            pthread_mutex_unlock(&mutex_cpus);
+
             cambiar_estado_pcb(pcb_a_ejecutar, RDY);
             pcb_a_ejecutar->fd_cpu = 0;
             eliminar_proceso_Lista(pcb_a_ejecutar);
-            agregar_proceso_lista(pcb_a_ejecutar); 
-            
+            agregar_proceso_lista(pcb_a_ejecutar);
             return;
         }
 
@@ -472,29 +441,17 @@ void  mandar_proceso_cpu(int socket_cliente)/*OK*/
         {
             t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
 
-            // Invalida cualquier timer de quantum anterior de este PCB:
-            // a partir de acá, solo el timer con ESTA version podra desalojar.
+            /* Invalida cualquier timer de quantum anterior de este PCB. */
             pcb_a_ejecutar->quantum_version++;
 
             datos->pcb     = pcb_a_ejecutar;
             datos->version = pcb_a_ejecutar->quantum_version;
 
-            pthread_create(
-                &hilo_timer,
-                NULL,
-                control_hilo_quantum,
-                datos);
-
+            pthread_create(&hilo_timer, NULL, control_hilo_quantum, datos);
             pthread_detach(hilo_timer);
         }
-    }
-    else {
 
-        cpu_libre->enUso = false;
-
-        log_error( logger, "No hay procesos READY para ejecutar");
-
-        return;
+        return;   /* despachado */
     }
 }
 
@@ -595,6 +552,68 @@ void quitar_retorno_cpu (int pid)
     }
 
     pthread_mutex_unlock(&sem_retorno_cpu);
+}
+
+/* Devuelve el fd de la CPU a la que este PID esta pineado, o -1 si no lo esta. */
+int fd_afinidad_de (int pid)
+{
+    int fd = -1;
+    pthread_mutex_lock(&sem_retorno_cpu);
+    for (int i = 0; i < list_size(list_suplementarias->retorno_cpu); i++) {
+        t_retorno_cpu* r = list_get(list_suplementarias->retorno_cpu, i);
+        if (r->pid == pid) { fd = r->fd_cpu; break; }
+    }
+    pthread_mutex_unlock(&sem_retorno_cpu);
+    return fd;
+}
+
+/* Borra TODAS las reservas de una CPU (para la desconexion). */
+void quitar_retorno_por_fd (int fd_cpu)
+{
+    pthread_mutex_lock(&sem_retorno_cpu);
+    for (int i = 0; i < list_size(list_suplementarias->retorno_cpu); ) {
+        t_retorno_cpu* r = list_get(list_suplementarias->retorno_cpu, i);
+        if (r->fd_cpu == fd_cpu) { list_remove(list_suplementarias->retorno_cpu, i); free(r); }
+        else i++;
+    }
+    pthread_mutex_unlock(&sem_retorno_cpu);
+}
+
+/* Igual que obtener_siguiente_proceso() pero respetando afinidad.
+   Mira el head SIN sacarlo: si el turno es de un proceso pineado a otra CPU,
+   devuelve NULL y nadie se lo lleva (el proceso sigue en READY). */
+PCB* obtener_siguiente_proceso_para_cpu (int fd_cpu)
+{
+    PCB*    pcb  = NULL;
+    t_list* cola = NULL;
+
+    pthread_mutex_lock(&mutex_ready);
+
+    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0) {
+        for (int i = 0; i < planificador->cantidad_niveles; i++)
+            if (!list_is_empty(planificador->niveles[i].cola)) {
+                cola = planificador->niveles[i].cola;
+                break;
+            }
+    } else {
+        cola = listasProcesos->rdy;
+    }
+
+    if (cola != NULL && !list_is_empty(cola)) {
+
+        PCB* candidato = list_get(cola, 0);          /* el que le toca */
+        int  fd_afin   = fd_afinidad_de(candidato->data.PID);
+
+        if (fd_afin == -1 || fd_afin == fd_cpu) {
+            pcb = list_remove(cola, 0);
+            if (fd_afin == fd_cpu)
+                quitar_retorno_cpu(pcb->data.PID);   /* se consume la afinidad */
+        }
+        /* si fd_afin != fd_cpu -> pcb queda NULL: no se despacha nada */
+    }
+
+    pthread_mutex_unlock(&mutex_ready);
+    return pcb;
 }
 
 /* Cierre comun de MEM_ALLOC / MEM_FREE / MUTEX_CREATE / MUTEX_UNLOCK */
@@ -921,32 +940,29 @@ void cpu_libre (int cliente_fd)/*OK*/
 //DESALOJO
 void desalojo(int socket_cliente)
 {
-    int pid = recibir_pid(socket_cliente);
-    char* cpu_id = recibir_mensaje(socket_cliente, logger);
-    op_code err = OK;
+    int pid       = recibir_pid(socket_cliente);
+    char* cpu_id  = recibir_mensaje(socket_cliente, logger);
+    op_code err   = OK;
     int desalojado = 0;
-    bool retorna_misma_cpu = existe_retorno_cpu(pid, socket_cliente);
+
+    /* Ya NO existe retorna_misma_cpu: el proceso SIEMPRE vuelve a READY y la
+       afinidad se resuelve despues, cuando le toque el turno. */
 
     if (mem_corrupt_value == 1) {
 
         log_debug(logger, "MEM CORRUPT");
-        
-        if (retorna_misma_cpu) {
-            quitar_retorno_cpu(pid); retorna_misma_cpu = false;
-        }   
+
+        quitar_retorno_cpu(pid);        /* se cancela la afinidad */
 
         enviar_op_code(MEM_CORRUPT, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
         desalojado = 1;
-        // FIX: había un segundo log_info idéntico acá, eliminado
     }
     else if (compactacion_value == 1) {
 
         log_debug(logger, "COMPACTACION");
-        
-        if (retorna_misma_cpu) {
-            quitar_retorno_cpu(pid); retorna_misma_cpu = false;
-        }
+
+        quitar_retorno_cpu(pid);        /* se cancela la afinidad */
 
         enviar_op_code(COMPACTACION, socket_cliente);
         log_info(logger, "## Se solicito desalojar el PID:[%d] que se encuentra ejecutando en la CPU:[%s]", pid, cpu_id);
@@ -964,6 +980,8 @@ void desalojo(int socket_cliente)
             sacar_pcb_por_pid(list_suplementarias->desalojo, pid);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
 
+            quitar_retorno_cpu(pid);
+
             enviar_op_code(OK, socket_cliente);
             desalojado = 0;
         }
@@ -976,51 +994,49 @@ void desalojo(int socket_cliente)
             pthread_mutex_lock(&sem_procesos_s_desalojo);
             sacar_pcb_por_pid(list_suplementarias->desalojo, pid);
             pthread_mutex_unlock(&sem_procesos_s_desalojo);
+
             desalojado = 1;
-            // FIX: eliminado "PCB* pcb = buscar_pcb_por_pid(pid);" que estaba
-            // acá: era una variable local que no se usaba para nada
         }
     }
-        else {
+    else {
 
-        // ¿Hay un Memory Stick nuevo (en caliente) pendiente de avisar?
+        /* Hay un Memory Stick nuevo (en caliente) pendiente de avisar? */
         t_mem_stick* pendiente = NULL;
         pthread_mutex_lock(&mutex_ms_pendientes);
         if (list_ms_pendientes != NULL && list_size(list_ms_pendientes) > 0)
             pendiente = list_remove(list_ms_pendientes, 0);
         pthread_mutex_unlock(&mutex_ms_pendientes);
 
-                if (pendiente != NULL) {
+        if (pendiente != NULL) {
 
             enviar_op_code(NUEVA_MEMORY_STICK, socket_cliente);
 
-            // La CPU espera un buffer PLANO: ip\0 puerto\0 base tamanio.
-            int len_ip = strlen(pendiente->ip) + 1;
+            /* La CPU espera un buffer PLANO: ip\0 puerto\0 base tamanio. */
+            int len_ip     = strlen(pendiente->ip) + 1;
             int len_puerto = strlen(pendiente->puerto) + 1;
-            int size = len_ip + len_puerto + sizeof(uint32_t) * 2;
+            int size       = len_ip + len_puerto + sizeof(uint32_t) * 2;
 
             void* buffer = malloc(size);
             int off = 0;
-            memcpy(buffer + off, pendiente->ip, len_ip);           off += len_ip;
-            memcpy(buffer + off, pendiente->puerto, len_puerto);   off += len_puerto;
+            memcpy(buffer + off, pendiente->ip, len_ip);                 off += len_ip;
+            memcpy(buffer + off, pendiente->puerto, len_puerto);         off += len_puerto;
             memcpy(buffer + off, &pendiente->base, sizeof(uint32_t));    off += sizeof(uint32_t);
             memcpy(buffer + off, &pendiente->tamanio, sizeof(uint32_t)); off += sizeof(uint32_t);
 
             enviar_buffer(buffer, size, socket_cliente);
             free(buffer);
 
-            log_info(logger, "CPU %s recibió nueva Memory Stick ", cpu_id);
+            log_info(logger, "CPU %s recibio nueva Memory Stick ", cpu_id);
             desalojado = 0;
         }
         else {
 
-            log_info(logger, "No es Necesario Relizar Acciones");
-            log_debug(logger, "NO HAY DESAOLOJO");
+            log_info(logger, "No es Necesario Realizar Acciones");
+            log_debug(logger, "NO HAY DESALOJO");
             enviar_op_code(OK, socket_cliente);
             desalojado = 0;
         }
     }
-
 
     err = recibir_op_code(socket_cliente);
 
@@ -1036,30 +1052,21 @@ void desalojo(int socket_cliente)
 
                 log_error(logger, "PID %d no encontrado", pid);
 
-                log_debug(logger, "NEW: %d", list_size(listasProcesos->new));
-                log_debug(logger, "READY: %d", list_size(listasProcesos->rdy));
-                log_debug(logger, "RUNNING: %d", list_size(listasProcesos->rnn));
-                log_debug(logger, "BLOCK: %d", list_size(listasProcesos->bck));
-                log_debug(logger, "EXIT: %d", list_size(listasProcesos->ext));
-                log_debug(logger, "S_READY: %d", list_size(listasProcesos->s_rdy));
-                log_debug(logger, "S_BLOCK: %d", list_size(listasProcesos->s_bck));
-            }
-            else if (retorna_misma_cpu) {
-
-                log_info(logger,
-                         "PID:[%d] queda reservado para volver a la CPU:[%s] que hizo la Syscall",
-                         pid, cpu_id);
+                log_debug(logger, "NEW: %d",      list_size(listasProcesos->new));
+                log_debug(logger, "READY: %d",    list_size(listasProcesos->rdy));
+                log_debug(logger, "RUNNING: %d",  list_size(listasProcesos->rnn));
+                log_debug(logger, "BLOCK: %d",    list_size(listasProcesos->bck));
+                log_debug(logger, "EXIT: %d",     list_size(listasProcesos->ext));
+                log_debug(logger, "S_READY: %d",  list_size(listasProcesos->s_rdy));
+                log_debug(logger, "S_BLOCK: %d",  list_size(listasProcesos->s_bck));
             }
             else if (pcb->estado_pcb == BCK) {
 
                 if (pcb->esperando_io) {
 
-                    /* NUEVO: bloqueado por IO (sleep/stdin/stdout).
-                       La CPU ya guardó el contexto; el proceso queda en
-                       BLOCK y lo despierta rta_io_* cuando termine la IO. */
-                    log_info(logger,
-                             "PID:[%d] sigue bloqueado esperando IO",
-                             pid);
+                    /* Bloqueado por IO (sleep/stdin/stdout). La CPU ya guardo el
+                       contexto; lo despierta rta_io_* cuando termine la IO. */
+                    log_info(logger, "PID:[%d] sigue bloqueado esperando IO", pid);
                 }
                 else {
 
@@ -1076,28 +1083,26 @@ void desalojo(int socket_cliente)
                         pthread_mutex_unlock(&mutex_ready);
 
                         sem_post(&sem_hay_ready);
-
-                    } else {
-
+                    }
+                    else {
                         agregar_proceso_lista(pcb);
                     }
 
                     eliminar_proceso_Lista(pcb);
 
-                    log_info(logger,
-                             "Proceso Desalojado PID:[%d] de CPU:[%s]",
-                             pid, cpu_id);
+                    log_info(logger, "Proceso Desalojado PID:[%d] de CPU:[%s]", pid, cpu_id);
                 }
             }
             else if (pcb->estado_pcb == RNN) {
 
+                /* Incluye el caso "salio por MEM_ALLOC / MEM_FREE / MUTEX_*":
+                   vuelve a READY como cualquier otro. La reserva sigue viva en
+                   retorno_cpu y solo se usa como AFINIDAD al elegir. */
                 cambiar_estado_pcb(pcb, RDY);
 
-                if (compactacion_value == 1) 
+                if (compactacion_value == 1)
                 {
-                    // Desalojado por compactación → excepcionalmente al PRINCIPIO de READY
-                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0) 
-                    {
+                    if (strcmp(info_config.planificacion_algoritmo, "CMN") == 0) {
                         actualizar_prioridad_pcb(pcb, 0);
                     }
 
@@ -1105,33 +1110,38 @@ void desalojo(int socket_cliente)
                     list_add_in_index(listasProcesos->rdy, 0, pcb);
                     pthread_mutex_unlock(&mutex_ready);
                     sem_post(&sem_hay_ready);
-                } 
-                else 
+                }
+                else
                 {
                     agregar_proceso_lista(pcb);
                 }
 
                 eliminar_proceso_Lista(pcb);
 
-                log_info(logger,
-                         "Proceso Desalojado PID:[%d] de CPU:[%s]",
-                         pid, cpu_id);
+                log_info(logger, "Proceso Desalojado PID:[%d] de CPU:[%s]", pid, cpu_id);
             }
         }
-
-    } else {
-
+    }
+    else {
         log_error(logger, "Error de coordinacion en la comunicacion [desalojo]");
     }
 
     pthread_mutex_lock(&mutex_cpus);
-    t_CPU *cpu_libre = list_find_with_context(list_suplementarias->cpu, es_la_cpu_buscada, &socket_cliente);
 
-    if (cpu_libre != NULL && !retorna_misma_cpu && desalojado == 1)          // FIX: antes se desreferenciaba sin chequear NULL
-        cpu_libre->enUso = false;
+    t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
+                                              es_la_cpu_buscada, &socket_cliente);
+
+    /* FIX: la CPU SIEMPRE se libera cuando hubo desalojo (antes se saltaba si
+       retorna_misma_cpu) y se limpia pid_ejecutando para que una desconexion
+       posterior no toque un PID que ya migro a otra CPU. */
+    if (cpu_libre != NULL && desalojado == 1) {
+        cpu_libre->enUso          = false;
+        cpu_libre->pid_ejecutando = -1;
+    }
 
     pthread_mutex_unlock(&mutex_cpus);
-    free(cpu_id);                   // FIX: recibir_mensaje hace malloc, esto se perdía en cada llamada
+
+    free(cpu_id);
 
     return;
 }

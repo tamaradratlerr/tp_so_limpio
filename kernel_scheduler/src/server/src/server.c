@@ -340,121 +340,114 @@ PCB* encontrar_pcb_rnn_por_pid(int pid) /*OK*/
 
 
 /*-----                     GESTION DE CPUs                     -----*/
-void  mandar_proceso_cpu(int socket_cliente)
+/* Devuelve true si hay que REINTENTAR (no despacho pero puede despachar mas tarde),
+   false si no hay que reintentar (despacho ok, o la CPU murio).
+   El token de sem_hay_ready lo consume solo cuando despacha; en cualquier otro
+   caso lo devuelve antes de salir. */
+bool mandar_proceso_cpu(int socket_cliente)
 {
     log_opcode(logger, CPU_LIBRE);
 
-    /* Se reintenta mientras el turno sea de un proceso con afinidad a OTRA CPU.
-       Ya no hay atajo de "retorno": la reserva es solo afinidad y se resuelve
-       dentro de obtener_siguiente_proceso_para_cpu(). */
-    while (1)
+    pthread_mutex_lock(&mutex_cpus);
+
+    t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
+                                              es_la_cpu_buscada, &socket_cliente);
+
+    if (compactacion_value)
     {
-        sem_wait(&sem_hay_ready);          /* no entra si READY esta vacia */
+        pthread_mutex_unlock(&mutex_cpus);
+        sem_post(&sem_hay_ready);
+        log_info(logger, "No se despacha: Memory esta compactando");
+        return true;                      /* reintentar cuando termine */
+    }
+
+    if (cpu_libre != NULL && cpu_libre->enUso == false)
+    {
+        cpu_libre->enUso = true;
+    }
+    else
+    {
+        log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
+        pthread_mutex_unlock(&mutex_cpus);
+        sem_post(&sem_hay_ready);
+        return false;                     /* la CPU no esta, no tiene sentido insistir */
+    }
+
+    pthread_mutex_unlock(&mutex_cpus);
+
+    /* Toma el head de la cola SOLO si no tiene afinidad o la afinidad es
+       con esta CPU. Si el turno es de un proceso pineado a otra CPU
+       devuelve NULL y el proceso se queda en READY. */
+    PCB* pcb_a_ejecutar = obtener_siguiente_proceso_para_cpu(socket_cliente);
+
+    if (mock && pcb_a_ejecutar)
+    {
+        log_info(logger, "[MOCK] Scheduler selecciono PID %d", pcb_a_ejecutar->data.PID);
+    }
+
+    if (pcb_a_ejecutar == NULL)
+    {
+        log_info(logger,
+                 "CPU fd:[%d] no despacha: el turno es de un proceso con afinidad a otra CPU",
+                 socket_cliente);
 
         pthread_mutex_lock(&mutex_cpus);
-
-        t_CPU* cpu_libre = list_find_with_context(list_suplementarias->cpu,
-                                                  es_la_cpu_buscada, &socket_cliente);
-
-        /* Durante la compactacion no se despacha nada. Se devuelve el token y
-           se SALE (no se reintenta): cpu_libre() nos tiene tomado
-           sem_compactacion y girar aca adentro trabaria a compactacion(). */
-        if (compactacion_value)
-        {
-            pthread_mutex_unlock(&mutex_cpus);
-            sem_post(&sem_hay_ready);
-            log_info(logger, "No se despacha: Memory esta compactando");
-            return;
-        }
-
-        if (cpu_libre != NULL && cpu_libre->enUso == false)
-        {
-            cpu_libre->enUso = true;
-        }
-        else
-        {
-            log_warning(logger, "No se encontro a la CPU Buscada. Posible Desconexion");
-            pthread_mutex_unlock(&mutex_cpus);
-            sem_post(&sem_hay_ready);
-            return;
-        }
-
+        cpu_libre = list_find_with_context(list_suplementarias->cpu,
+                                           es_la_cpu_buscada, &socket_cliente);
+        if (cpu_libre != NULL) cpu_libre->enUso = false;
         pthread_mutex_unlock(&mutex_cpus);
 
-        /* Toma el head de la cola SOLO si no tiene afinidad o la afinidad es
-           con esta CPU. Si el turno es de un proceso pineado a otra CPU
-           devuelve NULL y el proceso se queda en READY. */
-        PCB* pcb_a_ejecutar = obtener_siguiente_proceso_para_cpu(socket_cliente);
-
-        if (mock && pcb_a_ejecutar)
-        {
-            log_info(logger, "[MOCK] Scheduler selecciono PID %d", pcb_a_ejecutar->data.PID);
-        }
-
-        if (pcb_a_ejecutar == NULL)
-        {
-            log_info(logger,
-                     "CPU fd:[%d] no despacha: el turno es de un proceso con afinidad a otra CPU",
-                     socket_cliente);
-
-            pthread_mutex_lock(&mutex_cpus);
-            cpu_libre = list_find_with_context(list_suplementarias->cpu,
-                                               es_la_cpu_buscada, &socket_cliente);
-            if (cpu_libre != NULL) cpu_libre->enUso = false;
-            pthread_mutex_unlock(&mutex_cpus);
-
-            sem_post(&sem_hay_ready);   /* FIX: antes se perdia el token */
-            usleep(5000);               /* evita busy-wait cerrado */
-            continue;                   /* vuelve a intentar */
-        }
-
-        /* ---- Despacho normal ---- */
-
-        cambiar_estado_pcb(pcb_a_ejecutar, RNN);
-        pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
-        agregar_proceso_lista(pcb_a_ejecutar);
-
-        loguear_lista(listasProcesos->rnn, logger);
-
-        int err = enviar_pid(pcb_a_ejecutar->data.PID, cpu_libre->fd);
-
-        log_info(logger, "Kernel Scheduler envio PID[%d] a CPU ID: [%s] a Ejecutarse",
-                 pcb_a_ejecutar->data.PID, cpu_libre->identificador);
-
-        if (err != 1)
-        {
-            log_error(logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)");
-
-            pthread_mutex_lock(&mutex_cpus);
-            cpu_libre->enUso          = false;
-            cpu_libre->pid_ejecutando = -1;
-            pthread_mutex_unlock(&mutex_cpus);
-
-            cambiar_estado_pcb(pcb_a_ejecutar, RDY);
-            pcb_a_ejecutar->fd_cpu = 0;
-            eliminar_proceso_Lista(pcb_a_ejecutar);
-            agregar_proceso_lista(pcb_a_ejecutar);
-            return;
-        }
-
-        cpu_libre->pid_ejecutando = pcb_a_ejecutar->data.PID;
-
-        if (usa_quantum(pcb_a_ejecutar))
-        {
-            t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
-
-            /* Invalida cualquier timer de quantum anterior de este PCB. */
-            pcb_a_ejecutar->quantum_version++;
-
-            datos->pcb     = pcb_a_ejecutar;
-            datos->version = pcb_a_ejecutar->quantum_version;
-
-            pthread_create(&hilo_timer, NULL, control_hilo_quantum, datos);
-            pthread_detach(hilo_timer);
-        }
-
-        return;   /* despachado */
+        sem_post(&sem_hay_ready);
+        return true;                      /* reintentar */
     }
+
+    /* ---- Despacho ---- */
+
+    cambiar_estado_pcb(pcb_a_ejecutar, RNN);
+    pcb_a_ejecutar->fd_cpu = cpu_libre->fd;
+    agregar_proceso_lista(pcb_a_ejecutar);
+
+    loguear_lista(listasProcesos->rnn, logger);
+
+    int err = enviar_pid(pcb_a_ejecutar->data.PID, cpu_libre->fd);
+
+    log_info(logger, "Kernel Scheduler envio PID[%d] a CPU ID: [%s] a Ejecutarse",
+             pcb_a_ejecutar->data.PID, cpu_libre->identificador);
+
+    if (err != 1)
+    {
+        log_error(logger, "Error en conexion con la CPU (funcion: mandar_proceso_cpu)");
+
+        pthread_mutex_lock(&mutex_cpus);
+        cpu_libre->enUso          = false;
+        cpu_libre->pid_ejecutando = -1;
+        pthread_mutex_unlock(&mutex_cpus);
+
+        cambiar_estado_pcb(pcb_a_ejecutar, RDY);
+        pcb_a_ejecutar->fd_cpu = 0;
+        eliminar_proceso_Lista(pcb_a_ejecutar);
+        agregar_proceso_lista(pcb_a_ejecutar);   /* este ya hace el sem_post */
+
+        return false;                     /* la CPU murio, no reintentar */
+    }
+
+    cpu_libre->pid_ejecutando = pcb_a_ejecutar->data.PID;
+
+    if (usa_quantum(pcb_a_ejecutar))
+    {
+        t_datos_quantum* datos = malloc(sizeof(t_datos_quantum));
+
+        /* Invalida cualquier timer de quantum anterior de este PCB. */
+        pcb_a_ejecutar->quantum_version++;
+
+        datos->pcb     = pcb_a_ejecutar;
+        datos->version = pcb_a_ejecutar->quantum_version;
+
+        pthread_create(&hilo_timer, NULL, control_hilo_quantum, datos);
+        pthread_detach(hilo_timer);
+    }
+
+    return false;                         /* despachado */
 }
 
 bool es_la_cpu_buscada (void* elemento, void* contexto)/*OK*/
@@ -921,7 +914,7 @@ void nueva_cpu (int cliente_fd)/*OK*/
 }
 
 //CPU_LIBRE,
-void cpu_libre (int cliente_fd)/*OK*/
+void cpu_libre (int cliente_fd)
 {
     sem_wait(&init_sem_sleep);
     sem_post(&init_sem_sleep);
@@ -932,11 +925,21 @@ void cpu_libre (int cliente_fd)/*OK*/
     sem_wait(&init_sem_stdout);
     sem_post(&init_sem_stdout);
 
-    sem_wait(&sem_compactacion);
+    while (1)
+    {
+        /* La espera larga va ACA, sin tener sem_compactacion tomado.
+           Antes se esperaba adentro de mandar_proceso_cpu con el semaforo
+           en la mano y eso trababa a compactacion(). */
+        sem_wait(&sem_hay_ready);
 
-    mandar_proceso_cpu(cliente_fd);
+        sem_wait(&sem_compactacion);
+        bool reintentar = mandar_proceso_cpu(cliente_fd);
+        sem_post(&sem_compactacion);      /* se suelta SIEMPRE, en cada vuelta */
 
-    sem_post(&sem_compactacion);
+        if (!reintentar) return;
+
+        usleep(5000);
+    }
 }
 
 //DESALOJO

@@ -17,7 +17,7 @@ PCB* encontrar_pcb_rnn_por_pid(int pid);
 
 /*----- GESTION DE CPUs -----*/
 
-void mandar_proceso_cpu(int socket_cliente);
+bool mandar_proceso_cpu(int socket_cliente);
 bool es_la_cpu_buscada(void* elemento, void* contexto);
 
 /*----- ALGORTIMOS DE PLANIFICACION -----*/
